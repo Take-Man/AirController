@@ -86,6 +86,14 @@ def test_nav_fires_once_and_rearms_at_center():
     assert [e.data["dir"] for e in ev if e.kind == "nav"] == ["back", "back", "forward"]
 
 
+def test_nav_swap():
+    """nav_swap（TASKS-20261025 2.4、config.toml の既定）: 手を左へ → 進む、右へ → 戻る。"""
+    center, left, right = make_peace(), make_peace(yaw=-35), make_peace(yaw=35)
+    ev = run(GestureEngine(cfg(nav_swap=True)), frames([(10, center, True), (30, left, True), (10, center, True),
+                                                         (20, right, True)]))
+    assert [e.data["dir"] for e in ev if e.kind == "nav"] == ["forward", "back"]
+
+
 def test_inactive_emits_nothing():
     ev = run(GestureEngine(cfg()), frames([(10, make_peace(), False), (30, make_peace(pitch=35), False),
                                            (30, make_peace(yaw=-35), False)]))

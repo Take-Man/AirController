@@ -172,12 +172,23 @@ class OverlayView(AppKit.NSView):
             _color((0, 0, 0), 0.55).setFill()
             AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, by, 14, bh))
             lv = max(-1.0, min(1.0, s.get("zoom_level", 0.0)))
-            _color((0.3, 0.9, 0.8)).setFill()
+            # 段を送った直後は明るい黄色、発火の計時中は明るく、送った後に中央へ戻るまで（再武装前）は暗くする
+            if s.get("zoom_flash"):
+                _color((1.0, 0.95, 0.4)).setFill()
+            elif not s.get("zoom_armed", True):
+                _color((0.3, 0.9, 0.8), 0.35).setFill()
+            else:
+                _color((0.3, 0.9, 0.8), 0.6 + 0.4 * s.get("zoom_progress", 0.0)).setFill()
             mid = by + bh / 2
             h = abs(lv) * bh / 2
             AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, mid - h if lv > 0 else mid, 14, h))
             _color((1, 1, 1), 0.6).setFill()
             AppKit.NSBezierPath.fillRect_(NSMakeRect(bx - 2, mid - 0.5, 18, 1))
+            fl = s.get("zoom_fire_level")
+            if fl is not None:  # 発火の閾値の目盛り
+                _color((1, 1, 1), 0.35).setFill()
+                for yy in (mid - fl * bh / 2, mid + fl * bh / 2):
+                    AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, yy - 0.5, 14, 1))
         if s.get("peace") is not None:
             _draw_peace(s["peace"], ox + CAM_W - 72, oy + 72, 64)
 

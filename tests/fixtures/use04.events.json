@@ -1,6 +1,10 @@
 {
  "config": {
   "min_score": 0.5,
+  "hand": "right",
+  "hand_switch_frames": 5,
+  "hand_switch_jump": 0.15,
+  "hand_settle_frames": 30,
   "acquire_hold_ms": 120.0,
   "lose_hold_ms": 150.0,
   "posture_hold_ms": 120.0,
@@ -33,8 +37,9 @@
   "zoom_sign": 1.0,
   "zoom_dead": 0.0485,
   "zoom_max": 0.1384,
-  "zoom_min_rate": 0.8,
-  "zoom_max_rate": 2.5,
+  "zoom_fire_level": 0.25,
+  "zoom_fire_hold_ms": 300.0,
+  "zoom_rearm_frac": 1.0,
   "zoom_min_cutoff": 1.0,
   "zoom_beta": 0.5,
   "fist_enabled": true,
@@ -86,6 +91,7 @@
   "scroll_exponent": 1.8,
   "scroll_invert": false,
   "nav_cooldown_ms": 500.0,
+  "nav_swap": true,
   "screen_w": 1440.0,
   "screen_h": 900.0,
   "roi_cx": 0.4959,
@@ -97,14 +103,14 @@
   "roi_adapt": true,
   "roi_adapt_tau_s": 0.5,
   "roi_adapt_shift": 0.5,
-  "roi_adapt_grow": 0.5,
+  "roi_adapt_grow": 0.05,
   "roi_width_min": 0.15,
   "roi_width_max": 0.9
  },
  "events": [
   {
    "kind": "hand_acquired",
-   "t_ns": 5640861767829166,
+   "t_ns": 5640865697989500,
    "data": {}
   },
   {
@@ -5370,7 +5376,7 @@
    "kind": "nav",
    "t_ns": 5640901485143500,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
@@ -5508,7 +5514,7 @@
    "kind": "nav",
    "t_ns": 5640905681349750,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
@@ -7352,7 +7358,7 @@
    "kind": "nav",
    "t_ns": 5640917944836375,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
@@ -7485,7 +7491,7 @@
    "kind": "nav",
    "t_ns": 5640928306993000,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
@@ -7870,7 +7876,7 @@
    "kind": "nav",
    "t_ns": 5640932705163333,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
@@ -8045,7 +8051,7 @@
    "kind": "nav",
    "t_ns": 5640934637473958,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {

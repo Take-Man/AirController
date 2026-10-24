@@ -191,7 +191,9 @@ class PeaceController:
         return events
 
     def _dir_name(self, side: str) -> str:
-        return "back" if side == "left" else "forward"
+        # 既定（nav_swap = true）: 手を左へ → 進む（⌘]）、右へ → 戻る（⌘[）。作者の指示で入れ替えた（TASKS-20261025 2.4）
+        back_side = "right" if self.cfg.nav_swap else "left"
+        return "back" if side == back_side else "forward"
 
 
 class ThumbsUpController(PeaceController):

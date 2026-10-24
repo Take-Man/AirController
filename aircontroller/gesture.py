@@ -30,6 +30,19 @@ from .types import (INDEX_MCP, INDEX_TIP, MIDDLE_MCP, MIDDLE_TIP, PALM, PINKY_MC
 class GestureConfig:
     # 検出
     min_score: float = 0.5  # これ未満の信頼度の手は「検出なし」として扱う（イベントを出さない）
+    # 使う手（TASKS-20261025 2.5）: "right" / "left" / "both"。MediaPipe の左右ラベルで選び、別のラベルの手は「手がない」と
+    # 同じに扱う。ラベルは一時的に反転する（記録では 1〜3 フレームのものが多い）ので、別のラベルが hand_switch_frames
+    # フレーム続いたときだけ別の手とみなす。ピンチ・ドラッグ・右クリック待ち・ピース・いいね・ズームの途中では切り替えない。
+    # 既定値は互換のため "both"。config.toml で "right" にしている
+    # さらに、ラベルが変わった瞬間に手のひら中心が hand_switch_jump（画像の幅に対する比）以上跳んだときだけ別の手とみなす。
+    # 位置が続いたままラベルだけが変わるのは、同じ手の誤判定（記録では跳びは 0.08 以下で、8〜175 フレーム続くこともあった）。
+    # 別の手が映ったときは 0.3〜0.45 跳んでいた。0 で無効（フレーム数だけで決める）
+    hand: str = "both"
+    hand_switch_frames: int = 5
+    hand_switch_jump: float = 0.15
+    # 跳びの条件で守るのは、hand_settle_frames フレーム以上続いたラベルだけ。手が入ってきた直後は、画像の端などで
+    # ラベルを誤ることがある（use03: 端から入った右手の最初の 4 フレームが Left）ので、フレーム数だけで切り替える
+    hand_settle_frames: int = 30
     acquire_hold_ms: float = 120.0  # 検出がこの時間続いたら手の獲得
     lose_hold_ms: float = 150.0  # 未検出がこの時間続いたら見失い
     # 姿勢（モード）
@@ -77,9 +90,12 @@ class GestureConfig:
     zoom_signal: str = "depth"  # 指先の前後の測り方（zoom.py）: "depth" / "curl" / "length"。learn-zoom で選ぶ
     zoom_sign: float = 1.0  # ズームインが正になるように掛ける符号
     zoom_dead: float = 0.15  # 入ったときからの変化の不感帯
-    zoom_max: float = 0.50  # この変化で最大速度
-    zoom_min_rate: float = 0.8  # 不感帯を出たときのズームの段数（段/秒）
-    zoom_max_rate: float = 2.5  # 最大の段数（段/秒）（zoom01: 1.5〜5 では速すぎた）
+    zoom_max: float = 0.50  # 棒の外端になる変化
+    # 1回の超過で1段（TASKS-20261025 2.1）: 棒の長さ（0 = 不感帯の端、1 = zoom_max）で zoom_fire_level を超え、
+    # zoom_fire_hold_ms 保ったら 1 段送る。変化が zoom_dead × zoom_rearm_frac の内側に戻るまで次を送らない
+    zoom_fire_level: float = 0.25
+    zoom_fire_hold_ms: float = 300.0
+    zoom_rearm_frac: float = 1.0
     zoom_min_cutoff: float = 1.0  # One Euro Filter（安定度）
     zoom_beta: float = 0.5
     # グー（握りこぶし）: 何もしない状態。カーソル移動・クリック・スクロールをすべて止める（作者の判断、SPEC 13.13）
@@ -138,6 +154,9 @@ class GestureConfig:
     scroll_exponent: float = 1.8  # 速度カーブの指数（大きいほど中央付近が遅く、端が速い）
     scroll_invert: bool = False  # スクロール方向の反転
     nav_cooldown_ms: float = 500.0  # 戻る・進むの、連続発火を防ぐ最短間隔
+    # 戻る・進むの向き。False: 手を左へ → 戻る、右へ → 進む（以前）。True: 左へ → 進む、右へ → 戻る（TASKS-20261025 2.4）。
+    # 既定値は互換のため False。config.toml で True にしている
+    nav_swap: bool = False
     # カーソル（絶対座標マッピング）
     screen_w: float = 1440.0
     screen_h: float = 900.0
@@ -184,6 +203,10 @@ class GestureState:
     pinch_progress: float = 0.0  # ピンチの経過 / drag_ms
     peace: object | None = None  # ピースモード中は PeaceView
     zoom_level: float = 0.0  # ズームモード中の -1..1（ズームインが正）
+    zoom_progress: float = 0.0  # 発火までの経過（0..1）
+    zoom_armed: bool = True  # 中央に戻って、次の段を送れる状態か
+    zoom_fire_ns: int | None = None  # 直近に段を送った時刻（オーバーレイで、棒の色を一瞬変える）
+    zoom_fire_dir: int = 0
 
 
 def thumb_fold_metric(hand: Hand) -> float:
@@ -325,14 +348,78 @@ class GestureEngine:
         self.state = GestureState()
         self.roi_cx, self.roi_cy, self.roi_width = self.cfg.roi_cx, self.cfg.roi_cy, self.cfg.roi_width
         self._last_t: int | None = None
+        self._label: str | None = None  # 左右ラベル（ヒステリシスをかけた値）
+        self._label_run = 0  # 別のラベルが続いたフレーム数
+        self._label_seen_t: int | None = None  # 最後に手が見えた時刻
+        self._selected: tuple[int, Hand | None, Hand | None] | None = None  # (時刻, 選んだ手, 生の最良の手)
+        self._label_palm: tuple[float, float] | None = None  # 直前のフレームの手のひら中心（ラベルの切り替えの判定用）
+        self._flip_jumped = False  # 今続いている別のラベルが、手のひら中心の跳びとともに始まったか
+        self._label_age = 0  # 今のラベルになってからのフレーム数
 
     @property
     def hand_present(self) -> bool:
         return self._presence.value
 
-    def primary_hand(self, frame: LandmarkFrame) -> Hand | None:
+    @property
+    def stable_label(self) -> str | None:
+        return self._label
+
+    LOCKED_MODES = ("pinch", "drag", "right", "peace", "thumbsup", "zoom")
+
+    def _best(self, frame: LandmarkFrame) -> Hand | None:
         hands = [h for h in frame.hands if h.score >= self.cfg.min_score]
         return max(hands, key=lambda h: h.score) if hands else None
+
+    def _select(self, frame: LandmarkFrame) -> tuple[Hand | None, Hand | None]:
+        """使う手を選ぶ（1 フレームに 1 回、update から呼ぶ）。返り値は (選んだ手, 生の最良の手)。"""
+        c = self.cfg
+        t = frame.t_capture_ns
+        best = self._best(frame)
+        if c.hand == "both":
+            return best, best
+        want = "Right" if c.hand == "right" else "Left"
+        hands = [h for h in frame.hands if h.score >= c.min_score]
+        if best is None:
+            # 見失いが続いたら、ラベルを忘れる（次に見えた手のラベルを、そのまま使う）
+            if self._label_seen_t is not None and (t - self._label_seen_t) / 1e6 >= c.lose_hold_ms:
+                self._label, self._label_run, self._label_palm = None, 0, None
+            return None, None
+        self._label_seen_t = t
+        matching = [h for h in hands if h.handedness == want]
+        if len(hands) > 1:  # 両方の手が映っている: 選んだ手だけを使う（ラベルがそろっていれば、そのまま信じる）
+            return (max(matching, key=lambda h: h.score) if matching else None), best
+        raw = best.handedness
+        palm = tuple(float(v) for v in best.landmarks[list(PALM), :2].mean(axis=0))
+        prev, self._label_palm = self._label_palm, palm
+        self._label_age += 1
+        if self._label is None:
+            self._label, self._label_age = raw, 0
+        elif raw != self._label:
+            if self._label_run == 0:  # 別のラベルが始まった: そのとき手が跳んだか（今のラベルが落ち着く前なら問わない）
+                self._flip_jumped = (c.hand_switch_jump <= 0 or prev is None or self._label_age < c.hand_settle_frames
+                                     or math.dist(palm, prev) >= c.hand_switch_jump)
+            self._label_run += 1
+            if (self._label_run >= c.hand_switch_frames and self._flip_jumped
+                    and self.state.mode not in self.LOCKED_MODES):
+                self._label, self._label_run, self._label_age = raw, 0, 0
+        else:
+            self._label_run = 0
+        return (best if self._label == want else None), best
+
+    def primary_hand(self, frame: LandmarkFrame) -> Hand | None:
+        """そのフレームで使う手。update の後に同じフレームで呼ぶと、update が選んだ手を返す。"""
+        if self._selected is not None and self._selected[0] == frame.t_capture_ns:
+            return self._selected[1]
+        best = self._best(frame)
+        if self.cfg.hand == "both" or best is None:
+            return best
+        return best if (self._label or best.handedness) == ("Right" if self.cfg.hand == "right" else "Left") else None
+
+    def raw_hand(self, frame: LandmarkFrame) -> Hand | None:
+        """左右で選ぶ前の、信頼度が最も高い手（ログ・オーバーレイ用）。"""
+        if self._selected is not None and self._selected[0] == frame.t_capture_ns:
+            return self._selected[2]
+        return self._best(frame)
 
     # --- マッピング ---
     def roi(self, image_size: tuple[int, int]) -> tuple[float, float, float, float]:
@@ -370,7 +457,8 @@ class GestureEngine:
         c = self.cfg
         events: list[Event] = []
         t = frame.t_capture_ns
-        hand = self.primary_hand(frame)
+        hand, raw_best = self._select(frame)
+        self._selected = (t, hand, raw_best)
         st = self.state
         st.t_ns, st.active = t, frame.active
 
@@ -594,6 +682,9 @@ class GestureEngine:
             events.extend(self._thumbsup.update(hand, frame.image_size, t, frame.active))
             st.peace = self._thumbsup.view
         st.zoom_level = self._zoom.level if st.mode == "zoom" else 0.0
+        st.zoom_progress = self._zoom.progress if st.mode == "zoom" else 0.0
+        st.zoom_armed = self._zoom.armed
+        st.zoom_fire_ns, st.zoom_fire_dir = self._zoom.last_fire_ns, self._zoom.last_fire_dir
         if pinching:
             hold = c.drag_ms if self._pinch_kind == "left" else c.right_hold_ms
             st.pinch_progress = min(1.0, (t - self._pinch_start) / 1e6 / hold)

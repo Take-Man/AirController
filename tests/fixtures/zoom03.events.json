@@ -1,6 +1,10 @@
 {
  "config": {
   "min_score": 0.5,
+  "hand": "right",
+  "hand_switch_frames": 5,
+  "hand_switch_jump": 0.15,
+  "hand_settle_frames": 30,
   "acquire_hold_ms": 120.0,
   "lose_hold_ms": 150.0,
   "posture_hold_ms": 120.0,
@@ -33,8 +37,9 @@
   "zoom_sign": 1.0,
   "zoom_dead": 0.0485,
   "zoom_max": 0.1384,
-  "zoom_min_rate": 0.8,
-  "zoom_max_rate": 2.5,
+  "zoom_fire_level": 0.25,
+  "zoom_fire_hold_ms": 300.0,
+  "zoom_rearm_frac": 1.0,
   "zoom_min_cutoff": 1.0,
   "zoom_beta": 0.5,
   "fist_enabled": true,
@@ -86,6 +91,7 @@
   "scroll_exponent": 1.8,
   "scroll_invert": false,
   "nav_cooldown_ms": 500.0,
+  "nav_swap": true,
   "screen_w": 1440.0,
   "screen_h": 900.0,
   "roi_cx": 0.4959,
@@ -97,7 +103,7 @@
   "roi_adapt": true,
   "roi_adapt_tau_s": 0.5,
   "roi_adapt_shift": 0.5,
-  "roi_adapt_grow": 0.5,
+  "roi_adapt_grow": 0.05,
   "roi_width_min": 0.15,
   "roi_width_max": 0.9
  },
@@ -488,49 +494,28 @@
   },
   {
    "kind": "zoom",
-   "t_ns": 5653717206731166,
+   "t_ns": 5653717171776875,
    "data": {
     "dir": "in"
    }
   },
   {
    "kind": "zoom",
-   "t_ns": 5653717607121166,
+   "t_ns": 5653719171740166,
+   "data": {
+    "dir": "out"
+   }
+  },
+  {
+   "kind": "zoom",
+   "t_ns": 5653720372342416,
    "data": {
     "dir": "in"
    }
   },
   {
    "kind": "zoom",
-   "t_ns": 5653719237039916,
-   "data": {
-    "dir": "out"
-   }
-  },
-  {
-   "kind": "zoom",
-   "t_ns": 5653719670336083,
-   "data": {
-    "dir": "out"
-   }
-  },
-  {
-   "kind": "zoom",
-   "t_ns": 5653720470769666,
-   "data": {
-    "dir": "in"
-   }
-  },
-  {
-   "kind": "zoom",
-   "t_ns": 5653721803141000,
-   "data": {
-    "dir": "out"
-   }
-  },
-  {
-   "kind": "zoom",
-   "t_ns": 5653722205420416,
+   "t_ns": 5653721572053750,
    "data": {
     "dir": "out"
    }
@@ -4788,35 +4773,35 @@
    "kind": "nav",
    "t_ns": 5653768183593916,
    "data": {
-    "dir": "back"
+    "dir": "forward"
    }
   },
   {
    "kind": "nav",
    "t_ns": 5653770151025250,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
    "kind": "nav",
    "t_ns": 5653773849339500,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
    "kind": "nav",
    "t_ns": 5653776181071333,
    "data": {
-    "dir": "back"
+    "dir": "forward"
    }
   },
   {
    "kind": "nav",
    "t_ns": 5653780579870208,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
@@ -5655,35 +5640,35 @@
    "kind": "nav",
    "t_ns": 5653788674596666,
    "data": {
-    "dir": "back"
+    "dir": "forward"
    }
   },
   {
    "kind": "nav",
    "t_ns": 5653790375532041,
    "data": {
-    "dir": "back"
+    "dir": "forward"
    }
   },
   {
    "kind": "nav",
    "t_ns": 5653792407126833,
    "data": {
-    "dir": "back"
+    "dir": "forward"
    }
   },
   {
    "kind": "nav",
    "t_ns": 5653794406398541,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {
    "kind": "nav",
    "t_ns": 5653800771125166,
    "data": {
-    "dir": "forward"
+    "dir": "back"
    }
   },
   {

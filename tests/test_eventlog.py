@@ -83,7 +83,9 @@ def test_mark_saved_without_frames(tmp_path):
 def test_report_on_recording(tmp_path):
     """記録を流してイベントログを作り、集計できる（クリック数はジェスチャー層の出力と一致する）。"""
     path = FIXTURES / "use04.jsonl"
-    engine = GestureEngine(GestureConfig(**json.loads(path.with_suffix(".events.json").read_text())["config"]))
+    known = GestureConfig.__dataclass_fields__
+    conf = json.loads(path.with_suffix(".events.json").read_text())["config"]
+    engine = GestureEngine(GestureConfig(**{k: v for k, v in conf.items() if k in known}))
     w = EventLogWriter(tmp_path, EventLogConfig(max_files=0), stamp="use04")
     s = SessionLogger(w.put)
     clicks = 0

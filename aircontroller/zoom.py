@@ -32,6 +32,13 @@ def zoom_signals(hand: Hand, image_size: tuple[int, int]) -> dict[str, float]:
 
 
 class ZoomController:
+    """ズームの段の送り方（TASKS-20261025 2.1）: 閾値を超えて一定時間保ったら 1 段だけ送り、不感帯に戻るまで次を送らない。
+
+    以前は不感帯の外で、離れるほど速く連続して送っていた（0.8〜2.5 段/秒）。今は、ピースの戻る・進みやいいねと同じ
+    「とどまって発火」（SPEC 13.18）: 棒の長さで zoom_fire_level を超えたら計時を始め、同じ向きのまま
+    zoom_fire_hold_ms 経ったら発火する。計時中は、閾値を下回っても不感帯の外にいる間は続ける（閾値付近の行き来で
+    やり直さない）。発火した後は、変化が zoom_dead × zoom_rearm_frac より内側に戻るまで再発火しない（再武装）。"""
+
     def __init__(self, cfg):
         self.cfg = cfg
         self._filter = OneEuroFilter(cfg.zoom_min_cutoff, cfg.zoom_beta, 1.0)
@@ -40,19 +47,26 @@ class ZoomController:
     def reset(self) -> None:
         self._filter.reset()
         self._origin: float | None = None
-        self._last_t: float | None = None
-        self._acc = 0.0  # ズームの段数の端数（持ち越す）
+        self._armed = True
+        self._since: float | None = None  # 発火の計時を始めた時刻
+        self._side = 0  # 計時中の向き（+1 イン / -1 アウト）
         self.value = 0.0  # 正面からの変化（ズームインが正）。オーバーレイ用
         self.level = 0.0  # -1..1（不感帯の外での割合）
+        self.progress = 0.0  # 発火までの経過（0..1）。オーバーレイ用
+        self.fired = 0  # 発火した回数（オーバーレイの、発火の表示に使う）
+        self.last_fire_ns: int | None = None
+        self.last_fire_dir = 0
 
     def enter(self) -> None:
         self.reset()
 
+    @property
+    def armed(self) -> bool:
+        return self._armed
+
     def update(self, hand: Hand | None, image_size, t_ns: int, active: bool) -> list[Event]:
         c = self.cfg
         t_s = t_ns / 1e9
-        dt = t_s - self._last_t if self._last_t is not None else 0.0
-        self._last_t = t_s
         if hand is None:
             return []
         raw = zoom_signals(hand, image_size)[c.zoom_signal] * c.zoom_sign
@@ -61,18 +75,25 @@ class ZoomController:
         v = self._filter(raw - self._origin, t_s)
         self.value = v
         a = abs(v)
-        if a < c.zoom_dead:
-            self.level = 0.0
-            self._acc = 0.0
+        side = 1 if v > 0 else -1
+        u = min(1.0, max(0.0, (a - c.zoom_dead) / max(c.zoom_max - c.zoom_dead, 1e-9)))
+        self.level = u * side if a >= c.zoom_dead else 0.0
+        if a < c.zoom_dead * c.zoom_rearm_frac:
+            self._armed = True  # 中央に戻った
+        if a < c.zoom_dead or side != self._side:
+            self._since = None
+        if not self._armed or (self._since is None and u < c.zoom_fire_level):
+            self.progress = 0.0
             return []
-        u = min(1.0, (a - c.zoom_dead) / max(c.zoom_max - c.zoom_dead, 1e-9))
-        self.level = u if v > 0 else -u
-        # 一定速度に近い操作: 不感帯の外では、離れるほど速く（最大 zoom_max_rate 段/秒）ズームの段を送る
-        rate = c.zoom_min_rate + (c.zoom_max_rate - c.zoom_min_rate) * u
-        self._acc += rate * dt
-        events: list[Event] = []
-        while self._acc >= 1.0:
-            self._acc -= 1.0
-            if active:
-                events.append(Event("zoom", t_ns, {"dir": "in" if v > 0 else "out"}))
-        return events
+        if self._since is None:
+            self._since, self._side = t_s, side
+        held_ms = (t_s - self._since) * 1000
+        self.progress = min(1.0, held_ms / c.zoom_fire_hold_ms) if c.zoom_fire_hold_ms > 0 else 1.0
+        if held_ms < c.zoom_fire_hold_ms:
+            return []
+        self._armed = False
+        self._since = None
+        self.progress = 0.0
+        self.fired += 1
+        self.last_fire_ns, self.last_fire_dir = t_ns, side
+        return [Event("zoom", t_ns, {"dir": "in" if side > 0 else "out"})] if active else []

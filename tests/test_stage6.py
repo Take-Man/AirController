@@ -49,12 +49,25 @@ def test_enter_needs_hold_then_zoom_in_and_out():
     assert outs and all(e.data["dir"] == "out" for e in outs)
 
 
-def test_steady_hand_does_not_zoom_and_faster_with_more_tilt():
+def test_one_step_per_exceed():
+    """1回の超過で1段（TASKS-20261025 2.1）: 傾けたまま保っても 1 段だけ。中央に戻ってから、もう一度傾けると次の段。"""
     still = run(GestureEngine(zcfg()), frames([(60, make_back(), True)]))
     assert not [e for e in still if e.kind == "zoom"]
-    small = run(GestureEngine(zcfg()), frames([(15, make_back(), True), (60, make_back(tilt_deg=25), True)]))
-    big = run(GestureEngine(zcfg()), frames([(15, make_back(), True), (60, make_back(tilt_deg=60), True)]))
-    assert len([e for e in big if e.kind == "zoom"]) > len([e for e in small if e.kind == "zoom"]) > 0
+    held = run(GestureEngine(zcfg()), frames([(15, make_back(), True), (90, make_back(tilt_deg=60), True)]))
+    assert [e.data["dir"] for e in held if e.kind == "zoom"] == ["in"]
+    twice = run(GestureEngine(zcfg()), frames([(15, make_back(), True), (30, make_back(tilt_deg=60), True),
+                                               (30, make_back(), True), (30, make_back(tilt_deg=60), True)]))
+    assert [e.data["dir"] for e in twice if e.kind == "zoom"] == ["in", "in"]
+
+
+def test_zoom_needs_hold():
+    """閾値を超えても、zoom_fire_hold_ms 保たなければ送らない。"""
+    brief = run(GestureEngine(zcfg(zoom_fire_hold_ms=300)),
+                frames([(15, make_back(), True), (6, make_back(tilt_deg=60), True), (30, make_back(), True)]))
+    assert not [e for e in brief if e.kind == "zoom"]
+    eng = GestureEngine(zcfg(zoom_fire_hold_ms=300))
+    run(eng, frames([(15, make_back(), True), (5, make_back(tilt_deg=60), True)]))
+    assert eng.state.mode == "zoom" and 0 < eng.state.zoom_progress < 1
 
 
 def test_other_gestures_do_not_enter_zoom():

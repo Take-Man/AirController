@@ -290,7 +290,7 @@ def cmd_run(args, cfg: dict) -> int:
                     release_all()
         t_out = time.perf_counter_ns()
         hand = engine.primary_hand(frame)
-        slog.observe(frame, events, engine.state.mode, hand)
+        slog.observe(frame, events, engine.state.mode, engine.raw_hand(frame))  # 左右ラベルは選ぶ前の手で記録する
         marks.add_frame(frame)
         log.write(frame.seq, frame.t_capture_ns, frame.t_infer_ns, t_out, len(frame.hands),
                   hand.score if hand else 0.0, frame.active, posted)
@@ -375,13 +375,22 @@ def cmd_run(args, cfg: dict) -> int:
             warn = f"印 {mark_flash['n']} を付けました" + ("  " + warn if warn else "")
         if pipe.state == "error":
             warn = f"カメラを起動できません: {pipe.start_error or ''}"
-        return {"camera": pipe.state, "camera_reason": power["reason"],
+        fr = shared["frame"]
+        raw = engine.raw_hand(fr) if fr is not None else None
+        if raw is not None:  # 左右ラベル（MediaPipe）とスコア。使わない手なら ✕
+            used = gcfg.hand == "both" or engine.stable_label == ("Right" if gcfg.hand == "right" else "Left")
+            hand_label = f"{'R' if raw.handedness == 'Right' else 'L'} {raw.score:.2f}{'' if used else ' ✕'}"
+        else:
+            hand_label = "-"
+        return {"camera": pipe.state, "camera_reason": power["reason"], "hand_label": hand_label,
                 "roi": engine.roi(cam_size), "mode": st.mode, "active": activation.active, "peace": st.peace,
-                "zoom_level": st.zoom_level,
+                "zoom_level": st.zoom_level, "zoom_progress": st.zoom_progress, "zoom_armed": st.zoom_armed,
+                "zoom_fire_level": gcfg.zoom_fire_level,
+                "zoom_flash": st.zoom_fire_ns is not None and st.t_ns - st.zoom_fire_ns < 300_000_000,
                 "landmarks": st.landmarks if engine.hand_present else None,
                 "palm": st.palm if engine.hand_present else None,
                 "pinch_progress": st.pinch_progress, "pinch_n": st.pinch_n,
-                "status": f"cam {cam_fps:4.1f}fps  proc {proc_fps:4.1f}fps  conf {st.score:.2f}  p95 {p95:4.1f}ms",
+                "status": f"cam {cam_fps:4.1f}fps  proc {proc_fps:4.1f}fps  手 {hand_label}  p95 {p95:4.1f}ms",
                 "warning": warn}
 
     method = args.activation or cfg.get("activation", {}).get("method", "toggle")
@@ -1310,7 +1319,7 @@ def cmd_report(args, cfg: dict) -> int:
                 if f.active != prev_active:
                     slog.record(f.t_capture_ns, "activation", on=f.active, reason="recorded")
                     prev_active = f.active
-                slog.observe(f, engine.update(f), engine.state.mode, engine.primary_hand(f))
+                slog.observe(f, engine.update(f), engine.state.mode, engine.raw_hand(f))
                 last = f.t_capture_ns
             slog.close(last)
             w.close()
