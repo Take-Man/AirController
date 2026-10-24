@@ -1,0 +1,40 @@
+# 操作範囲は run の自動補正が更新（2026-10-25 01:14）。config.toml の値を上書きする。消せば config.toml の値に戻る
+
+[gesture]
+base_length_m = 0.1941
+
+[cursor]
+roi_cx = 0.5089
+roi_cy = 0.5539
+roi_width = 0.7145
+
+[click]
+pinch_on = 0.2235
+pinch_off = 0.2448
+drag_off = 0.257
+
+[peace]
+peace_neutral_yaw_deg = -56.19
+peace_neutral_pitch_deg = -5.7
+thumb_fold_on = 0.5013
+thumb_fold_off = 0.4498
+
+[thumbsup]
+thumbsup_thumb_far_min = 1.271
+thumbsup_stay_thumb_far_min = 1.017
+thumbsup_x_w_thumb = 0.0
+thumbsup_x_w_knuckle = 0.0
+thumbsup_y_w_thumb = 0.0
+thumbsup_y_w_knuckle = 0.0
+thumbsup_fire_right = 1.045
+thumbsup_fire_left = 1.204
+thumbsup_fire_up = 0.6
+thumbsup_dead_disp = 0.4
+thumbsup_rearm_disp = 0.28
+thumbsup_max_disp = 1.926
+
+[zoom]
+zoom_signal = "depth"
+zoom_sign = 1.0
+zoom_dead = 0.0485
+zoom_max = 0.1384

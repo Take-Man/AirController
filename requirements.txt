@@ -1,0 +1,15 @@
+# Python 3.12（.venv は uv venv --python 3.12 で作成）。2026-10-24 時点で動作確認した版
+mediapipe==1.1.1
+opencv-python==5.0.0.93
+numpy==2.5.4
+pillow==13.0.0
+pyobjc-core==12.2.2
+pyobjc-framework-Quartz==12.2.2
+pyobjc-framework-Cocoa==12.2.2
+pyobjc-framework-AVFoundation==12.2.2
+pyobjc-framework-CoreMedia==12.2.2
+pyobjc-framework-ApplicationServices==12.2.2
+pyobjc-framework-libdispatch==12.2.2
+pytest==9.1.1
+# モデル: models/hand_landmarker.task（Google 公式配布の float16/latest、7,819,105 バイト）
+#   curl -sSL -o models/hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task

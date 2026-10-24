@@ -1,0 +1,181 @@
+# AirController 設定ファイル（段階6までの項目と、待機中の省電力。以降の段階で追記する）
+# 用語（SPEC 第7節）: 「安定度」= 平滑化の強さと、微小な動きを無視する範囲。「移動倍率」= 手の動きに対する出力の倍率。
+# calibration.toml（calibrate コマンドが書く）があれば、その値がここを上書きする。
+
+[camera]
+index = 0
+width = 1280
+height = 720
+fps = 30
+backend = "opencv"   # "opencv" / "avf"（AVFoundation を直接使う。段階2で遅延を比較中）
+
+[power]
+# 待機中の負荷を下げる（SPEC 13.22）。有効化がオフの間は推論を idle_fps に間引き、オフのまま idle_stop_s 経ったらカメラを止める。
+# オーバーレイのカメラのボタン（待機中に表示）でも止められる。止めている間は No signal と表示し、ボタンか有効化で再開する
+idle_fps = 10.0
+idle_stop_s = 300.0
+
+[tracker]
+model_path = "models/hand_landmarker.task"
+num_hands = 1
+min_detection_confidence = 0.5
+min_presence_confidence = 0.5
+min_tracking_confidence = 0.5
+
+[activation]
+method = "toggle"        # "toggle": 押すたびに開始・終了（既定）/ "hold": 押している間だけ（ラベル付き記録用）
+toggle_keys = ["right_command", "jis_yen"]  # 右 Command は単独で押して離したときだけ切り替える（⌘C などでは切り替えない）
+modifier_tap_ms = 400.0  # 右 Command をこれより長く押した場合は切り替えない
+hold_key = "jis_yen"     # method = "hold" のときのキー
+swallow = true           # ¥ のイベントを握りつぶす（実行中は ¥ が入力されない）。右 Command は握りつぶさない
+
+[safety]
+emergency_keycode = 47               # ピリオド
+emergency_mods = ["ctrl", "opt", "cmd"]  # Control+Option+Command+ピリオド で緊急停止
+timeout_s = 0                        # 0 以外なら、起動から N 秒で自動終了（--timeout が優先）
+
+[gesture]
+min_score = 0.5          # これ未満の信頼度の手は検出なしとして扱い、イベントを出さない
+acquire_hold_ms = 120.0  # 検出がこの時間続いたら手の獲得
+lose_hold_ms = 150.0     # 未検出がこの時間続いたら見失い
+base_length_m = 0.19     # 基準長: 手を開いた状態の手首→中指先（world 座標）。段階3で校正する
+
+[mode]
+posture_hold_ms = 120.0     # 姿勢がこの時間続いたら成立
+posture_release_ms = 150.0  # 崩れてこの時間続いたら解除
+index_up_enter = 0.85       # 人差し指の真っすぐさ（0..1）がこれを超えたら「立っている」
+index_up_exit = 0.70        # これを下回ったら「立っていない」
+
+[click]
+pinch_metric = "image"  # "image": 画像上の 親指先-人差し指先 / 手首-中指付け根（横向きの手でも検出できる）
+                        # "world": world 座標の距離 / base_length_m（仕様の当初案。横向きで検出できない）
+pinch_on = 0.15       # これ未満でピンチ成立（world のときの目安は 0.13）
+pinch_off = 0.22      # これを超えたら解除（world のときの目安は 0.18）
+click_min_ms = 40.0   # これより短いピンチは無視（ブレ対策）
+drag_ms = 500.0       # 親指と人差し指のピンチがこれを超えたらドラッグに移行
+drag_off = 0.26       # ドラッグ中の解除の閾値（通常の pinch_off より甘くする）
+drag_release_ms = 100.0   # ドラッグ中は、解除の閾値を超えた状態がこの時間続いたら離す
+drag_lost_release_ms = 500.0  # ドラッグ中に手を見失って、この時間戻らなければ離す
+right_on = 0.15       # 親指先-中指先（右クリック）の成立の閾値。0.18 にすると誤認が出た（use02）
+right_off = 0.22
+right_hold_ms = 400.0 # 親指と中指を付けたまま、この時間待つと右クリック（待つ間カーソルは固定、オーバーレイにリング表示）
+right_arm = 0.35      # 右クリックは、直前 right_arm_window_ms 以内に親指と中指がこれより離れていたことを条件にする
+right_arm_window_ms = 600.0
+
+[cursor]
+roi_cx = 0.5          # 操作範囲の中心（画像座標 0..1）。calibrate で上書きされる
+roi_cy = 0.5
+roi_width = 0.4       # 移動倍率の実体: 操作範囲の幅（画像幅に対する比）。小さいほど少ない動きで大きく動く
+cursor_min_cutoff = 1.0   # 安定度: One Euro Filter
+cursor_beta = 0.01
+cursor_d_cutoff = 1.0
+# 操作範囲の自動補正: 操作中に手のひらが操作範囲の外へ出たら、少しずつそちらへ広げ・ずらす。終了時に calibration.toml へ保存する
+roi_adapt = true
+roi_adapt_tau_s = 0.5     # 補正の速さ（時定数、秒）
+roi_adapt_shift = 0.3     # 外へ出た量に対する中心の移動の割合
+roi_adapt_grow = 0.3      # 外へ出た量に対する幅の増加の割合
+roi_width_min = 0.15
+roi_width_max = 0.9
+
+[zoom]
+# ズームモード（段階6、SPEC 13.20）: 手の甲をカメラに向けて指を伸ばし、0.3 秒保って入る。
+# 手招きのように指先をカメラから遠ざけるとズームイン、近づけるとズームアウト（入ったときの姿勢からの変化で決める）
+zoom_enabled = true
+zoom_back_min = 0.50          # 入るとき: 手の甲がカメラを向いている度合い（+1 = 正対）
+zoom_stay_back_min = 0.20     # 入った後は、これを超え、
+zoom_stay_open_min = 0.66     # 4本の指の真っすぐさの平均がこれを超えていれば保つ（手招きは 0.71 以上、グーは 0.51 前後で抜ける）
+zoom_open_min = 0.80          # 入るとき: 人差し指・中指・薬指の真っすぐさ
+zoom_enter_hold_ms = 300.0
+zoom_thumb_max = -0.30        # 入るとき: 親指が開いている（親指先が手のひらの外。ズームの手 -0.48〜-0.40、グー +0.12 前後）
+zoom_stay_thumb_max = -0.10   # 入った後: これを超えたら（親指を握ったら）抜ける。手招きでは親指も内側へ寄りがちなので少し甘く
+zoom_signal = "depth"         # 指先の前後の測り方: "depth" / "curl" / "length"（learn-zoom が選ぶ）
+zoom_sign = 1.0               # ズームインが正になる符号（learn-zoom が決める）
+zoom_dead = 0.15              # 入ったときからの変化の不感帯（learn-zoom が決める）
+zoom_max = 0.50               # この変化で最大速度
+zoom_min_rate = 0.8           # 不感帯を出たときのズームの段数（段/秒）
+zoom_max_rate = 2.5           # 最大（段/秒）（1.5〜5 では速すぎた）
+zoom_min_cutoff = 1.0         # 安定度（One Euro Filter）
+zoom_beta = 0.5
+# ショートカット: ⌘+ / ⌘−。キーコードは JIS 配列の位置（; + のキー = 41、- のキー = 27）。US 配列では = 24、- 27
+in_keycode = 41
+in_mods = ["cmd"]
+out_keycode = 27
+out_mods = ["cmd"]
+
+[fist]
+# グー（握りこぶし）: 何もしない状態。カーソル移動・クリック・スクロールをすべて止める（手を画面外に出す代わり）
+fist_enabled = true
+fist_enter = 0.60     # 4本の指の真っすぐさがすべてこれ未満で「握った」
+fist_exit = 0.75      # どれかの指がこれを超えたら「握っていない」
+
+[thumbsup]
+# いいねモード（段階5、SPEC 13.16）: 親指を立て、ほかの指を握る。手を動かして領域にとどまると一度だけ発火
+# 左右 = デスクトップの移動（手を左へ → 右のデスクトップ。トラックパッドのスワイプと同じ向き）、上 = Mission Control（もう一度で閉じる）。下は使わない
+thumbsup_enabled = true
+thumbsup_index_max = 0.80     # 入るとき: 人差し指の真っすぐさがこれ未満（握っている）
+thumbsup_up_min = 0.60        # 入るとき: 親指の上向き成分（-1..1）がこれを超える
+thumbsup_fold_max = -0.30     # 入るとき: 親指が手のひらの外へ出ている（lab01 ではグーで -0.29〜+0.33、いいねで -2.74〜-0.35）
+thumbsup_thumb_far_min = 1.20 # 入るとき: 親指先が手のひら中心から十分離れている（親指が隠れたグーを除く。lab01: いいね 1.12〜、グー 〜1.27）
+thumbsup_stay_thumb_far_min = 0.90  # 入った後は、これを超えていれば保つ
+thumbsup_stay_up_min = 0.50   # 入った後は、親指の上向き成分がこれを超え、
+thumbsup_stay_index_max = 0.90  # 人差し指の真っすぐさがこれ未満なら保つ（下へ動かすと人差し指が伸びて見える）
+thumbsup_dead_disp = 0.50     # 不感帯（手のひら中心の変位。単位: モードに入ったときの、画像上の手首→中指付け根の長さ）
+thumbsup_max_disp = 2.00
+thumbsup_fire_left = 1.20     # 発火の計時を始める量: 左（lab01 の各方向の変位: 上 +2.0、下 -1.3、左 -2.1、右 +2.2）
+thumbsup_fire_right = 1.20    # 右
+thumbsup_fire_up = 1.00       # 上
+thumbsup_rearm_disp = 0.30    # これより中央に戻ったら、次の発火を許す
+# 回転の寄与: 方向の量 = 手のひら中心の変位 + 重み × 角度の変化（度）/ 45。learn-thumbsup が calibration.toml に書く
+thumbsup_x_w_thumb = 0.0      # 左右: 親指の角度
+thumbsup_x_w_knuckle = 0.0    # 左右: 人差し指付け根→小指付け根の角度
+thumbsup_y_w_thumb = 0.0      # 上下: 親指の角度
+thumbsup_y_w_knuckle = 0.0    # 上下: 付け根の線の角度
+thumbsup_dwell_ms = 400.0     # 領域にこの時間とどまったら発火（プログレスリング）
+thumbsup_cooldown_ms = 600.0
+thumbsup_still_speed = 1.5    # 発火した後、手が動き出し、方向の量の変化がこれ（単位/秒）未満で
+thumbsup_still_ms = 250.0     # この時間止まったら、そこを新しい正面にする（元の位置に正確に戻らなくてよい。戻る動きは発火しない）
+thumbsup_center_follow_s = 2.0  # 不感帯の中にいる間、正面がこの時定数で手に追従する（姿勢のずれを吸収。0 で無効）
+# ショートカット（システム設定 → キーボード → キーボードショートカット → Mission Control で有効になっている既定の組み合わせ）
+# 矢印のキーコード: ← 123、→ 124、↓ 125、↑ 126。修飾は macOS の登録に合わせ fn（・テンキー）を付ける
+# 手を左へ動かす → ⌃→（右のデスクトップへ）、手を右へ → ⌃←（作者の要望で、当初の向きから入れ替えた）
+left_keycode = 124
+left_mods = ["ctrl", "fn"]
+right_keycode = 123
+right_mods = ["ctrl", "fn"]
+up_keycode = 126
+up_mods = ["ctrl", "fn", "numpad"]
+
+[peace]
+# ピースモード（段階4）: 人差し指と中指を立て、親指を畳む。指先の向きの上下でスクロール、左右で戻る・進む
+peace_enabled = true
+peace_method = "displacement" # "displacement": 入ったときからの指先の変位（既定。未確定事項3の結果、SPEC 13.12）/ "angle": world の方位角・仰角
+thumb_fold_on = 0.25          # 親指を畳んだ判定（親指先の、人差し指付け根→小指付け根の軸上の位置）。calibrate で上書き
+thumb_fold_off = 0.15
+ring_down_max = 0.88          # 入るとき、薬指の真っすぐさがこれ未満（畳んでいる）
+peace_exit_straight = 0.55    # モード中は、人差し指か中指の真っすぐさがこれを下回るまで保つ（指先を下に向けても抜けないように）
+peace_neutral_yaw_deg = 0.0   # 中立方向。calibrate で上書き
+peace_neutral_pitch_deg = 0.0
+peace_dead_deg = 12.0         # 中央の不感帯（度）
+peace_max_deg = 40.0          # スクロールが最大速度になる角度
+peace_fire_deg = 25.0         # 戻る・進むの発火の角度
+peace_rearm_deg = 10.0        # 再武装の角度（これより中央に戻ったら次を許す）
+peace_dead_disp = 0.30        # 変位方式の同じ値（単位: 画像上の手首→中指付け根の長さ）
+peace_max_disp = 1.20
+peace_fire_disp = 0.50
+peace_rearm_disp = 0.25
+peace_min_cutoff = 1.0        # スクロールの安定度（One Euro Filter）
+peace_beta = 0.02
+scroll_max_speed = 2000.0     # スクロールの移動倍率: 最大速度（px/秒）
+scroll_exponent = 1.8         # 速度カーブ（大きいほど中央付近が遅く、端が速い）
+scroll_invert = false         # スクロール方向の反転
+nav_dwell_ms = 400.0          # 戻る・進むの領域にこの時間とどまったら発火（プログレスリングを表示）
+nav_cooldown_ms = 500.0       # 戻る・進むのクールダウン
+# 戻る・進むのショートカット。キーコードはキーの位置: JIS 配列では [ = 30、] = 42（US 配列では 33、30）
+back_keycode = 30
+back_mods = ["cmd"]
+forward_keycode = 42
+forward_mods = ["cmd"]
+
+[log]
+dir = "logs"
+recordings_dir = "recordings"

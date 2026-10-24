@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pointer Target Test</title>
+<style>
+  :root { --bg: #f6f6f4; --fg: #1d1d1f; --muted: #6e6e73; --target: #d9480f; --ok: #2b8a3e; --panel: #ffffff; --line: #d0d0d0; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #161618; --fg: #ececf0; --muted: #9a9aa2; --target: #ff7a45; --ok: #51cf66; --panel: #222226; --line: #3a3a40; }
+  }
+  :root[data-theme="dark"] { --bg: #161618; --fg: #ececf0; --muted: #9a9aa2; --target: #ff7a45; --ok: #51cf66; --panel: #222226; --line: #3a3a40; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, "Hiragino Sans", sans-serif; overflow: hidden; }
+  #arena { position: fixed; inset: 0; }
+  .target { position: absolute; border-radius: 50%; background: var(--target); transform: translate(-50%, -50%); }
+  #panel { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); background: var(--panel); border: 1px solid var(--line);
+           border-radius: 12px; padding: 20px 24px; width: min(560px, calc(100vw - 32px)); box-sizing: border-box; }
+  #panel h1 { font-size: 18px; margin: 0 0 8px; }
+  #panel p { margin: 6px 0; color: var(--muted); }
+  label { display: block; margin: 10px 0 4px; }
+  input, button, textarea { font: inherit; }
+  input[type=text] { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+  button { margin-top: 14px; padding: 8px 18px; border-radius: 8px; border: 0; background: var(--fg); color: var(--bg); cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  textarea { width: 100%; height: 120px; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; font: 12px ui-monospace, Menlo, monospace; }
+  #hud { position: fixed; left: 12px; bottom: 10px; color: var(--muted); font-size: 13px; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="arena"></div>
+<div id="hud"></div>
+<div id="panel">
+  <h1>クリック精度テスト</h1>
+  <p>表示される円を、できるだけ速く正確にクリックしてください。円の外をクリックするとミスとして数えます。</p>
+  <p>大きさ3種類 × 各10回、計30回。最初の1回は練習として集計から除きます。</p>
+  <label for="cond">条件（例: relative / absolute）</label>
+  <input id="cond" type="text" value="relative">
+  <button id="start">開始</button>
+</div>
+<script>
+(() => {
+  const SIZES = [24, 48, 96];       // 円の直径（px）
+  const PER_SIZE = 10;
+  const arena = document.getElementById('arena');
+  const panel = document.getElementById('panel');
+  const hud = document.getElementById('hud');
+  let trials = [], idx = 0, tShown = 0, misses = 0, prev = null, cond = '', el = null;
+
+  function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+  function place() {
+    const s = trials[idx].size, m = 60;
+    let x, y, tries = 0;
+    do {  // 前の円から、画面の対角線の 20% 以上離す
+      x = m + Math.random() * (innerWidth - 2 * m);
+      y = m + Math.random() * (innerHeight - 2 * m);
+      tries++;
+    } while (prev && Math.hypot(x - prev.x, y - prev.y) < 0.2 * Math.hypot(innerWidth, innerHeight) && tries < 50);
+    trials[idx].x = x; trials[idx].y = y;
+    trials[idx].dist = prev ? Math.hypot(x - prev.x, y - prev.y) : 0;
+    if (!el) { el = document.createElement('div'); el.className = 'target'; arena.appendChild(el); }
+    el.style.width = el.style.height = s + 'px';
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    tShown = performance.now(); misses = 0;
+    hud.textContent = `${cond}  ${idx + 1} / ${trials.length}`;
+  }
+
+  function start() {
+    cond = document.getElementById('cond').value.trim() || 'unnamed';
+    trials = [{ size: 48, practice: true }].concat(shuffle(SIZES.flatMap(s => Array(PER_SIZE).fill(0).map(() => ({ size: s })))));
+    idx = 0; prev = null; panel.style.display = 'none';
+    place();
+  }
+
+  arena.addEventListener('mousedown', ev => {
+    if (!trials.length || idx >= trials.length) return;
+    const t = trials[idx];
+    const hit = Math.hypot(ev.clientX - t.x, ev.clientY - t.y) <= t.size / 2;
+    if (!hit) { misses++; return; }
+    t.time = performance.now() - tShown; t.misses = misses;
+    prev = { x: t.x, y: t.y }; idx++;
+    if (idx < trials.length) place(); else finish();
+  });
+
+  function finish() {
+    if (el) { el.remove(); el = null; }
+    hud.textContent = '';
+    const done = trials.filter(t => !t.practice);
+    const rows = SIZES.map(s => {
+      const ts = done.filter(t => t.size === s);
+      const times = ts.map(t => t.time).sort((a, b) => a - b);
+      const med = times[Math.floor(times.length / 2)];
+      const miss = ts.reduce((a, t) => a + t.misses, 0);
+      // Fitts の難易度 ID = log2(D/W + 1)、スループット = ID / 時間
+      const tp = ts.reduce((a, t) => a + Math.log2(t.dist / t.size + 1) / (Math.max(t.time, 1) / 1000), 0) / ts.length;
+      return { s, med, mean: times.reduce((a, b) => a + b, 0) / times.length, miss, n: ts.length, tp };
+    });
+    const total = done.reduce((a, t) => a + t.time, 0) / 1000;
+    const missAll = done.reduce((a, t) => a + t.misses, 0);
+    const tpAll = rows.reduce((a, r) => a + r.tp, 0) / rows.length;
+    const csv = ['cond,size,dist,time_ms,misses'].concat(done.map(t => `${cond},${t.size},${t.dist.toFixed(0)},${t.time.toFixed(0)},${t.misses}`)).join('\n');
+    const summary = `[${cond}] 合計 ${total.toFixed(1)}s  ミス ${missAll}  スループット ${tpAll.toFixed(2)} bit/s  ` +
+      rows.map(r => `${r.s}px: 中央値 ${(r.med / 1000).toFixed(2)}s ミス ${r.miss}`).join('  ');
+    panel.innerHTML = `<h1>結果: ${cond}</h1>
+      <table><tr><th>直径</th><th>中央値</th><th>平均</th><th>ミス</th><th>bit/s</th></tr>
+      ${rows.map(r => `<tr><td>${r.s}px</td><td>${(r.med / 1000).toFixed(2)}s</td><td>${(r.mean / 1000).toFixed(2)}s</td><td>${r.miss}</td><td>${r.tp.toFixed(2)}</td></tr>`).join('')}
+      <tr><td>合計</td><td colspan="2">${total.toFixed(1)}s</td><td>${missAll}</td><td>${tpAll.toFixed(2)}</td></tr></table>
+      <p>下の内容をコピーして貼ってください。</p>
+      <textarea readonly>${summary}\n${csv}</textarea>
+      <label for="cond">次の条件</label><input id="cond" type="text" value="${cond === 'relative' ? 'absolute' : 'relative'}">
+      <button id="start">もう一度</button>`;
+    panel.style.display = 'block';
+    document.getElementById('start').onclick = start;
+  }
+
+  document.getElementById('start').onclick = start;
+})();
+</script>
+</body>
+</html>
