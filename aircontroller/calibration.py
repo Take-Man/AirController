@@ -65,7 +65,7 @@ class LearnResult:
     report: str
 
 
-def learn_thumbsup(frames, segments: list[dict]) -> LearnResult:
+def learn_thumbsup(frames, segments: list[dict], hand: str = "both") -> LearnResult:
     """いいねモードの学習（SPEC 13.18）。frames はラベル付きの記録、segments は区間（label, t_start_ns, t_end_ns）。
 
     - 姿勢: 親指先と手のひら中心の距離（thumb_far）の閾値を、いいねと間違えやすい形（neg_*）の間に置く。
@@ -74,7 +74,7 @@ def learn_thumbsup(frames, segments: list[dict]) -> LearnResult:
       両方向の余裕（小さい方）から、反対の軸へのはみ出しを引いたもの（重みを大きくして全体を拡大しても得をしないように）。
       閾値は、正面の p95 と、その方向の p20 の中間に置く。
     """
-    from .gesture import finger_straightness, thumb_far, thumb_fold_metric, thumb_up
+    from .gesture import finger_straightness, preferred_hand, thumb_far, thumb_fold_metric, thumb_up
     from .peace import _wrap, hand_angles, palm_position
     from .types import INDEX_MCP
 
@@ -86,7 +86,7 @@ def learn_thumbsup(frames, segments: list[dict]) -> LearnResult:
         lab = label_of(f.t_capture_ns)
         if lab is None or not f.hands:
             continue
-        h = max(f.hands, key=lambda h: h.score)
+        h = preferred_hand(f.hands, hand)
         x, y, ref = palm_position(h, f.image_size)
         at, ak = hand_angles(h, f.image_size)
         rows.append({"label": lab, "_t": f.t_capture_ns, "x": x, "y": y, "ref": ref, "at": at, "ak": ak,
@@ -211,13 +211,13 @@ def learn_thumbsup(frames, segments: list[dict]) -> LearnResult:
     return LearnResult(params, "\n".join(lines))
 
 
-def learn_zoom(frames, segments: list[dict]) -> LearnResult:
+def learn_zoom(frames, segments: list[dict], hand: str = "both") -> LearnResult:
     """ズームモードの学習（SPEC 13.20）。区間のラベル: "neutral"（手の甲を向けて指を伸ばし止める）、"in"（手招きのように
     指先を遠ざける）、"out"（指先を近づける）。各 in / out は直前の neutral を基準に測る。
 
     指先の前後の測り方の候補（zoom.zoom_signals）ごとに、in と out が反対向きに、正面の揺れより十分大きく動くかを比べ、
     いちばん分かれるものを選ぶ。符号はズームインが正になるようにする。"""
-    from .gesture import finger_straightness, palm_facing
+    from .gesture import finger_straightness, palm_facing, preferred_hand
     from .types import INDEX_MCP, MIDDLE_MCP, RING_MCP
     from .zoom import zoom_signals
 
@@ -226,7 +226,7 @@ def learn_zoom(frames, segments: list[dict]) -> LearnResult:
         rs = []
         for f in frames:
             if sgm["t_start_ns"] <= f.t_capture_ns < sgm["t_end_ns"] and f.hands:
-                h = max(f.hands, key=lambda h: h.score)
+                h = preferred_hand(f.hands, hand)
                 sig = zoom_signals(h, f.image_size)
                 sig["_back"] = palm_facing(h)
                 sig["_open"] = min(finger_straightness(h.world, m) for m in (INDEX_MCP, MIDDLE_MCP, RING_MCP))

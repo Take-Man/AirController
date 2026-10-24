@@ -78,3 +78,39 @@ def test_wrong_label_on_entry_is_corrected():
     eng = GestureEngine(GestureConfig(hand="right", hand_switch_frames=5, hand_settle_frames=30))
     ev = run(eng, frames([(4, L(h), True), (20, h, True)]))
     assert kinds(ev) == ["hand_acquired"] and eng.stable_label == "Right"
+
+
+def _two(a, b, n):
+    """1フレームに 2つの手が映ったフレーム列（num_hands = 2）。"""
+    from aircontroller.types import LandmarkFrame
+    return [LandmarkFrame(i + 1, int(i * 33 * 1e6), int(i * 33 * 1e6), (1280, 720), (a, b), True) for i in range(n)]
+
+
+def test_two_hands_use_preferred_immediately():
+    """左手がずっと映っていても、右手を出せば、左手を外さなくても右手で操作できる（作者の要望）。"""
+    left = L(make_hand(palm=(0.8, 0.5), score=0.99))
+    right = make_hand(palm=(0.4, 0.5), score=0.9)
+    eng = GestureEngine(GestureConfig(hand="right"))
+    seq = frames([(40, left, True)])
+    t0 = seq[-1].t_capture_ns
+    two = [f.__class__(**{**f.__dict__, "t_capture_ns": f.t_capture_ns + t0 + 33_000_000, "seq": f.seq + 40})
+           for f in _two(left, right, 20)]
+    ev = run(eng, seq + two)
+    assert kinds(ev) == ["hand_acquired"] and eng.state.mode == "cursor" and eng.stable_label == "Right"
+    moves = [e for e in ev if e.kind == "move"]
+    assert moves and eng.state.palm[0] < 0.6  # 右手（画像の左側）の位置で動く
+    # 左手が去っても、右手のまま続けて使える
+    one = frames([(10, right, True)])
+    t1 = two[-1].t_capture_ns + 33_000_000
+    one = [f.__class__(**{**f.__dict__, "t_capture_ns": f.t_capture_ns + t1, "seq": f.seq + 60}) for f in one]
+    for f in one:
+        eng.update(f)
+    assert eng.hand_present and eng.state.mode == "cursor"
+
+
+def test_preferred_hand_helper():
+    from aircontroller.gesture import preferred_hand
+    left, right = L(make_hand(score=0.99)), make_hand(score=0.8)
+    assert preferred_hand((left, right), "right") is right
+    assert preferred_hand((left, right), "both") is left
+    assert preferred_hand((left,), "right") is left  # 無ければ信頼度の高い手（校正・表示用）

@@ -6,7 +6,8 @@
 推論の時間は手の有無で変わる（見失うと手のひらの検出をやり直すので遅い）ため、手が映っているフレームだけの値も出す。CGEvent は送らない（アクセシビリティの権限は要らない。カメラの権限は要る）。
 手を映して動かしながら測ると、実際の使用に近い。
 
-使い方: .venv/bin/python tools/latency_ab.py [--seconds 30] [--rounds 3]
+使い方: .venv/bin/python tools/latency_ab.py [--seconds 30] [--rounds 3] [--num-hands 1|2]
+  --num-hands で、同時に検出する手の数（config の tracker.num_hands）を上書きする（1 と 2 の推論時間を比べる）
 """
 from __future__ import annotations
 
@@ -33,8 +34,12 @@ def main() -> None:
     ap.add_argument("--seconds", type=float, default=30.0)
     ap.add_argument("--rounds", type=int, default=3)
     ap.add_argument("--block", type=float, default=5.0, help="A と B を切り替える間隔（秒）")
+    ap.add_argument("--num-hands", type=int, help="同時に検出する手の数を上書きする")
     args = ap.parse_args()
     cfg = load_config(None)
+    if args.num_hands:
+        cfg["tracker"]["num_hands"] = args.num_hands
+    print(f"num_hands = {cfg['tracker']['num_hands']}")
     engine = GestureEngine(GestureConfig.from_toml(cfg))
     td = tempfile.mkdtemp(prefix="latency_ab-")
     w = EventLogWriter(td, EventLogConfig(max_files=0))
@@ -82,6 +87,7 @@ def main() -> None:
         print(f"   全体（取得→記録）      {pct(tot)}")
         print(f"   全体（手ありのみ）     {pct(tot[hand])}")
         print(f"   推論後（推論完了→記録）{pct(post)}")
+        print(f"   推論（取得→推論完了）  {pct(tot - post)}")
     print(f"（記録の出力先: {td}。イベントログ {w.lines} 行、印 {len(marks.saved)} 個）")
 
 

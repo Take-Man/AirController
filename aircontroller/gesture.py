@@ -93,7 +93,7 @@ class GestureConfig:
     zoom_max: float = 0.50  # 棒の外端になる変化
     # 1回の超過で1段（TASKS-20261025 2.1）: 棒の長さ（0 = 不感帯の端、1 = zoom_max）で zoom_fire_level を超え、
     # zoom_fire_hold_ms 保ったら 1 段送る。変化が zoom_dead × zoom_rearm_frac の内側に戻るまで次を送らない
-    zoom_fire_level: float = 0.25
+    zoom_fire_level: float = 0.5
     zoom_fire_hold_ms: float = 300.0
     zoom_rearm_frac: float = 1.0
     zoom_min_cutoff: float = 1.0  # One Euro Filter（安定度）
@@ -207,6 +207,17 @@ class GestureState:
     zoom_armed: bool = True  # 中央に戻って、次の段を送れる状態か
     zoom_fire_ns: int | None = None  # 直近に段を送った時刻（オーバーレイで、棒の色を一瞬変える）
     zoom_fire_dir: int = 0
+
+
+def preferred_hand(hands, hand: str = "both", min_score: float = 0.0) -> Hand | None:
+    """複数の手が映っているとき、設定の手（hand: "right" / "left"）のラベルの手を優先し、その中で信頼度が最も高い手を返す。
+    そのラベルの手が無ければ、信頼度が最も高い手（校正・学習・表示用。操作に使う手は GestureEngine が選ぶ）。"""
+    hs = [h for h in hands if h.score >= min_score]
+    if not hs:
+        return None
+    want = {"right": "Right", "left": "Left"}.get(hand)
+    pref = [h for h in hs if h.handedness == want]
+    return max(pref or hs, key=lambda h: h.score)
 
 
 def thumb_fold_metric(hand: Hand) -> float:
@@ -386,8 +397,17 @@ class GestureEngine:
             return None, None
         self._label_seen_t = t
         matching = [h for h in hands if h.handedness == want]
-        if len(hands) > 1:  # 両方の手が映っている: 選んだ手だけを使う（ラベルがそろっていれば、そのまま信じる）
-            return (max(matching, key=lambda h: h.score) if matching else None), best
+        if len(hands) > 1:
+            # 両方の手が映っている（tracker.num_hands = 2）: 設定の手のラベルの手だけを使う。もう一方の手が先に映っていても、
+            # 設定の手を出せばすぐに操作できる。ラベルの状態もその手に合わせる（もう一方の手が去った後も、続けて使えるように）
+            if not matching:
+                return None, best
+            chosen = max(matching, key=lambda h: h.score)
+            if self._label != want:
+                self._label_age = 0
+            self._label, self._label_run = want, 0
+            self._label_palm = tuple(float(v) for v in chosen.landmarks[list(PALM), :2].mean(axis=0))
+            return chosen, best
         raw = best.handedness
         palm = tuple(float(v) for v in best.landmarks[list(PALM), :2].mean(axis=0))
         prev, self._label_palm = self._label_palm, palm

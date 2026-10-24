@@ -28,6 +28,13 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 CALIBRATION = ROOT / "calibration.toml"
+HAND = "both"  # 設定の手（[gesture] hand）。校正・学習・表示で、複数の手が映ったときに優先する手。main で設定する
+
+
+def preferred_hand(hands, hand: str = "both"):
+    from .gesture import preferred_hand as ph
+
+    return ph(hands, hand)
 
 
 def load_config(path: str | None, calibration: bool = True) -> dict:
@@ -518,7 +525,7 @@ def cmd_view(args, cfg: dict) -> int:
                      if lat else "latency -",
                      f"hand: {'present' if engine.hand_present else 'none'}"]
             if frame is not None and frame.hands:
-                h = max(frame.hands, key=lambda h: h.score)
+                h = preferred_hand(frame.hands, HAND)
                 _draw_hand(cv2, img, h)
                 pm = pinch_metrics(h)
                 lines.append(f"{h.handedness} score {h.score:.2f}  ref {pm['ref_m']*100:.1f}cm")
@@ -617,7 +624,7 @@ def cmd_calibrate(args, cfg: dict) -> int:
         recorder.write(dataclasses.replace(frame, active=name in ("pinch", "rpinch")))
         if time.monotonic() < phase.get("settle_until", 0):
             name = "settling"  # 移行中のフレームは集計しない
-        h = max(frame.hands, key=lambda h: h.score) if frame.hands else None
+        h = preferred_hand(frame.hands, HAND) if frame.hands else None
         m = image_pinch_metrics(h, frame.image_size) if h else {}
         with lock:
             latest.update(frame=frame, ti=m.get("thumb_index_n", float("nan")), tm=m.get("thumb_middle_n", float("nan")))
@@ -675,7 +682,7 @@ def cmd_calibrate(args, cfg: dict) -> int:
                 with lock:
                     f, ti, tm = latest["frame"], latest["ti"], latest["tm"]
                 if f is not None and f.hands:
-                    _draw_hand(cv2, img, max(f.hands, key=lambda h: h.score))
+                    _draw_hand(cv2, img, preferred_hand(f.hands, HAND))
                 if name == "range":
                     for x, y in data["range"][-300:]:
                         cv2.circle(img, (int((1 - x) * iw), int(y * ih)), 2, (255, 200, 0), -1)
@@ -814,7 +821,7 @@ def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, st
                 with lock:
                     f = latest["frame"]
                 if f is not None and f.hands:
-                    _draw_hand(cv2, img, max(f.hands, key=lambda h: h.score))
+                    _draw_hand(cv2, img, preferred_hand(f.hands, HAND))
                 left = t_end - time.monotonic()
                 if label:
                     sub = f"あと {left:3.1f} 秒" + ("（準備中）" if time.monotonic() < settle_until else "（記録中）")
@@ -897,7 +904,7 @@ def cmd_learn_thumbsup(args, cfg: dict) -> int:
         rec_path, segments = res
     frames = list(iter_frames(rec_path))
     try:
-        result = learn_thumbsup(frames, segments)
+        result = learn_thumbsup(frames, segments, HAND)
     except ValueError as e:
         print(f"学習できませんでした: {e}")
         return 1
@@ -934,7 +941,7 @@ def cmd_learn_zoom(args, cfg: dict) -> int:
             return 2
         rec_path, segments = res
     try:
-        result = learn_zoom(list(iter_frames(rec_path)), segments)
+        result = learn_zoom(list(iter_frames(rec_path)), segments, HAND)
     except ValueError as e:
         print(f"学習できませんでした: {e}")
         return 1
@@ -966,7 +973,7 @@ def cmd_lab_report(args, cfg: dict) -> int:
         if not f.hands:
             continue
         seen[lab.split("/")[0]][1] += 1
-        h = max(f.hands, key=lambda h: h.score)
+        h = preferred_hand(f.hands, HAND)
         p = h.landmarks[:, :2] * np.asarray(f.image_size)
         ref = float(np.linalg.norm(p[MIDDLE_MCP] - p[WRIST])) or 1.0
         palm = p[list(PALM)].mean(axis=0) / ref
@@ -1258,7 +1265,7 @@ def cmd_analyze(args, cfg: dict) -> int:
     for f in frames:
         if not f.hands:
             continue
-        h = max(f.hands, key=lambda h: h.score)
+        h = preferred_hand(f.hands, HAND)
         pm = pinch_metrics(h)
         ref.append(pm["ref_m"])
         span.append(float(np.linalg.norm(h.world[MIDDLE_TIP] - h.world[WRIST])))
@@ -1387,6 +1394,8 @@ def main(argv=None) -> int:
     rp.add_argument("--from-recording", action="store_true", help="ランドマークの記録からイベントログを作って集計する")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
+    global HAND
+    HAND = cfg.get("gesture", {}).get("hand", "both")
     return {"run": cmd_run, "calibrate": cmd_calibrate, "lab": cmd_lab, "lab-report": cmd_lab_report,
             "learn-thumbsup": cmd_learn_thumbsup, "learn-zoom": cmd_learn_zoom, "modkeys": cmd_modkeys, "view": cmd_view, "keytest": cmd_keytest, "camlatency": cmd_camlatency,
             "replay": cmd_replay, "stats": cmd_stats, "analyze": cmd_analyze, "report": cmd_report}[args.cmd](args, cfg)
