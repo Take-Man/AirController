@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .eventlog import LOG_FORMAT
 
-MODE_JA = {"cursor": "カーソル", "pinch": "ピンチ（左）", "drag": "ドラッグ", "right": "右クリック待ち", "peace": "ピース",
+MODE_JA = {"idle": "なし", "cursor": "カーソル", "pinch": "ピンチ（左）", "drag": "ドラッグ", "right": "右クリック待ち", "peace": "ピース",
            "thumbsup": "いいね", "zoom": "ズーム", "fist": "グー"}
 REASON_JA = {"key": "キー", "hand_absent": "手の不在", "palm": "パー", "emergency": "緊急停止",
              "tap_timeout": "キー監視の停止", "exit": "終了"}
