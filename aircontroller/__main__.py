@@ -429,7 +429,7 @@ def cmd_run(args, cfg: dict) -> int:
         print(f"有効化キー: 押下 {activation.press_count} 回（リピート {activation.repeat_count} 回は無視）"
               f"\nクリック {shared['clicks']} 回  右クリック {shared['right_clicks']} 回  ドラッグ {shared['drags']} 回")
     print(format_summary(summarize(log_path)))
-    lags = np.array(getattr(camera, "pts_lag_ns", [])) / 1e6
+    lags = np.array(getattr(pipe.last_camera, "pts_lag_ns", [])) / 1e6
     if len(lags):
         print(f"撮影時刻(PTS)→受け取り: 中央値 {np.median(lags):.1f}ms  p95 {np.percentile(lags, 95):.1f}ms")
     return 0

@@ -317,6 +317,7 @@ class VisionPipeline:
                  min_interval: Callable[[], float] | None = None):
         self.cam_cfg, self.tracker_cfg, self.on_frame, self.min_interval = cam_cfg, tracker_cfg, on_frame, min_interval
         self.camera = None
+        self.last_camera = None  # 最後に動かしたカメラ（止めた後も、終了時の集計 pts_lag_ns などに使う）
         self.tracker: Tracker | None = None
         self.state = "stopped"
         self.error: BaseException | None = None
@@ -343,6 +344,7 @@ class VisionPipeline:
             raise
         with self._lock:
             self.camera, self.tracker, self.state, self.start_error = camera, tracker, "running", None
+            self.last_camera = camera
             cancel = self._cancel
         if cancel:  # 起動中に止める指示が来ていた
             self.stop()

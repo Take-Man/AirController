@@ -92,3 +92,12 @@ def test_pipeline_stop_and_restart(monkeypatch):
     time.sleep(0.3)
     assert len(frames) > n
     pipe.stop()
+
+
+def test_pipeline_keeps_last_camera(monkeypatch):
+    """止めた後も、終了時の集計に使うカメラ（last_camera）を参照できる（run の終了時に NameError になっていた）。"""
+    monkeypatch.setattr(inp, "open_camera", lambda cfg: FakeCamera(cfg))
+    pipe = inp.VisionPipeline(inp.CameraConfig(), inp.TrackerConfig(model_path=MODEL), lambda f: None)
+    pipe.start()
+    pipe.stop()
+    assert pipe.camera is None and isinstance(pipe.last_camera, FakeCamera)
