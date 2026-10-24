@@ -142,8 +142,12 @@ def cmd_run(args, cfg: dict) -> int:
         a = act_ref[0]
         return 0.0 if (a is not None and a.active) or idle_fps <= 0 else 1.0 / idle_fps
 
-    pipe = VisionPipeline(CameraConfig(**cfg["camera"]), _tracker_config(cfg), lambda f: frame_handler[0](f),
-                          min_interval)
+    from .gesture import HandCountPolicy
+
+    tcfg = _tracker_config(cfg)
+    hand_policy = HandCountPolicy(gcfg.hand, min_score=gcfg.min_score) if tcfg.auto_two_hands else None
+    pipe = VisionPipeline(CameraConfig(**cfg["camera"]), tcfg, lambda f: frame_handler[0](f), min_interval,
+                          (lambda: hand_policy.num_hands) if hand_policy else None)
     try:
         pipe.start()
     except CameraError as e:
@@ -298,6 +302,10 @@ def cmd_run(args, cfg: dict) -> int:
         t_out = time.perf_counter_ns()
         hand = engine.primary_hand(frame)
         slog.observe(frame, events, engine.state.mode, engine.raw_hand(frame))  # 左右ラベルは選ぶ前の手で記録する
+        if hand_policy is not None:
+            n = hand_policy.update(frame, engine)
+            if n:
+                slog.record(frame.t_capture_ns, "num_hands", n=n)
         marks.add_frame(frame)
         log.write(frame.seq, frame.t_capture_ns, frame.t_infer_ns, t_out, len(frame.hands),
                   hand.score if hand else 0.0, frame.active, posted)
@@ -387,6 +395,8 @@ def cmd_run(args, cfg: dict) -> int:
         if raw is not None:  # 左右ラベル（MediaPipe）とスコア。使わない手なら ✕
             used = gcfg.hand == "both" or engine.stable_label == ("Right" if gcfg.hand == "right" else "Left")
             hand_label = f"{'R' if raw.handedness == 'Right' else 'L'} {raw.score:.2f}{'' if used else ' ✕'}"
+            if hand_policy is not None and hand_policy.num_hands == 2:
+                hand_label += "（2手を探索中）"
         else:
             hand_label = "-"
         return {"camera": pipe.state, "camera_reason": power["reason"], "hand_label": hand_label,

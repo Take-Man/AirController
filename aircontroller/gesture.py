@@ -738,6 +738,35 @@ class GestureEngine:
         self._drag_anchor = None
 
 
+class HandCountPolicy:
+    """推論で探す手の数を決める（input.TrackerConfig.auto_two_hands）。普段は 1。設定と違う手だけを使える手として
+    捉えている間（その手で操作できない間）は 2 にして、設定の手を出せばすぐ見つかるようにする。設定と違うラベルの手が
+    release_s 秒見えなくなったら 1 に戻す。2 の推論は約 2 倍重い（p50 13 → 26ms の実測）ので、操作中は使わない。"""
+
+    def __init__(self, hand: str = "both", release_s: float = 1.0, min_score: float = 0.5):
+        self.want = {"right": "Right", "left": "Left"}.get(hand)
+        self.release_ns = int(release_s * 1e9)
+        self.min_score = min_score
+        self.num_hands = 1
+        self._other_t: int | None = None
+
+    def update(self, frame: LandmarkFrame, engine: GestureEngine) -> int:
+        """フレームを処理した後に呼ぶ。切り替わったら新しい数を、変わらなければ 0 を返す。"""
+        if self.want is None:
+            return 0
+        t = frame.t_capture_ns
+        if any(h.handedness != self.want and h.score >= self.min_score for h in frame.hands):
+            self._other_t = t
+        if self.num_hands == 1:
+            if engine.raw_hand(frame) is not None and engine.primary_hand(frame) is None:
+                self.num_hands = 2  # 使えない手だけを捉えている
+                return 2
+        elif self._other_t is None or t - self._other_t >= self.release_ns:
+            self.num_hands = 1
+            return 1
+        return 0
+
+
 def run(engine: GestureEngine, frames) -> list[Event]:
     """フレーム列を流し込み、全イベントを返す（再現テスト用）。"""
     engine.reset()

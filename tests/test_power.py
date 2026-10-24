@@ -101,3 +101,21 @@ def test_pipeline_keeps_last_camera(monkeypatch):
     pipe.start()
     pipe.stop()
     assert pipe.camera is None and isinstance(pipe.last_camera, FakeCamera)
+
+
+def test_tracker_switches_num_hands():
+    """auto_two_hands: 推論器を 2 つ持ち、num_hands_fn の値で切り替える。"""
+    cam = FakeCamera()
+    cam.start()
+    want = [1]
+    tr = inp.Tracker(cam, inp.TrackerConfig(model_path=MODEL, auto_two_hands=True), lambda f: None, None,
+                     lambda: want[0])
+    assert set(tr._landmarkers) == {1, 2}
+    tr.start()
+    time.sleep(0.2)
+    assert tr.current_num_hands == 1
+    want[0] = 2
+    time.sleep(0.2)
+    assert tr.current_num_hands == 2 and tr.error is None
+    tr.stop()
+    cam.stop()

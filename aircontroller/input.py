@@ -220,14 +220,19 @@ class TrackerConfig:
     min_detection_confidence: float = 0.5
     min_presence_confidence: float = 0.5
     min_tracking_confidence: float = 0.5
+    # 設定と違う手だけが映っている間だけ、2 つの手を探す（TASKS-20261025 2.5 の作者の要望）。num_hands = 2 を常に使うと
+    # 推論が p50 13 → 26ms、p95 15 → 44ms に増えた（2026-10-25 の実測）ので、普段は num_hands の推論器を使い、
+    # num_hands_fn が 2 を返す間だけ 2 つの手を探す推論器に切り替える
+    auto_two_hands: bool = False
 
 
 class Tracker:
     """推論スレッド。フレームごとに on_frame(LandmarkFrame) を呼ぶ（呼び出しは推論スレッド上）。"""
 
     def __init__(self, camera: Camera, cfg: TrackerConfig, on_frame: Callable[[LandmarkFrame], None],
-                 min_interval: Callable[[], float] | None = None):
-        """min_interval: 推論の最短間隔（秒）を返す関数。待機中に処理回数を落とすために使う（0 なら毎フレーム）。"""
+                 min_interval: Callable[[], float] | None = None, num_hands_fn: Callable[[], int] | None = None):
+        """min_interval: 推論の最短間隔（秒）を返す関数。待機中に処理回数を落とすために使う（0 なら毎フレーム）。
+        num_hands_fn: cfg.auto_two_hands のとき、探す手の数（1 か 2）をフレームごとに返す関数。"""
         self.camera = camera
         self.cfg = cfg
         self.on_frame = on_frame
@@ -236,17 +241,25 @@ class Tracker:
         self._done = threading.Event()
         self._stop = False
         self.error: BaseException | None = None
+        self.num_hands_fn = num_hands_fn
+        self.current_num_hands = cfg.num_hands
+        counts = {cfg.num_hands} | ({2} if cfg.auto_two_hands else set())
+        self._landmarkers = {n: self._create(n) for n in counts}  # 切り替えで止まらないよう、起動時に両方作る
+        self._landmarker = self._landmarkers[cfg.num_hands]
+        self._thread = threading.Thread(target=self._loop, name="inference", daemon=True)
+
+    def _create(self, num_hands: int):
+        c = self.cfg
         options = vision.HandLandmarkerOptions(
-            base_options=BaseOptions(model_asset_path=cfg.model_path),
+            base_options=BaseOptions(model_asset_path=c.model_path),
             running_mode=vision.RunningMode.LIVE_STREAM,
-            num_hands=cfg.num_hands,
-            min_hand_detection_confidence=cfg.min_detection_confidence,
-            min_hand_presence_confidence=cfg.min_presence_confidence,
-            min_tracking_confidence=cfg.min_tracking_confidence,
+            num_hands=num_hands,
+            min_hand_detection_confidence=c.min_detection_confidence,
+            min_hand_presence_confidence=c.min_presence_confidence,
+            min_tracking_confidence=c.min_tracking_confidence,
             result_callback=self._on_result,
         )
-        self._landmarker = vision.HandLandmarker.create_from_options(options)
-        self._thread = threading.Thread(target=self._loop, name="inference", daemon=True)
+        return vision.HandLandmarker.create_from_options(options)
 
     def start(self) -> None:
         self._thread.start()
@@ -273,6 +286,11 @@ class Tracker:
                 self._pending[ts_ms] = (seq, t_cap, (bgr.shape[1], bgr.shape[0]))
                 for k in [k for k in self._pending if k < ts_ms - 2000]:  # 結果が返らなかった分の掃除
                     del self._pending[k]
+                if self.num_hands_fn is not None and len(self._landmarkers) > 1:
+                    n = self.num_hands_fn()
+                    if n in self._landmarkers:
+                        self.current_num_hands = n
+                        self._landmarker = self._landmarkers[n]
                 self._done.clear()
                 self._landmarker.detect_async(image, ts_ms)
                 # 結果が返るまで次を投入しない（推論待ちの間に来たフレームは捨てられ、常に最新が使われる）
@@ -304,7 +322,8 @@ class Tracker:
         self._done.set()
         if self._thread.is_alive():
             self._thread.join(timeout=2.0)
-        self._landmarker.close()
+        for lm in self._landmarkers.values():
+            lm.close()
 
 
 class VisionPipeline:
@@ -314,8 +333,9 @@ class VisionPipeline:
     """
 
     def __init__(self, cam_cfg: CameraConfig, tracker_cfg: TrackerConfig, on_frame: Callable[[LandmarkFrame], None],
-                 min_interval: Callable[[], float] | None = None):
+                 min_interval: Callable[[], float] | None = None, num_hands_fn: Callable[[], int] | None = None):
         self.cam_cfg, self.tracker_cfg, self.on_frame, self.min_interval = cam_cfg, tracker_cfg, on_frame, min_interval
+        self.num_hands_fn = num_hands_fn
         self.camera = None
         self.last_camera = None  # 最後に動かしたカメラ（止めた後も、終了時の集計 pts_lag_ns などに使う）
         self.tracker: Tracker | None = None
@@ -335,7 +355,7 @@ class VisionPipeline:
         try:
             camera = open_camera(self.cam_cfg)
             camera.start()
-            tracker = Tracker(camera, self.tracker_cfg, self.on_frame, self.min_interval)
+            tracker = Tracker(camera, self.tracker_cfg, self.on_frame, self.min_interval, self.num_hands_fn)
             tracker.start()
         except BaseException as e:
             with self._lock:

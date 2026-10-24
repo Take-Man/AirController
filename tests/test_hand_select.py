@@ -114,3 +114,27 @@ def test_preferred_hand_helper():
     assert preferred_hand((left, right), "right") is right
     assert preferred_hand((left, right), "both") is left
     assert preferred_hand((left,), "right") is left  # 無ければ信頼度の高い手（校正・表示用）
+
+
+def test_hand_count_policy():
+    """使えない手（左手）だけを捉えている間だけ 2 つの手を探し、左手が 1 秒見えなくなったら 1 に戻す。"""
+    from aircontroller.gesture import HandCountPolicy
+    left, right = L(make_hand(palm=(0.8, 0.5))), make_hand(palm=(0.4, 0.5))
+    eng = GestureEngine(GestureConfig(hand="right"))
+    pol = HandCountPolicy("right", release_s=1.0)
+    changes = []
+    seq = frames([(10, right, True), (20, None, True), (20, left, True)])
+    seq += [f.__class__(**{**f.__dict__, "t_capture_ns": f.t_capture_ns + seq[-1].t_capture_ns + 33_000_000})
+            for f in _two(left, right, 10)]
+    seq += [f.__class__(**{**f.__dict__, "t_capture_ns": f.t_capture_ns + seq[-1].t_capture_ns + 33_000_000})
+            for f in frames([(40, right, True)])]
+    for i, f in enumerate(seq):
+        eng.update(f)
+        n = pol.update(f, eng)
+        if n:
+            changes.append((i, n))
+    assert [n for _, n in changes] == [2, 1]
+    assert 30 <= changes[0][0] < 35  # 左手だけになってすぐ 2
+    assert changes[1][0] >= 60 + 29  # 左手が去ってから約 1 秒後に 1
+    assert eng.hand_present and eng.state.mode == "cursor"
+    assert HandCountPolicy("both").update(seq[0], eng) == 0
