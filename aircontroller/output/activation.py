@@ -1,10 +1,14 @@
 """有効化の方式。
 
 Activation は「いま有効か」と、その変化の通知だけを提供する。方式は差し替え可能。
-- ToggleActivation（既定）: キーを押すたびに開始・終了を切り替える。
+- ToggleActivation（既定）: キーを押すたびに開始・終了を切り替える（既定は右 Command の単独押し）。
 - KeyHoldActivation: キーを押している間だけ有効（ラベル付き記録に使う）。
 
-どちらも CGEventTap を専用スレッドの CFRunLoop で動かす。同じタップで緊急停止のホットキーも監視する。
+どちらも CGEventTap を専用スレッドの CFRunLoop で動かす。同じタップで緊急停止のホットキーと、
+印を付けるキー（既定 ¥。TASKS-20261025 1.1）も監視する。印のキーのイベントは握りつぶす（¥ の文字を入力させない）。
+
+切り替えの理由（last_reason）: "key"（有効化キー）、"emergency"（緊急停止）、"tap_timeout"（キー監視が止められた）、
+"exit"（終了）。ほかの理由（手の不在など）は set() で外から与える。
 """
 from __future__ import annotations
 
@@ -32,18 +36,25 @@ def keycode_of(key: str | int) -> int:
 class Activation:
     def __init__(self):
         self.active = False
+        self.last_reason = ""
         self.on_change: Callable[[bool], None] | None = None
+        self.on_mark: Callable[[], None] | None = None
 
-    def _set(self, value: bool) -> None:
+    def _set(self, value: bool, reason: str = "key") -> None:
         if value != self.active:
             self.active = value
+            self.last_reason = reason
             if self.on_change:
                 self.on_change(value)
+
+    def set(self, value: bool, reason: str) -> None:
+        """キー以外の理由（手の不在など）で切り替える。"""
+        self._set(value, reason)
 
     def start(self) -> None: ...
 
     def stop(self) -> None:
-        self._set(False)
+        self._set(False, "exit")
 
 
 class TapError(RuntimeError):
@@ -54,8 +65,10 @@ class _TapActivation(Activation):
     """CGEventTap を使う有効化の共通部分。_handle_key をサブクラスで実装する。"""
 
     def __init__(self, emergency_keycode: int = 47, emergency_mods: tuple[str, ...] = ("ctrl", "opt", "cmd"),
-                 on_emergency: Callable[[], None] | None = None):
+                 on_emergency: Callable[[], None] | None = None, mark_key: str | int | None = None):
         super().__init__()
+        self.mark_keycode = keycode_of(mark_key) if mark_key is not None else None
+        self.mark_count = 0
         self.emergency_keycode = emergency_keycode
         self.emergency_flags = sum(MOD_FLAGS[m] for m in emergency_mods)
         self.on_emergency = on_emergency
@@ -93,7 +106,7 @@ class _TapActivation(Activation):
     def _callback(self, proxy, etype, event, refcon):
         if etype in (Quartz.kCGEventTapDisabledByTimeout, Quartz.kCGEventTapDisabledByUserInput):
             # キーのイベントを取りこぼした可能性があるので、安全側に倒して無効化する
-            self._set(False)
+            self._set(False, "tap_timeout")
             Quartz.CGEventTapEnable(self._tap, True)
             return event
         code = Quartz.CGEventGetIntegerValueField(event, Quartz.kCGKeyboardEventKeycode)
@@ -103,9 +116,17 @@ class _TapActivation(Activation):
         self.physical_flags = flags & MOD_MASK
         if etype == Quartz.kCGEventKeyDown and code == self.emergency_keycode \
                 and (flags & _MOD_ALL) == self.emergency_flags:
-            self._set(False)
+            self._set(False, "emergency")
             if self.on_emergency:
                 self.on_emergency()
+            return None
+        if code == self.mark_keycode and etype in (Quartz.kCGEventKeyDown, Quartz.kCGEventKeyUp):
+            # 印を付けるキー: リピートでない押下で印を付ける。押下・解放・リピートとも握りつぶす
+            if etype == Quartz.kCGEventKeyDown and not Quartz.CGEventGetIntegerValueField(
+                    event, Quartz.kCGKeyboardEventAutorepeat):
+                self.mark_count += 1
+                if self.on_mark:
+                    self.on_mark()
             return None
         return self._handle_key(etype, code, flags, event)
 
@@ -159,8 +180,7 @@ class ToggleActivation(_TapActivation):
       （⌘C など）や、modifier_tap_ms より長く押した場合は切り替えない。修飾キーのイベントは握りつぶさない。
     """
 
-    def __init__(self, keys=("right_command", "jis_yen"), swallow: bool = True, modifier_tap_ms: float = 400.0,
-                 **kw):
+    def __init__(self, keys=("right_command",), swallow: bool = True, modifier_tap_ms: float = 400.0, **kw):
         super().__init__(**kw)
         self.keycodes = {keycode_of(k) for k in keys}
         self.swallow = swallow
@@ -207,9 +227,17 @@ def make_activation(cfg: dict, on_emergency: Callable[[], None], method: str | N
     kw = dict(emergency_keycode=s.get("emergency_keycode", 47),
               emergency_mods=tuple(s.get("emergency_mods", ["ctrl", "opt", "cmd"])), on_emergency=on_emergency)
     method = method or a.get("method", "toggle")
+    mark = a.get("mark_key", "jis_yen") or None
     if method == "toggle":
-        return ToggleActivation(keys=tuple(a.get("toggle_keys", ["right_command", "jis_yen"])),
-                                swallow=a.get("swallow", True), modifier_tap_ms=a.get("modifier_tap_ms", 400.0), **kw)
+        keys = tuple(a.get("toggle_keys", ["right_command"]))
+        if mark is not None and keycode_of(mark) in {keycode_of(k) for k in keys}:
+            print(f"[activation] 印のキー {mark} は有効化キーと重なるので、印は使いません")
+            mark = None
+        return ToggleActivation(keys=keys, swallow=a.get("swallow", True),
+                                modifier_tap_ms=a.get("modifier_tap_ms", 400.0), mark_key=mark, **kw)
     if method == "hold":
-        return KeyHoldActivation(key=a.get("hold_key", "jis_yen"), swallow=a.get("swallow", True), **kw)
+        hold = a.get("hold_key", "jis_yen")
+        if mark is not None and keycode_of(mark) == keycode_of(hold):
+            mark = None  # ラベル付き記録（¥ を押している間 = ラベル）では、¥ は押下中の有効化に使う
+        return KeyHoldActivation(key=hold, swallow=a.get("swallow", True), mark_key=mark, **kw)
     raise ValueError(f"未対応の有効化方式: {method}")

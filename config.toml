@@ -24,10 +24,25 @@ min_tracking_confidence = 0.5
 
 [activation]
 method = "toggle"        # "toggle": 押すたびに開始・終了（既定）/ "hold": 押している間だけ（ラベル付き記録用）
-toggle_keys = ["right_command", "jis_yen"]  # 右 Command は単独で押して離したときだけ切り替える（⌘C などでは切り替えない）
+toggle_keys = ["right_command"]  # 右 Command は単独で押して離したときだけ切り替える（⌘C などでは切り替えない）
 modifier_tap_ms = 400.0  # 右 Command をこれより長く押した場合は切り替えない
-hold_key = "jis_yen"     # method = "hold" のときのキー
-swallow = true           # ¥ のイベントを握りつぶす（実行中は ¥ が入力されない）。右 Command は握りつぶさない
+mark_key = "jis_yen"     # 印を付けるキー（TASKS-20261025 1.1）。押すと前後のランドマークを recordings/mark-*.jsonl に残す。
+                         # イベントは握りつぶす（実行中は ¥ が入力されない）。"" で無効
+hold_key = "jis_yen"     # method = "hold" のときのキー（このときは ¥ で印を付けない）
+swallow = true           # toggle_keys / hold_key が通常のキーなら、そのイベントを握りつぶす。右 Command は握りつぶさない
+
+[eventlog]
+# 常時の軽い記録（TASKS-20261025 1.2）: logs/events-YYYYmmdd-HHMMSS.jsonl。集計は python -m aircontroller report
+enabled = true
+max_bytes = 20000000     # 1ファイルの上限（バイト）。超えたら新しいファイルに移る
+max_files = 30           # logs/ の events-*.jsonl をこの数まで残し、超えたら古いものから消す（0 で消さない）
+flush_s = 2.0            # この間隔でファイルに書き出す
+
+[marks]
+# 印（mark_key）の前後のランドマーク。既存の記録と同じ形式で、再現テストにそのまま使える
+ring_s = 10.0            # 直近この秒数をメモリに持つ
+pre_s = 6.0              # 印の前に残す秒数（ring_s 以下）
+post_s = 3.0             # 印の後に残す秒数
 
 [safety]
 emergency_keycode = 47               # ピリオド

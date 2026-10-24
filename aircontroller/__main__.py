@@ -7,6 +7,7 @@
   python -m aircontroller replay recordings/xxx.jsonl [--realtime]
   python -m aircontroller stats logs/xxx.csv
   python -m aircontroller analyze recordings/xxx.jsonl
+  python -m aircontroller report logs/events-*.jsonl                  イベントログの集計（印、取り消し、誤ドラッグの候補など）
 """
 from __future__ import annotations
 
@@ -102,6 +103,7 @@ def _tracker_config(cfg: dict):
 def cmd_run(args, cfg: dict) -> int:
     import Quartz
 
+    from .eventlog import EventLogConfig, EventLogWriter, MarkConfig, MarkRecorder, SessionLogger
     from .gesture import GestureConfig, GestureEngine
     from .input import CameraConfig, CameraError, VisionPipeline
     from .latency import LatencyLog, format_summary, summarize
@@ -153,6 +155,19 @@ def cmd_run(args, cfg: dict) -> int:
                                    "tracker": cfg["tracker"], "gesture": dataclasses.asdict(gcfg),
                                    "activation": cfg.get("activation", {}), "no_output": args.no_output}) \
         if args.record else None
+    # 常時の軽い記録（TASKS-20261025 1.2）: イベントログと、印の前後のランドマーク
+    elcfg = EventLogConfig.from_toml(cfg)
+    evlog = EventLogWriter(_resolve(cfg["log"]["dir"]), elcfg, {"camera": cfg["camera"], "no_output": args.no_output},
+                           stamp) if elcfg.enabled and not args.no_eventlog else None
+    slog = SessionLogger(evlog.put if evlog else (lambda rec: None))
+
+    def mark_saved(n: int, path: Path, frames: int) -> None:
+        print(f"[mark] 印 {n} の前後 {frames} フレームを保存しました: {path.relative_to(ROOT)}")
+
+    marks = MarkRecorder(_resolve(cfg["log"]["recordings_dir"]), MarkConfig.from_toml(cfg),
+                         {"camera": cfg["camera"], "actual_size": list(cam_size), "tracker": cfg["tracker"],
+                          "gesture": dataclasses.asdict(gcfg), "no_output": args.no_output},
+                         run_io=evlog.call if evlog else None, on_saved=mark_saved)
 
     mouse = Mouse()
     pc = cfg.get("peace", {})
@@ -193,7 +208,8 @@ def cmd_run(args, cfg: dict) -> int:
     power = {"last_active": time.monotonic(), "reason": ""}
 
     def on_activation(active: bool):
-        print(f"[activation] {'開始' if active else '終了'}")
+        print(f"[activation] {'開始' if active else '終了'}（{activation.last_reason}）")
+        slog.record(time.perf_counter_ns(), "activation", on=active, reason=activation.last_reason)
         power["last_active"] = time.monotonic()
         unstick("有効化の切り替え")
         if not active:
@@ -215,6 +231,16 @@ def cmd_run(args, cfg: dict) -> int:
             pipe.start_async()
 
     activation.on_change = on_activation
+    mark_flash = {"until": 0.0, "n": 0}
+
+    def on_mark():
+        n, path = marks.mark()
+        mark_flash.update(until=time.monotonic() + 1.5, n=n)
+        slog.record(time.perf_counter_ns(), "mark", n=n, path=str(path.relative_to(ROOT)), active=activation.active,
+                    mode=engine.state.mode)
+        print(f"[mark] 印 {n}（{marks.cfg.post_s:.0f}秒後に前後を保存します）")
+
+    activation.on_mark = on_mark
 
     lock = threading.Lock()
     shared = {"lat": deque(maxlen=90), "t_proc": deque(maxlen=60), "clicks": 0, "right_clicks": 0, "drags": 0,
@@ -264,6 +290,8 @@ def cmd_run(args, cfg: dict) -> int:
                     release_all()
         t_out = time.perf_counter_ns()
         hand = engine.primary_hand(frame)
+        slog.observe(frame, events, engine.state.mode, hand)
+        marks.add_frame(frame)
         log.write(frame.seq, frame.t_capture_ns, frame.t_infer_ns, t_out, len(frame.hands),
                   hand.score if hand else 0.0, frame.active, posted)
         if recorder:
@@ -314,6 +342,7 @@ def cmd_run(args, cfg: dict) -> int:
         if pipe.tracker_error:
             err.append(pipe.tracker_error)
             return False
+        marks.poll()  # カメラが止まっていてフレームが来ないときも、印を締めて保存する
         # 有効化がオフのまま idle_stop_s 経ったら、カメラを止める
         if (idle_stop_s > 0 and pipe.state == "running" and not activation.active
                 and time.monotonic() - power["last_active"] > idle_stop_s):
@@ -342,6 +371,8 @@ def cmd_run(args, cfg: dict) -> int:
             warn = "検出信頼度が低いので停止中"
         if args.no_output:
             warn = (warn + "  " if warn else "") + "出力オフ（記録のみ）"
+        if time.monotonic() < mark_flash["until"]:
+            warn = f"印 {mark_flash['n']} を付けました" + ("  " + warn if warn else "")
         if pipe.state == "error":
             warn = f"カメラを起動できません: {pipe.start_error or ''}"
         return {"camera": pipe.state, "camera_reason": power["reason"],
@@ -354,8 +385,8 @@ def cmd_run(args, cfg: dict) -> int:
                 "warning": warn}
 
     method = args.activation or cfg.get("activation", {}).get("method", "toggle")
-    print(("実行中。右 Command（単独で押して離す）または ¥ で、操作の開始・終了を切り替えます。" if method == "toggle"
-           else "実行中。¥ キーを押している間だけ操作します。")
+    print(("実行中。右 Command（単独で押して離す）で、操作の開始・終了を切り替えます。¥ で印を付けます。"
+           if method == "toggle" else "実行中。¥ キーを押している間だけ操作します。")
           + "終了: Ctrl+C、緊急停止: Control+Option+Command+ピリオド"
           + (f"（{timeout:.0f}秒で自動終了）" if timeout else ""))
     try:
@@ -374,6 +405,10 @@ def cmd_run(args, cfg: dict) -> int:
         log.close()
         if recorder:
             recorder.close()
+        slog.close(time.perf_counter_ns())
+        marks.flush()
+        if evlog:
+            evlog.close()
 
     if err:
         raise err[0]
@@ -383,6 +418,11 @@ def cmd_run(args, cfg: dict) -> int:
         print(f"操作範囲を補正しました: 中心 ({gcfg.roi_cx:.3f}, {gcfg.roi_cy:.3f}) 幅 {gcfg.roi_width:.3f} → "
               f"中心 ({engine.roi_cx:.3f}, {engine.roi_cy:.3f}) 幅 {engine.roi_width:.3f}（{CALIBRATION.name} に保存）")
     print(f"\n遅延ログ: {log_path}")
+    if evlog:
+        print(f"イベントログ: {', '.join(str(p) for p in evlog.paths)}（{evlog.lines} 行）"
+              + (f"  上限を超えた古いログを消しました: {len(evlog.deleted)} 本" if evlog.deleted else ""))
+    if marks.saved:
+        print(f"印: {len(marks.saved)} 個 → " + ", ".join(str(p.relative_to(ROOT)) for p in marks.saved))
     if recorder:
         print(f"ランドマーク記録: {rec_path}（{recorder.count} フレーム）")
     if hasattr(activation, "press_count"):
@@ -1243,6 +1283,44 @@ def cmd_analyze(args, cfg: dict) -> int:
     return 0
 
 
+def cmd_report(args, cfg: dict) -> int:
+    """イベントログの集計（TASKS-20261025 1.3）。--from-recording では、ランドマークの記録をジェスチャー層に流して
+    イベントログを作ってから集計する（有効化の状態は記録のものを使う。手の不在の自動オフなどは含まない）。"""
+    from .report import format_report, load, summarize
+
+    paths = list(args.paths)
+    if args.from_recording:
+        from .eventlog import EventLogConfig, EventLogWriter, SessionLogger
+        from .gesture import GestureConfig, GestureEngine
+        from .recording import iter_frames
+
+        out = []
+        for rp in paths:
+            engine = GestureEngine(GestureConfig.from_toml(cfg))
+            w = EventLogWriter(_resolve(cfg["log"]["dir"]) / "replay", EventLogConfig(max_files=0),
+                               {"from_recording": rp}, Path(rp).stem, overwrite=True)
+            from .eventlog import wall_iso
+            from .recording import read_header
+
+            created = time.mktime(time.strptime(read_header(rp)["created"], "%Y-%m-%dT%H:%M:%S"))
+            t0 = next(iter_frames(rp)).t_capture_ns
+            slog = SessionLogger(w.put, lambda t: wall_iso(int(created * 1e9) + t - t0))
+            last, prev_active = 0, False
+            for f in iter_frames(rp):
+                if f.active != prev_active:
+                    slog.record(f.t_capture_ns, "activation", on=f.active, reason="recorded")
+                    prev_active = f.active
+                slog.observe(f, engine.update(f), engine.state.mode, engine.primary_hand(f))
+                last = f.t_capture_ns
+            slog.close(last)
+            w.close()
+            out += [str(p) for p in w.paths]
+            print(f"イベントログを作りました: {', '.join(str(p) for p in w.paths)}")
+        paths = out
+    print(format_report(summarize(load(paths))))
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="aircontroller")
     ap.add_argument("--config", help="設定ファイル（既定: config.toml）")
@@ -1254,6 +1332,7 @@ def main(argv=None) -> int:
     r.add_argument("--no-overlay", action="store_true", help="オーバーレイを出さない")
     r.add_argument("--timeout", type=float, default=0, help="N 秒後に自動終了（既定は config の safety.timeout_s）")
     r.add_argument("--activation", choices=["toggle", "hold"], help="有効化の方式を上書きする（ラベル付き記録は hold）")
+    r.add_argument("--no-eventlog", action="store_true", help="イベントログ（logs/events-*.jsonl）を書かない")
     cb = sub.add_parser("calibrate", help="基準長と操作範囲を校正し、calibration.toml に保存する")
     cb.add_argument("--seconds", type=float, default=10.0, help="操作範囲を測る時間")
     cb.add_argument("--pinch-only", action="store_true", help="ピンチの閾値だけを校正する（基準長と操作範囲は測らない）")
@@ -1294,11 +1373,14 @@ def main(argv=None) -> int:
     s.add_argument("path")
     a = sub.add_parser("analyze", help="記録から fps と world landmarks の安定度を集計する")
     a.add_argument("path")
+    rp = sub.add_parser("report", help="イベントログ（logs/events-*.jsonl）を集計する")
+    rp.add_argument("paths", nargs="+")
+    rp.add_argument("--from-recording", action="store_true", help="ランドマークの記録からイベントログを作って集計する")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     return {"run": cmd_run, "calibrate": cmd_calibrate, "lab": cmd_lab, "lab-report": cmd_lab_report,
             "learn-thumbsup": cmd_learn_thumbsup, "learn-zoom": cmd_learn_zoom, "modkeys": cmd_modkeys, "view": cmd_view, "keytest": cmd_keytest, "camlatency": cmd_camlatency,
-            "replay": cmd_replay, "stats": cmd_stats, "analyze": cmd_analyze}[args.cmd](args, cfg)
+            "replay": cmd_replay, "stats": cmd_stats, "analyze": cmd_analyze, "report": cmd_report}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

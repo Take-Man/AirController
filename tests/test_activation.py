@@ -35,11 +35,31 @@ def feed(act, *events):
 
 
 def test_toggle_with_yen_ignores_repeat_and_swallows():
-    a = ToggleActivation()
+    a = ToggleActivation(keys=("jis_yen",))  # 通常のキーでも切り替えられる（既定は右 Command だけ）
     out = feed(a, key(YEN), key(YEN, repeat=True), key(YEN, repeat=True), key(YEN, down=False))
     assert a.active and out == [None, None, None, None]  # 長押ししても1回だけ切り替わり、¥ は入力されない
     feed(a, key(YEN), key(YEN, down=False))
     assert not a.active
+
+
+def test_yen_marks_and_does_not_toggle():
+    """¥ は印を付けるだけ（TASKS-20261025 1.1）。有効化は切り替えず、イベントは握りつぶす。リピートでは印を付けない。"""
+    marks = []
+    a = ToggleActivation(mark_key="jis_yen")
+    a.on_mark = lambda: marks.append(a.active)
+    out = feed(a, key(YEN), key(YEN, repeat=True), key(YEN, down=False))
+    assert not a.active and marks == [False] and out == [None, None, None]
+    feed(a, rcmd(True), rcmd(False))
+    assert a.active and a.last_reason == "key"
+    feed(a, key(YEN), key(YEN, down=False))
+    assert a.active and marks == [False, True]
+
+
+def test_activation_reason():
+    a = ToggleActivation()
+    feed(a, rcmd(True), rcmd(False))
+    a.set(False, "hand_absent")
+    assert not a.active and a.last_reason == "hand_absent"
 
 
 def test_toggle_with_right_command_tap():
@@ -68,10 +88,10 @@ def test_deactivate_callback_and_emergency():
     calls, emerg = [], []
     a = ToggleActivation(on_emergency=lambda: emerg.append(1))
     a.on_change = calls.append
-    feed(a, key(YEN))
+    feed(a, rcmd(True), rcmd(False))
     out = feed(a, key(PERIOD, flags=Quartz.kCGEventFlagMaskControl | Quartz.kCGEventFlagMaskAlternate
                        | Quartz.kCGEventFlagMaskCommand))
-    assert calls == [True, False] and emerg == [1] and out == [None]
+    assert calls == [True, False] and emerg == [1] and out == [None] and a.last_reason == "emergency"
 
 
 def test_hold_mode():
