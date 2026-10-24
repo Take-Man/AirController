@@ -172,7 +172,8 @@ def cmd_run(args, cfg: dict) -> int:
     tcfg = _tracker_config(cfg)
     hand_policy = HandCountPolicy(gcfg.hand, min_score=gcfg.min_score) if tcfg.auto_two_hands else None
     pipe = VisionPipeline(CameraConfig(**cfg["camera"]), tcfg, lambda f: frame_handler[0](f), min_interval,
-                          (lambda: hand_policy.num_hands) if hand_policy else None)
+                          (lambda: hand_policy.num_hands) if hand_policy else None,
+                          (lambda: hand_policy.mask_boxes) if hand_policy else None)
     try:
         pipe.start()
     except CameraError as e:

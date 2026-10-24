@@ -117,24 +117,36 @@ def test_preferred_hand_helper():
 
 
 def test_hand_count_policy():
-    """使えない手（左手）だけを捉えている間だけ 2 つの手を探し、左手が 1 秒見えなくなったら 1 に戻す。"""
+    """使えない手（左手）だけを捉えている間だけ 2 つの手を探し、右手を捉えたら（左手が映ったままでも）すぐ 1 に戻す。
+    戻すときは、左手の位置を塗りつぶす範囲として渡し、右手を捉えたら塗るのをやめる。"""
     from aircontroller.gesture import HandCountPolicy
     left, right = L(make_hand(palm=(0.8, 0.5))), make_hand(palm=(0.4, 0.5))
     eng = GestureEngine(GestureConfig(hand="right"))
-    pol = HandCountPolicy("right", release_s=1.0)
-    changes = []
+    pol = HandCountPolicy("right", release_s=1.0, return_frames=3)
     seq = frames([(10, right, True), (20, None, True), (20, left, True)])
-    seq += [f.__class__(**{**f.__dict__, "t_capture_ns": f.t_capture_ns + seq[-1].t_capture_ns + 33_000_000})
-            for f in _two(left, right, 10)]
-    seq += [f.__class__(**{**f.__dict__, "t_capture_ns": f.t_capture_ns + seq[-1].t_capture_ns + 33_000_000})
-            for f in frames([(40, right, True)])]
+
+    def shift(fs, after):
+        return [f.__class__(**{**f.__dict__, "t_capture_ns": f.t_capture_ns + after.t_capture_ns + 33_000_000})
+                for f in fs]
+
+    seq += shift(_two(left, right, 3), seq[-1])  # 両手が映る（3 フレーム目で 1 に戻す。以後は 1 手の推論器の結果）
+    n_two_end = len(seq)
+    seq += shift(frames([(1, None, True)]), seq[-1])  # 1 手に戻した直後: まだ何も捉えていない
+    seq += shift(frames([(10, right, True)]), seq[-1])
+    changes, masks = [], []
     for i, f in enumerate(seq):
         eng.update(f)
         n = pol.update(f, eng)
         if n:
             changes.append((i, n))
+        masks.append(bool(pol.mask_boxes))
     assert [n for _, n in changes] == [2, 1]
     assert 30 <= changes[0][0] < 35  # 左手だけになってすぐ 2
-    assert changes[1][0] >= 60 + 29  # 左手が去ってから約 1 秒後に 1
+    assert changes[1][0] == n_two_end - 1  # 両手が映ったら、右手を捉えて 3 フレームで 1（左手が映ったままでも）
+    assert masks[changes[1][0]] and masks[n_two_end] and not masks[-1]  # 戻した直後だけ左手の位置を塗る
+    x0, y0, x1, y1 = pol._other_boxes[0]
+    assert x0 < 0.8 < x1 and x1 > 0.6  # 塗る範囲は左手（画像の x 0.8 付近）
     assert eng.hand_present and eng.state.mode == "cursor"
     assert HandCountPolicy("both").update(seq[0], eng) == 0
+
+

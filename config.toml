@@ -29,7 +29,8 @@ idle_stop_s = 0.0
 model_path = "models/hand_landmarker.task"
 num_hands = 1            # 同時に検出する手の数（1 で常時。2 を常に使うと推論が約 2 倍: p50 13 → 26ms、p95 15 → 44ms）
 auto_two_hands = true    # 設定と違う手（[gesture] hand）だけが映っている間だけ、2 つの手を探す。もう一方の手が映ったままでも、
-                         # 設定の手を出せばすぐ操作できる（2026-10-25、作者の要望）。違う手が 1 秒見えなくなったら 1 に戻す
+                         # 設定の手を出せばすぐ操作できる（2026-10-25、作者の要望）。設定の手を捉えたら 1 に戻す（もう一方の手の
+                         # 位置を塗りつぶして、設定の手を拾わせる）。違う手が 1 秒見えなくなったときも 1 に戻す
 min_detection_confidence = 0.5
 min_presence_confidence = 0.5
 min_tracking_confidence = 0.5

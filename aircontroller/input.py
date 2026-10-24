@@ -230,9 +230,11 @@ class Tracker:
     """推論スレッド。フレームごとに on_frame(LandmarkFrame) を呼ぶ（呼び出しは推論スレッド上）。"""
 
     def __init__(self, camera: Camera, cfg: TrackerConfig, on_frame: Callable[[LandmarkFrame], None],
-                 min_interval: Callable[[], float] | None = None, num_hands_fn: Callable[[], int] | None = None):
+                 min_interval: Callable[[], float] | None = None, num_hands_fn: Callable[[], int] | None = None,
+                 mask_fn: Callable[[], list] | None = None):
         """min_interval: 推論の最短間隔（秒）を返す関数。待機中に処理回数を落とすために使う（0 なら毎フレーム）。
-        num_hands_fn: cfg.auto_two_hands のとき、探す手の数（1 か 2）をフレームごとに返す関数。"""
+        num_hands_fn: cfg.auto_two_hands のとき、探す手の数（1 か 2）をフレームごとに返す関数。
+        mask_fn: 推論の前に画像を黒く塗る範囲 [(x0, y0, x1, y1)]（画像座標 0..1）を返す関数（gesture.HandCountPolicy）。"""
         self.camera = camera
         self.cfg = cfg
         self.on_frame = on_frame
@@ -242,6 +244,7 @@ class Tracker:
         self._stop = False
         self.error: BaseException | None = None
         self.num_hands_fn = num_hands_fn
+        self.mask_fn = mask_fn
         self.current_num_hands = cfg.num_hands
         counts = {cfg.num_hands} | ({2} if cfg.auto_two_hands else set())
         self._landmarkers = {n: self._create(n) for n in counts}  # 切り替えで止まらないよう、起動時に両方作る
@@ -279,7 +282,12 @@ class Tracker:
                 if interval > 0 and (t_cap - last_proc) / 1e9 < interval - 0.005:
                     continue  # 待機中は間引く（取得は続けるので、有効化した次のフレームから毎フレームに戻る）
                 last_proc = t_cap
-                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)  # 新しい配列（取得スレッドの画像は書き換えない）
+                boxes = self.mask_fn() if self.mask_fn is not None else None
+                if boxes:
+                    h_, w_ = rgb.shape[:2]
+                    for x0, y0, x1, y1 in boxes:
+                        rgb[max(0, int(y0 * h_)):max(0, int(y1 * h_)), max(0, int(x0 * w_)):max(0, int(x1 * w_))] = 0
                 image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 ts_ms = max(t_cap // 1_000_000, last_ts_ms + 1)  # 単調増加が必須
                 last_ts_ms = ts_ms
@@ -333,9 +341,12 @@ class VisionPipeline:
     """
 
     def __init__(self, cam_cfg: CameraConfig, tracker_cfg: TrackerConfig, on_frame: Callable[[LandmarkFrame], None],
-                 min_interval: Callable[[], float] | None = None, num_hands_fn: Callable[[], int] | None = None):
+                 min_interval: Callable[[], float] | None = None, num_hands_fn: Callable[[], int] | None = None,
+                 mask_fn: Callable[[], list] | None = None):
         self.cam_cfg, self.tracker_cfg, self.on_frame, self.min_interval = cam_cfg, tracker_cfg, on_frame, min_interval
         self.num_hands_fn = num_hands_fn
+        self.mask_fn = mask_fn
+        self.mask_fn = mask_fn
         self.camera = None
         self.last_camera = None  # 最後に動かしたカメラ（止めた後も、終了時の集計 pts_lag_ns などに使う）
         self.tracker: Tracker | None = None
@@ -355,7 +366,8 @@ class VisionPipeline:
         try:
             camera = open_camera(self.cam_cfg)
             camera.start()
-            tracker = Tracker(camera, self.tracker_cfg, self.on_frame, self.min_interval, self.num_hands_fn)
+            tracker = Tracker(camera, self.tracker_cfg, self.on_frame, self.min_interval, self.num_hands_fn,
+                              self.mask_fn)
             tracker.start()
         except BaseException as e:
             with self._lock:

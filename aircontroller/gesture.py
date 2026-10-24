@@ -739,29 +739,59 @@ class GestureEngine:
 
 
 class HandCountPolicy:
-    """推論で探す手の数を決める（input.TrackerConfig.auto_two_hands）。普段は 1。設定と違う手だけを使える手として
-    捉えている間（その手で操作できない間）は 2 にして、設定の手を出せばすぐ見つかるようにする。設定と違うラベルの手が
-    release_s 秒見えなくなったら 1 に戻す。2 の推論は約 2 倍重い（p50 13 → 26ms の実測）ので、操作中は使わない。"""
+    """推論で探す手の数を決める（input.TrackerConfig.auto_two_hands）。普段は 1。設定と違う手だけを捉えている間
+    （その手で操作できない間）は 2 にして、設定の手を出せばすぐ見つかるようにする。2 の推論は約 2 倍重い
+    （p50 13 → 26ms の実測）ので、設定の手を捉えたら return_frames フレームで 1 に戻す（もう一方の手が映ったままでも）。
+    戻した直後は、1 つの手しか探さない推論器がもう一方の手を拾い直さないよう、最後に見えたもう一方の手の位置を
+    画像上で塗りつぶす（mask_boxes）。設定の手を捉えたら、推論器はその手を追い続けるので、塗るのをやめる。
+    設定と違うラベルの手が release_s 秒見えなくなったときも 1 に戻す。"""
 
-    def __init__(self, hand: str = "both", release_s: float = 1.0, min_score: float = 0.5):
+    def __init__(self, hand: str = "both", release_s: float = 1.0, min_score: float = 0.5, return_frames: int = 3,
+                 mask_s: float = 1.0, mask_margin: float = 0.3):
         self.want = {"right": "Right", "left": "Left"}.get(hand)
         self.release_ns = int(release_s * 1e9)
         self.min_score = min_score
+        self.return_frames = return_frames
+        self.mask_ns = int(mask_s * 1e9)
+        self.mask_margin = mask_margin
         self.num_hands = 1
+        self.mask_boxes: list[tuple[float, float, float, float]] = []  # 塗りつぶす範囲 (x0, y0, x1, y1)、画像座標 0..1
+        self._mask_until = 0
         self._other_t: int | None = None
+        self._other_boxes: list[tuple[float, float, float, float]] = []
+        self._ok_run = 0
+
+    def _box(self, hand: Hand) -> tuple[float, float, float, float]:
+        p = hand.landmarks[:, :2]
+        (x0, y0), (x1, y1) = p.min(axis=0), p.max(axis=0)
+        mx, my = (x1 - x0) * self.mask_margin + 0.02, (y1 - y0) * self.mask_margin + 0.02
+        return float(x0 - mx), float(y0 - my), float(x1 + mx), float(y1 + my)
 
     def update(self, frame: LandmarkFrame, engine: GestureEngine) -> int:
         """フレームを処理した後に呼ぶ。切り替わったら新しい数を、変わらなければ 0 を返す。"""
         if self.want is None:
             return 0
         t = frame.t_capture_ns
-        if any(h.handedness != self.want and h.score >= self.min_score for h in frame.hands):
+        others = [h for h in frame.hands if h.handedness != self.want and h.score >= self.min_score]
+        if others:
             self._other_t = t
+            self._other_boxes = [self._box(h) for h in others]
+        selected = engine.primary_hand(frame) is not None
+        if self.mask_boxes and (selected or t >= self._mask_until):
+            self.mask_boxes = []  # 設定の手を捉えた（または時間切れ）
         if self.num_hands == 1:
-            if engine.raw_hand(frame) is not None and engine.primary_hand(frame) is None:
-                self.num_hands = 2  # 使えない手だけを捉えている
+            if engine.raw_hand(frame) is not None and not selected:
+                self.num_hands, self._ok_run = 2, 0  # 使えない手だけを捉えている
                 return 2
-        elif self._other_t is None or t - self._other_t >= self.release_ns:
+            return 0
+        self._ok_run = self._ok_run + 1 if selected else 0
+        if self._ok_run >= self.return_frames:
+            self.num_hands = 1
+            if others:  # もう一方の手が映ったまま戻す: その位置を塗って、設定の手を拾わせる
+                self.mask_boxes = list(self._other_boxes)
+                self._mask_until = t + self.mask_ns
+            return 1
+        if self._other_t is None or t - self._other_t >= self.release_ns:
             self.num_hands = 1
             return 1
         return 0
