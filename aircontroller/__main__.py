@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import atexit
 import dataclasses
+import os
 import signal
 import sys
 import threading
@@ -131,6 +132,7 @@ def _tracker_config(cfg: dict):
 def cmd_run(args, cfg: dict) -> int:
     import Quartz
 
+    from . import cpustat
     from .eventlog import EventLogConfig, EventLogWriter, MarkConfig, MarkRecorder, SessionLogger
     from .gesture import GestureConfig, GestureEngine
     from .input import CameraConfig, CameraError, VisionPipeline
@@ -160,6 +162,8 @@ def cmd_run(args, cfg: dict) -> int:
     pw = cfg.get("power", {})
     idle_stop_s = float(pw.get("idle_stop_s", 0.0))
     power_ctl = PowerController(PowerConfig.from_toml(cfg))
+    if args.no_auto_off:
+        power_ctl.cfg.auto_off_after_s = 0.0  # 負荷の計測（有効・手なし）用
     act_ref: list = [None]
     frame_handler = [lambda f: None]
 
@@ -287,6 +291,9 @@ def cmd_run(args, cfg: dict) -> int:
 
     activation.on_mark = on_mark
 
+    # 10 秒ごとの状態（TASKS-20261025 第5節）: 負荷の計測で、状態ごとに CPU・遅延・取りこぼしを分けるため
+    hb = {"interval_s": float(cfg.get("eventlog", {}).get("status_s", 10.0)), "last": time.monotonic(),
+          "cpu": os.times(), "frames": 0, "dropped": 0, "last_seq": None, "lat": [], "collapsed": None}
     lock = threading.Lock()
     shared = {"lat": deque(maxlen=90), "t_proc": deque(maxlen=60), "clicks": 0, "right_clicks": 0, "drags": 0,
               "frame": None}
@@ -353,6 +360,11 @@ def cmd_run(args, cfg: dict) -> int:
                   hand.score if hand else 0.0, frame.active, posted)
         if recorder:
             recorder.write(frame)
+        hb["frames"] += 1
+        if hb["last_seq"] is not None and frame.seq > hb["last_seq"]:
+            hb["dropped"] += frame.seq - hb["last_seq"] - 1
+        hb["last_seq"] = frame.seq
+        hb["lat"].append((t_out - frame.t_capture_ns) / 1e6)
         with lock:
             shared["frame"] = frame
             shared["lat"].append((t_out - frame.t_capture_ns) / 1e6)
@@ -400,6 +412,10 @@ def cmd_run(args, cfg: dict) -> int:
             err.append(pipe.tracker_error)
             return False
         marks.poll()  # カメラが止まっていてフレームが来ないときも、印を締めて保存する
+        cpustat.mark("main")
+        now_m = time.monotonic()
+        if hb["interval_s"] > 0 and now_m - hb["last"] >= hb["interval_s"]:
+            status_record(now_m)
         # 有効化がオフのまま idle_stop_s 経ったら、カメラを止める
         if (idle_stop_s > 0 and pipe.state == "running" and not activation.active
                 and time.monotonic() - power["last_active"] > idle_stop_s):
@@ -415,6 +431,28 @@ def cmd_run(args, cfg: dict) -> int:
     config_label = ({"right": "右手", "left": "左手"}.get(gcfg.hand, "両手")  # 設定の要約: 使う手・自動オフ・パー
                     + (f"・{pc_.auto_off_after_s:.0f}s" if pc_.auto_off_after_s > 0 else "")
                     + ("・パー" if pc_.wake_enabled else ""))
+
+    def status_record(now_m: float) -> None:
+        """10 秒ごとの状態をイベントログに書く（メインスレッド）。"""
+        import resource
+
+        c1 = os.times()
+        dt = now_m - hb["last"]
+        c0 = hb["cpu"]
+        lat, hb["lat"] = hb["lat"], []
+        frames, dropped = hb["frames"], hb["dropped"]
+        hb.update(last=now_m, cpu=c1, frames=0, dropped=0)
+        rec = {"active": activation.active, "power": power_ctl.state, "camera": pipe.state,
+               "collapsed": hb["collapsed"], "num_hands": hand_policy.num_hands if hand_policy else 1,
+               "hand": engine.hand_present, "mode": engine.state.mode, "dt_s": round(dt, 2),
+               "cpu_pct": round((c1.user - c0.user + c1.system - c0.system) / dt * 100, 1),
+               "threads_cpu_s": {k: round(v, 3) for k, v in cpustat.totals().items()},
+               "proc_cpu_s": round(c1.user + c1.system, 3),
+               "maxrss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20, 1),
+               "frames": frames, "dropped": dropped}
+        if lat:
+            rec["lat_p50"], rec["lat_p95"] = (round(float(v), 1) for v in np.percentile(lat, [50, 95]))
+        slog.record(time.perf_counter_ns(), "status", **rec)
 
     def overlay_state():
         with lock:
@@ -474,7 +512,10 @@ def cmd_run(args, cfg: dict) -> int:
 
             def collapse_changed(collapsed: bool) -> None:
                 ui["overlay_collapsed"] = collapsed
+                hb["collapsed"] = collapsed
                 _save_ui_state(ui)
+
+            hb["collapsed"] = bool(ui.get("overlay_collapsed", False))
 
             Overlay(overlay_state, tick, on_camera_button=camera_button,
                     collapsed=bool(ui.get("overlay_collapsed", False)), on_collapse_change=collapse_changed).run()
@@ -1414,6 +1455,7 @@ def main(argv=None) -> int:
     r.add_argument("--timeout", type=float, default=0, help="N 秒後に自動終了（既定は config の safety.timeout_s）")
     r.add_argument("--activation", choices=["toggle", "hold"], help="有効化の方式を上書きする（ラベル付き記録は hold）")
     r.add_argument("--no-eventlog", action="store_true", help="イベントログ（logs/events-*.jsonl）を書かない")
+    r.add_argument("--no-auto-off", action="store_true", help="手の不在による自動オフを使わない（負荷の計測用）")
     cb = sub.add_parser("calibrate", help="基準長と操作範囲を校正し、calibration.toml に保存する")
     cb.add_argument("--seconds", type=float, default=10.0, help="操作範囲を測る時間")
     cb.add_argument("--pinch-only", action="store_true", help="ピンチの閾値だけを校正する（基準長と操作範囲は測らない）")

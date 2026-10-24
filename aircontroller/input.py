@@ -18,6 +18,7 @@ import numpy as np
 from mediapipe.tasks.python import BaseOptions
 from mediapipe.tasks.python import vision
 
+from . import cpustat
 from .types import Hand, LandmarkFrame
 
 
@@ -73,6 +74,7 @@ class Camera:
         while not self._stop:
             ok, frame = self._cap.read()
             t = time.perf_counter_ns()
+            cpustat.mark("camera")
             if not ok:
                 time.sleep(0.005)
                 continue
@@ -163,6 +165,7 @@ class AVFCamera:
         import CoreMedia
 
         t = time.perf_counter_ns()
+        cpustat.mark("camera")
         pts = CoreMedia.CMSampleBufferGetPresentationTimeStamp(sample)
         pb = CoreMedia.CMSampleBufferGetImageBuffer(sample)
         Quartz.CVPixelBufferLockBaseAddress(pb, 1)
@@ -278,6 +281,7 @@ class Tracker:
                     continue
                 seq, t_cap, bgr = got
                 last_seq = seq
+                cpustat.mark("inference-submit")
                 interval = self.min_interval() if self.min_interval else 0.0
                 if interval > 0 and (t_cap - last_proc) / 1e9 < interval - 0.005:
                     continue  # 待機中は間引く（取得は続けるので、有効化した次のフレームから毎フレームに戻る）
@@ -323,6 +327,7 @@ class Tracker:
         except BaseException as e:  # noqa: BLE001
             self.error = e
         finally:
+            cpustat.mark("inference-result")  # MediaPipe の結果のスレッド（ジェスチャー層・出力層・記録もここ）
             self._done.set()
 
     def stop(self) -> None:

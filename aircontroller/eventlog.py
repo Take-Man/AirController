@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterable
 
+from . import cpustat
 from .recording import FORMAT, VERSION, frame_to_dict
 from .types import Event, LandmarkFrame
 
@@ -140,6 +141,7 @@ class EventLogWriter:
                     self._write(item)
             except Exception as e:  # noqa: BLE001 — 記録の失敗で本体を止めない
                 print(f"[eventlog] 書き込みに失敗しました: {e}")
+            cpustat.mark("eventlog")
             if time.monotonic() - last_flush >= self.cfg.flush_s:
                 self._fp.flush()
                 last_flush = time.monotonic()
