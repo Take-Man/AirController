@@ -14,7 +14,10 @@ from Foundation import NSObject, NSMakeRect, NSMakePoint
 
 W, H = 280, 236
 SMALL_W, SMALL_H = 210, 52  # カメラを止めている間（No signal）の大きさ
+COMPACT_W, COMPACT_H = 236, 52  # 畳んだ状態（TASKS-20261025 第4節）。No signal の帯と同程度
 BTN = 30  # カメラのボタンの大きさ
+SBTN = 22  # 畳んだ帯のボタンの大きさ
+POWER_JA = {"on": "オン", "off": "オフ", "probe": "確認中"}
 CAM_W, CAM_H = 256, 144
 PAD = 12
 
@@ -32,6 +35,21 @@ def _text(s, x, y, size=12, rgb=(1, 1, 1), bold=False):
     font = AppKit.NSFont.boldSystemFontOfSize_(size) if bold else AppKit.NSFont.monospacedDigitSystemFontOfSize_weight_(size, 0.0)
     attrs = {AppKit.NSFontAttributeName: font, AppKit.NSForegroundColorAttributeName: _color(rgb)}
     AppKit.NSString.stringWithString_(s).drawAtPoint_withAttributes_(NSMakePoint(x, y), attrs)
+
+
+def _text_fit(s, x, y, size, rgb, max_w: float) -> None:
+    """幅 max_w に収まるよう、末尾を … で切って描く。"""
+    font = AppKit.NSFont.monospacedDigitSystemFontOfSize_weight_(size, 0.0)
+    attrs = {AppKit.NSFontAttributeName: font}
+
+    def width(t):
+        return AppKit.NSString.stringWithString_(t).sizeWithAttributes_(attrs).width
+
+    if width(s) > max_w:
+        while s and width(s + "…") > max_w:
+            s = s[:-1]
+        s += "…"
+    _text(s, x, y, size, rgb)
 
 
 def _draw_peace(v, cx: float, cy: float, r: float) -> None:
@@ -84,13 +102,21 @@ def _draw_peace(v, cx: float, cy: float, r: float) -> None:
 
 def _draw_camera_button(r, slashed: bool) -> None:
     """カメラのマークのボタン。slashed=True は「押すと止める」（斜線つき）。"""
+    _draw_symbol_button(r, "video.slash.fill" if slashed else "video.fill", "■" if slashed else "▶")
+
+
+def _draw_collapse_button(r, collapsed: bool) -> None:
+    """畳む／広げるのボタン。"""
+    _draw_symbol_button(r, "chevron.down" if collapsed else "chevron.up", "▼" if collapsed else "▲")
+
+
+def _draw_symbol_button(r, name: str, fallback: str) -> None:
     x, y, w, h = r
     _color((1, 1, 1), 0.18).setFill()
     AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(NSMakeRect(x, y, w, h), 7, 7).fill()
-    name = "video.slash.fill" if slashed else "video.fill"
-    img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, "camera")
+    img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, name)
     if img is not None:
-        conf = AppKit.NSImageSymbolConfiguration.configurationWithPointSize_weight_(14, 0.0)
+        conf = AppKit.NSImageSymbolConfiguration.configurationWithPointSize_weight_(14 if w >= BTN else 11, 0.0)
         img = img.imageWithSymbolConfiguration_(conf) or img
         tinted = AppKit.NSImage.alloc().initWithSize_(img.size())
         tinted.lockFocus()
@@ -104,7 +130,44 @@ def _draw_camera_button(r, slashed: bool) -> None:
             NSMakeRect(x + (w - sz.width) / 2, y + (h - sz.height) / 2, sz.width, sz.height), AppKit.NSZeroRect,
             AppKit.NSCompositingOperationSourceOver, 1.0, True, None)
     else:
-        _text("■" if slashed else "▶", x + 9, y + 6, 14, (1, 1, 1), bold=True)
+        _text(fallback, x + w / 2 - 6, y + h / 2 - 9, 13, (1, 1, 1), bold=True)
+
+
+def _draw_ring(cx: float, cy: float, r: float, progress: float, rgb, width: float = 3.0) -> None:
+    _color((1, 1, 1), 0.25).setStroke()
+    ring = AppKit.NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(cx - r, cy - r, 2 * r, 2 * r))
+    ring.setLineWidth_(width)
+    ring.stroke()
+    if progress > 0:
+        arc = AppKit.NSBezierPath.bezierPath()
+        arc.appendBezierPathWithArcWithCenter_radius_startAngle_endAngle_clockwise_(
+            NSMakePoint(cx, cy), r, -90, -90 + 360 * min(1.0, progress), False)
+        arc.setLineWidth_(width)
+        _color(rgb).setStroke()
+        arc.stroke()
+
+
+def _draw_zoom_bar(s, bx: float, by: float, bw: float, bh: float) -> None:
+    """ズームの量: 中央が 0、上がズームイン、下がアウト。発火の閾値の目盛り、発火直後の黄色、再武装前は暗く。"""
+    _color((0, 0, 0), 0.55).setFill()
+    AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, by, bw, bh))
+    lv = max(-1.0, min(1.0, s.get("zoom_level", 0.0)))
+    if s.get("zoom_flash"):
+        _color((1.0, 0.95, 0.4)).setFill()
+    elif not s.get("zoom_armed", True):
+        _color((0.3, 0.9, 0.8), 0.35).setFill()
+    else:
+        _color((0.3, 0.9, 0.8), 0.6 + 0.4 * s.get("zoom_progress", 0.0)).setFill()
+    mid = by + bh / 2
+    h = abs(lv) * bh / 2
+    AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, mid - h if lv > 0 else mid, bw, h))
+    _color((1, 1, 1), 0.6).setFill()
+    AppKit.NSBezierPath.fillRect_(NSMakeRect(bx - 2, mid - 0.5, bw + 4, 1))
+    fl = s.get("zoom_fire_level")
+    if fl is not None:
+        _color((1, 1, 1), 0.35).setFill()
+        for yy in (mid - fl * bh / 2, mid + fl * bh / 2):
+            AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, yy - 0.5, bw, 1))
 
 
 class OverlayView(AppKit.NSView):
@@ -114,8 +177,10 @@ class OverlayView(AppKit.NSView):
             return None
         self.get_state = None
         self.state = None  # 直近の状態（Overlay が毎回取って入れる）
-        self.button_rect = None  # 表示中のカメラのボタンの位置（無ければ None）
-        self.on_button = None
+        self.buttons = []  # 表示中のボタン [(rect, callback)]
+        self.on_button = None  # カメラのボタン
+        self.on_collapse = None  # 畳む／広げるのボタン
+        self.collapsed = False
         return self
 
     def isFlipped(self):
@@ -126,15 +191,16 @@ class OverlayView(AppKit.NSView):
 
     def mouseDown_(self, event):
         p = self.convertPoint_fromView_(event.locationInWindow(), None)
-        r = self.button_rect
-        if r and self.on_button and r[0] <= p.x <= r[0] + r[2] and r[1] <= p.y <= r[1] + r[3]:
-            self.on_button()
+        for r, cb in self.buttons:
+            if cb and r[0] <= p.x <= r[0] + r[2] and r[1] <= p.y <= r[1] + r[3]:
+                cb()
+                return
 
     def drawRect_(self, rect):
         _color((0.08, 0.08, 0.1), 0.78).setFill()
         AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(self.bounds(), 10, 10).fill()
         s = self.state
-        self.button_rect = None
+        self.buttons = []
         if not s:
             return
         if s.get("camera", "running") != "running":  # カメラを止めている: No signal と、起動のボタンだけ
@@ -143,9 +209,50 @@ class OverlayView(AppKit.NSView):
             sub = {"stopped": f"{s.get('camera_reason') or ''}停止・ボタンか有効化で再開"}.get(s["camera"], "")
             _text(sub, 14, 30, 10, (0.7, 0.7, 0.7))
             if s["camera"] in ("stopped", "error"):
-                self.button_rect = (SMALL_W - BTN - 11, (SMALL_H - BTN) / 2, BTN, BTN)
-                _draw_camera_button(self.button_rect, slashed=False)
+                r = (SMALL_W - BTN - 11, (SMALL_H - BTN) / 2, BTN, BTN)
+                _draw_camera_button(r, slashed=False)
+                self.buttons.append((r, self.on_button))
             return
+        if self.collapsed:
+            self._draw_compact(s)
+        else:
+            self._draw_full(s)
+
+    def _mode_label(self, s) -> str:
+        if s["active"]:
+            return s["mode"].upper()
+        return f"{s['mode']}（{POWER_JA.get(s.get('power'), '待機')}）"
+
+    def _draw_compact(self, s):
+        """畳んだ帯: 小さい表示（ズームの棒・ピースの4領域・リング）、ジェスチャー名、左右ラベルとオン・オフ、設定。"""
+        mode_rgb = MODE_COLORS.get(s["mode"], (1, 1, 1))
+        cx, cy = 26, COMPACT_H / 2
+        if s.get("mode") == "zoom":
+            _draw_zoom_bar(s, cx - 5, 6, 10, COMPACT_H - 12)
+        elif s.get("peace") is not None:
+            _draw_peace(s["peace"], cx, cy, 16)
+        elif s["pinch_progress"] > 0:
+            _draw_ring(cx, cy, 14, s["pinch_progress"],
+                       (1.0, 0.65, 0.1) if s["pinch_progress"] < 1 else (1.0, 0.3, 0.3))
+        elif s.get("power") == "probe":  # パーの保持の経過
+            _draw_ring(cx, cy, 14, s.get("wake_progress", 0.0), (0.3, 0.9, 0.5))
+        else:
+            _color(mode_rgb, 1.0 if s["active"] else 0.5).setFill()
+            AppKit.NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(cx - 7, cy - 7, 14, 14)).fill()
+        tx = 52
+        max_w = COMPACT_W - tx - (2 * SBTN + 18 if not s["active"] else 8)
+        _text_fit(self._mode_label(s), tx, 5, 14, mode_rgb if s["active"] else (0.7, 0.7, 0.7), max_w)
+        sub = s["warning"] if s.get("warning") else f"手 {s.get('hand_label', '-')}  {s.get('config_label', '')}"
+        _text_fit(sub, tx, 29, 10, (1.0, 0.45, 0.4) if s.get("warning") else (0.8, 0.8, 0.8), max_w)
+        if not s["active"]:  # 待機中だけボタンを出す（操作中はクリックを下のウィンドウへ通す）
+            y = (COMPACT_H - SBTN) / 2
+            r_cam = (COMPACT_W - SBTN - 8, y, SBTN, SBTN)
+            r_col = (COMPACT_W - 2 * SBTN - 13, y, SBTN, SBTN)
+            _draw_camera_button(r_cam, slashed=True)
+            _draw_collapse_button(r_col, collapsed=True)
+            self.buttons += [(r_cam, self.on_button), (r_col, self.on_collapse)]
+
+    def _draw_full(self, s):
         # カメラ画像（鏡像）内の操作範囲と検出位置
         ox, oy = PAD, PAD
         _color((1, 1, 1), 0.12).setFill()
@@ -166,57 +273,33 @@ class OverlayView(AppKit.NSView):
             px, py = ox + (1 - s["palm"][0]) * CAM_W, oy + s["palm"][1] * CAM_H
             _color(mode_rgb).setFill()
             AppKit.NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(px - 5, py - 5, 10, 10)).fill()
-
-        if s.get("mode") == "zoom":  # ズームの量: 中央が 0、上がズームイン、下がアウト
-            bx, by, bh = ox + CAM_W - 24, oy + 8, CAM_H - 16
-            _color((0, 0, 0), 0.55).setFill()
-            AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, by, 14, bh))
-            lv = max(-1.0, min(1.0, s.get("zoom_level", 0.0)))
-            # 段を送った直後は明るい黄色、発火の計時中は明るく、送った後に中央へ戻るまで（再武装前）は暗くする
-            if s.get("zoom_flash"):
-                _color((1.0, 0.95, 0.4)).setFill()
-            elif not s.get("zoom_armed", True):
-                _color((0.3, 0.9, 0.8), 0.35).setFill()
-            else:
-                _color((0.3, 0.9, 0.8), 0.6 + 0.4 * s.get("zoom_progress", 0.0)).setFill()
-            mid = by + bh / 2
-            h = abs(lv) * bh / 2
-            AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, mid - h if lv > 0 else mid, 14, h))
-            _color((1, 1, 1), 0.6).setFill()
-            AppKit.NSBezierPath.fillRect_(NSMakeRect(bx - 2, mid - 0.5, 18, 1))
-            fl = s.get("zoom_fire_level")
-            if fl is not None:  # 発火の閾値の目盛り
-                _color((1, 1, 1), 0.35).setFill()
-                for yy in (mid - fl * bh / 2, mid + fl * bh / 2):
-                    AppKit.NSBezierPath.fillRect_(NSMakeRect(bx, yy - 0.5, 14, 1))
+        if s.get("mode") == "zoom":
+            _draw_zoom_bar(s, ox + CAM_W - 24, oy + 8, 14, CAM_H - 16)
         if s.get("peace") is not None:
             _draw_peace(s["peace"], ox + CAM_W - 72, oy + 72, 64)
 
-        # モードとプログレスリング
+        # モードとプログレスリング（確認の窓では、パーの保持の経過）
         ty = oy + CAM_H + 10
         cx, cy, r = ox + 16, ty + 16, 13
-        _color((1, 1, 1), 0.25).setStroke()
-        ring = AppKit.NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(cx - r, cy - r, 2 * r, 2 * r))
-        ring.setLineWidth_(4)
-        ring.stroke()
         if s["pinch_progress"] > 0:
-            arc = AppKit.NSBezierPath.bezierPath()
-            # 反転座標系なので clockwise=False で時計回りに見える
-            arc.appendBezierPathWithArcWithCenter_radius_startAngle_endAngle_clockwise_(
-                NSMakePoint(cx, cy), r, -90, -90 + 360 * s["pinch_progress"], False)
-            arc.setLineWidth_(4)
-            _color((1.0, 0.65, 0.1) if s["pinch_progress"] < 1 else (1.0, 0.3, 0.3)).setStroke()
-            arc.stroke()
-        label = s["mode"].upper() if s["active"] else f"{s['mode']}（待機）"
-        _text(label, ox + 38, ty + 2, 17, mode_rgb if s["active"] else (0.7, 0.7, 0.7), bold=True)
+            _draw_ring(cx, cy, r, s["pinch_progress"], (1.0, 0.65, 0.1) if s["pinch_progress"] < 1 else (1.0, 0.3, 0.3),
+                       4)
+        else:
+            _draw_ring(cx, cy, r, s.get("wake_progress", 0.0) if s.get("power") == "probe" else 0.0,
+                       (0.3, 0.9, 0.5), 4)
+        _text(self._mode_label(s), ox + 38, ty + 2, 17, mode_rgb if s["active"] else (0.7, 0.7, 0.7), bold=True)
         pn = s["pinch_n"]
-        _text(f"pinch {pn:.2f}" if not math.isnan(pn) else "pinch -", ox + 38, ty + 22, 11, (0.85, 0.85, 0.85))
+        _text((f"pinch {pn:.2f}" if not math.isnan(pn) else "pinch -") + f"   {s.get('config_label', '')}",
+              ox + 38, ty + 22, 11, (0.85, 0.85, 0.85))
         _text(s["status"], ox, ty + 42, 11, (0.85, 0.85, 0.85))
         if s.get("warning"):
             _text(s["warning"], ox, ty + 58, 11, (1.0, 0.45, 0.4))
-        if not s["active"]:  # 待機中だけ、カメラを止めるボタンを出す
-            self.button_rect = (W - BTN - 10, ty, BTN, BTN)
-            _draw_camera_button(self.button_rect, slashed=True)
+        if not s["active"]:  # 待機中だけ、カメラを止めるボタンと、畳むボタンを出す
+            r_cam = (W - BTN - 10, ty, BTN, BTN)
+            r_col = (W - 2 * BTN - 16, ty, BTN, BTN)
+            _draw_camera_button(r_cam, slashed=True)
+            _draw_collapse_button(r_col, collapsed=False)
+            self.buttons += [(r_cam, self.on_button), (r_col, self.on_collapse)]
 
 
 class _Ticker(NSObject):
@@ -233,9 +316,11 @@ class _Ticker(NSObject):
 
 class Overlay:
     def __init__(self, get_state: Callable[[], dict | None], tick: Callable[[], bool], hz: float = 30.0,
-                 on_camera_button: Callable[[], None] | None = None):
+                 on_camera_button: Callable[[], None] | None = None, collapsed: bool = False,
+                 on_collapse_change: Callable[[bool], None] | None = None):
         """tick() は描画のたびに呼ばれ、False を返すとイベントループを止める。
-        on_camera_button: カメラのボタンが押されたとき（メインスレッド）。ボタンを出している間だけクリックを受け取る。"""
+        on_camera_button: カメラのボタンが押されたとき（メインスレッド）。ボタンを出している間だけクリックを受け取る。
+        collapsed: 畳んだ状態で始める。on_collapse_change: 畳む／広げるのボタンで切り替えたとき（状態の保存に使う）。"""
         self.app = AppKit.NSApplication.sharedApplication()
         self.app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)  # Dock に出さず、フォーカスを取らない
         screen = AppKit.NSScreen.mainScreen().visibleFrame()
@@ -256,10 +341,18 @@ class Overlay:
         self.view = OverlayView.alloc().initWithFrame_(NSMakeRect(0, 0, W, H))
         self.view.get_state = get_state
         self.view.on_button = on_camera_button
+        self.view.collapsed = collapsed
+
+        def toggle_collapse():
+            self.view.collapsed = not self.view.collapsed
+            if on_collapse_change:
+                on_collapse_change(self.view.collapsed)
+
+        self.view.on_collapse = toggle_collapse
         self.win.setContentView_(self.view)
         self.win.orderFrontRegardless()
         self._tick = tick
-        self._small = False
+        self._size = (W, H)
         self._screen = screen
 
         def on_tick():
@@ -269,9 +362,11 @@ class Overlay:
             s = get_state()
             self.view.state = s
             small = bool(s) and s.get("camera", "running") != "running"
-            if small != self._small:  # カメラを止めたら小さく（No signal）、動かしたら元の大きさに
-                self._small = small
-                w, h = (SMALL_W, SMALL_H) if small else (W, H)
+            # カメラを止めたら小さく（No signal）、畳んだら帯に、それ以外は元の大きさに
+            size = (SMALL_W, SMALL_H) if small else (COMPACT_W, COMPACT_H) if self.view.collapsed else (W, H)
+            if size != self._size:
+                self._size = size
+                w, h = size
                 sc = self._screen
                 self.win.setFrame_display_(NSMakeRect(sc.origin.x + sc.size.width - w - 16,
                                                       sc.origin.y + sc.size.height - h - 16, w, h), True)

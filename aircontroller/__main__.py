@@ -77,6 +77,27 @@ def save_calibration(updates: dict[str, dict], note: str) -> None:
     CALIBRATION.write_text("\n".join(lines) + "\n")
 
 
+UI_STATE = ROOT / "ui_state.json"  # オーバーレイを畳んだかなど、次回の起動に引き継ぐ表示の状態
+
+
+def _load_ui_state() -> dict:
+    import json
+
+    try:
+        return json.loads(UI_STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_ui_state(ui: dict) -> None:
+    import json
+
+    try:
+        UI_STATE.write_text(json.dumps(ui, ensure_ascii=False) + "\n")
+    except OSError as e:
+        print(f"[overlay] 表示の状態を保存できませんでした: {e}")
+
+
 def _resolve(p: str) -> Path:
     q = Path(p)
     return q if q.is_absolute() else ROOT / q
@@ -131,16 +152,20 @@ def cmd_run(args, cfg: dict) -> int:
     engine = GestureEngine(gcfg)
     print(f"メインディスプレイ: {screen[0]:.0f}x{screen[1]:.0f}pt")
 
-    # カメラと推論（SPEC 13.22）: 有効化がオフの間は推論を power.idle_fps に間引き、オフのまま power.idle_stop_s 経つか、
-    # オーバーレイのカメラのボタンを押すとカメラを止める。有効化するかボタンを押すと起動し直す
+    # カメラと推論（SPEC 13.22、TASKS-20261025 第3節）: オフの間は推論を power.off_detect_hz（1Hz）に間引き、手が見えたら
+    # 確認の窓だけ毎フレームに上げて、パーでオンにする。操作中に手が auto_off_after_s 見えなければ自動でオフ。
+    # オフのまま power.idle_stop_s 経つか（0 で無効）、オーバーレイのカメラのボタンを押すとカメラを止める
+    from .power import PowerConfig, PowerController
+
     pw = cfg.get("power", {})
-    idle_fps, idle_stop_s = float(pw.get("idle_fps", 10.0)), float(pw.get("idle_stop_s", 300.0))
+    idle_stop_s = float(pw.get("idle_stop_s", 0.0))
+    power_ctl = PowerController(PowerConfig.from_toml(cfg))
     act_ref: list = [None]
     frame_handler = [lambda f: None]
 
     def min_interval() -> float:
         a = act_ref[0]
-        return 0.0 if (a is not None and a.active) or idle_fps <= 0 else 1.0 / idle_fps
+        return 0.0 if a is not None and a.active else power_ctl.min_interval()
 
     from .gesture import HandCountPolicy
 
@@ -219,8 +244,16 @@ def cmd_run(args, cfg: dict) -> int:
     power = {"last_active": time.monotonic(), "reason": ""}
 
     def on_activation(active: bool):
-        print(f"[activation] {'開始' if active else '終了'}（{activation.last_reason}）")
-        slog.record(time.perf_counter_ns(), "activation", on=active, reason=activation.last_reason)
+        reason = {"key": "キー", "hand_absent": f"手が {power_ctl.cfg.auto_off_after_s:.0f}秒見えない", "palm": "パー",
+                  "emergency": "緊急停止", "tap_timeout": "キー監視の停止", "exit": "終了"}.get(activation.last_reason,
+                                                                                         activation.last_reason)
+        print(f"[activation] {'開始' if active else '終了'}（{reason}）")
+        now = time.perf_counter_ns()
+        slog.record(now, "activation", on=active, reason=activation.last_reason)
+        if active:
+            power_ctl.activated(now)
+        else:
+            power_ctl.deactivated()
         power["last_active"] = time.monotonic()
         unstick("有効化の切り替え")
         if not active:
@@ -302,6 +335,14 @@ def cmd_run(args, cfg: dict) -> int:
         t_out = time.perf_counter_ns()
         hand = engine.primary_hand(frame)
         slog.observe(frame, events, engine.state.mode, engine.raw_hand(frame))  # 左右ラベルは選ぶ前の手で記録する
+        prev_power = power_ctl.state
+        action = power_ctl.update(frame.t_capture_ns, frame.active, engine.primary_hand(frame))
+        if power_ctl.state != prev_power and "on" not in (prev_power, power_ctl.state):
+            slog.record(frame.t_capture_ns, "power", state=power_ctl.state)  # off ⇄ probe（確認の窓）
+        if action == "auto_off":
+            activation.set(False, "hand_absent")  # on_activation で押下中のボタンを離す
+        elif action == "wake":
+            activation.set(True, "palm")
         if hand_policy is not None:
             n = hand_policy.update(frame, engine)
             if n:
@@ -369,6 +410,11 @@ def cmd_run(args, cfg: dict) -> int:
             return False
         return not stop.is_set()
 
+    pc_ = power_ctl.cfg
+    config_label = ({"right": "右手", "left": "左手"}.get(gcfg.hand, "両手")  # 設定の要約: 使う手・自動オフ・パー
+                    + (f"・{pc_.auto_off_after_s:.0f}s" if pc_.auto_off_after_s > 0 else "")
+                    + ("・パー" if pc_.wake_enabled else ""))
+
     def overlay_state():
         with lock:
             lat = list(shared["lat"])
@@ -396,10 +442,11 @@ def cmd_run(args, cfg: dict) -> int:
             used = gcfg.hand == "both" or engine.stable_label == ("Right" if gcfg.hand == "right" else "Left")
             hand_label = f"{'R' if raw.handedness == 'Right' else 'L'} {raw.score:.2f}{'' if used else ' ✕'}"
             if hand_policy is not None and hand_policy.num_hands == 2:
-                hand_label += "（2手を探索中）"
+                hand_label += " 2手"  # 両手を探している（設定と違う手だけが映っている）
         else:
             hand_label = "-"
         return {"camera": pipe.state, "camera_reason": power["reason"], "hand_label": hand_label,
+                "power": power_ctl.state, "wake_progress": power_ctl.wake_progress, "config_label": config_label,
                 "roi": engine.roi(cam_size), "mode": st.mode, "active": activation.active, "peace": st.peace,
                 "zoom_level": st.zoom_level, "zoom_progress": st.zoom_progress, "zoom_armed": st.zoom_armed,
                 "zoom_fire_level": gcfg.zoom_fire_level,
@@ -422,7 +469,14 @@ def cmd_run(args, cfg: dict) -> int:
         else:
             from .output.overlay import Overlay
 
-            Overlay(overlay_state, tick, on_camera_button=camera_button).run()
+            ui = _load_ui_state()
+
+            def collapse_changed(collapsed: bool) -> None:
+                ui["overlay_collapsed"] = collapsed
+                _save_ui_state(ui)
+
+            Overlay(overlay_state, tick, on_camera_button=camera_button,
+                    collapsed=bool(ui.get("overlay_collapsed", False)), on_collapse_change=collapse_changed).run()
     finally:
         cleanup()
         activation.stop()
