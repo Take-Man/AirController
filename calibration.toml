@@ -1,12 +1,12 @@
-# 操作範囲は run の自動補正が更新（2026-10-25 03:28）。config.toml の値を上書きする。消せば config.toml の値に戻る
+# 操作範囲は run の自動補正が更新（2026-10-25 03:53）。config.toml の値を上書きする。消せば config.toml の値に戻る
 
 [gesture]
 base_length_m = 0.1941
 
 [cursor]
 roi_cx = 0.5075
-roi_cy = 0.5514
-roi_width = 0.7158
+roi_cy = 0.5292
+roi_width = 0.7197
 
 [click]
 pinch_on = 0.2235

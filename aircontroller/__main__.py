@@ -167,9 +167,16 @@ def cmd_run(args, cfg: dict) -> int:
     act_ref: list = [None]
     frame_handler = [lambda f: None]
 
+    two_hands_hz = float(cfg.get("tracker", {}).get("two_hands_hz", 10.0))
+
     def min_interval() -> float:
         a = act_ref[0]
-        return 0.0 if a is not None and a.active else power_ctl.min_interval()
+        if a is not None and a.active:
+            # 設定と違う手だけが見えている間（2 手で探している間）は操作できないので、間引く（2 手の推論は約 2 倍重い）
+            if hand_policy is not None and hand_policy.num_hands == 2 and two_hands_hz > 0:
+                return 1.0 / two_hands_hz
+            return 0.0
+        return power_ctl.min_interval()
 
     from .gesture import HandCountPolicy
 

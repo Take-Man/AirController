@@ -31,6 +31,7 @@ num_hands = 1            # 同時に検出する手の数（1 で常時。2 を�
 auto_two_hands = true    # 設定と違う手（[gesture] hand）だけが映っている間だけ、2 つの手を探す。もう一方の手が映ったままでも、
                          # 設定の手を出せばすぐ操作できる（2026-10-25、作者の要望）。設定の手を捉えたら 1 に戻す（もう一方の手の
                          # 位置を塗りつぶして、設定の手を拾わせる）。違う手が 1 秒見えなくなったときも 1 に戻す
+two_hands_hz = 10.0      # 2 つの手を探している間（操作できない間）の推論の頻度。30Hz では CPU が約 90% になった（0 で間引かない）
 min_detection_confidence = 0.5
 min_presence_confidence = 0.5
 min_tracking_confidence = 0.5

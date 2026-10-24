@@ -110,21 +110,35 @@ def _draw_collapse_button(r, collapsed: bool) -> None:
     _draw_symbol_button(r, "chevron.down" if collapsed else "chevron.up", "▼" if collapsed else "▲")
 
 
+_SYMBOLS: dict = {}  # (名前, 大きさ) → 白く塗ったアイコン。毎回作ると、待機中の描画だけで CPU 15〜24% を使っていた
+
+
+def _symbol(name: str, pt: int):
+    key = (name, pt)
+    if key not in _SYMBOLS:
+        img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, name)
+        tinted = None
+        if img is not None:
+            conf = AppKit.NSImageSymbolConfiguration.configurationWithPointSize_weight_(pt, 0.0)
+            img = img.imageWithSymbolConfiguration_(conf) or img
+            tinted = AppKit.NSImage.alloc().initWithSize_(img.size())
+            tinted.lockFocus()
+            img.drawAtPoint_fromRect_operation_fraction_(NSMakePoint(0, 0), AppKit.NSZeroRect,
+                                                         AppKit.NSCompositingOperationSourceOver, 1.0)
+            _color((1, 1, 1)).set()
+            AppKit.NSRectFillUsingOperation(NSMakeRect(0, 0, img.size().width, img.size().height),
+                                            AppKit.NSCompositingOperationSourceAtop)
+            tinted.unlockFocus()
+        _SYMBOLS[key] = tinted
+    return _SYMBOLS[key]
+
+
 def _draw_symbol_button(r, name: str, fallback: str) -> None:
     x, y, w, h = r
     _color((1, 1, 1), 0.18).setFill()
     AppKit.NSBezierPath.bezierPathWithRoundedRect_xRadius_yRadius_(NSMakeRect(x, y, w, h), 7, 7).fill()
-    img = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, name)
-    if img is not None:
-        conf = AppKit.NSImageSymbolConfiguration.configurationWithPointSize_weight_(14 if w >= BTN else 11, 0.0)
-        img = img.imageWithSymbolConfiguration_(conf) or img
-        tinted = AppKit.NSImage.alloc().initWithSize_(img.size())
-        tinted.lockFocus()
-        img.drawAtPoint_fromRect_operation_fraction_(NSMakePoint(0, 0), AppKit.NSZeroRect, AppKit.NSCompositingOperationSourceOver, 1.0)
-        _color((1, 1, 1)).set()
-        AppKit.NSRectFillUsingOperation(NSMakeRect(0, 0, img.size().width, img.size().height),
-                                        AppKit.NSCompositingOperationSourceAtop)
-        tinted.unlockFocus()
+    tinted = _symbol(name, 14 if w >= BTN else 11)
+    if tinted is not None:
         sz = tinted.size()
         tinted.drawInRect_fromRect_operation_fraction_respectFlipped_hints_(
             NSMakeRect(x + (w - sz.width) / 2, y + (h - sz.height) / 2, sz.width, sz.height), AppKit.NSZeroRect,
@@ -353,6 +367,7 @@ class Overlay:
         self.win.orderFrontRegardless()
         self._tick = tick
         self._size = (W, H)
+        self._n_tick = 0
         self._screen = screen
 
         def on_tick():
@@ -376,7 +391,10 @@ class Overlay:
                 (small and s.get("camera") in ("stopped", "error")) or (not small and not s.get("active", True)))
             if clickable == self.win.ignoresMouseEvents():
                 self.win.setIgnoresMouseEvents_(not clickable)
-            self.view.setNeedsDisplay_(True)
+            # 待機中・カメラ停止中は、描画を 3 回に 1 回にする（30Hz → 10Hz。操作中は毎回）
+            self._n_tick += 1
+            if (s and s.get("active")) or self._n_tick % 3 == 0:
+                self.view.setNeedsDisplay_(True)
 
         self._ticker = _Ticker.alloc().initWithCallback_(on_tick)
         self._timer = AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(

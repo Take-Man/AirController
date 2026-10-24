@@ -112,10 +112,15 @@ def test_tracker_switches_num_hands():
                      lambda: want[0])
     assert set(tr._landmarkers) == {1, 2}
     tr.start()
-    time.sleep(0.2)
-    assert tr.current_num_hands == 1
+
+    def wait(cond, timeout=2.0):  # 負荷が高いと推論の 1 回目が遅れるので、決まった時間ではなく条件を待つ
+        t0 = time.monotonic()
+        while not cond() and time.monotonic() - t0 < timeout:
+            time.sleep(0.02)
+        return cond()
+
+    assert wait(lambda: tr.current_num_hands == 1)
     want[0] = 2
-    time.sleep(0.2)
-    assert tr.current_num_hands == 2 and tr.error is None
+    assert wait(lambda: tr.current_num_hands == 2) and tr.error is None
     tr.stop()
     cam.stop()
