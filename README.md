@@ -38,6 +38,7 @@ uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
 .venv/bin/python -m aircontroller learn-zoom                     # ズームモードを手招きの記録から学習 → calibration.toml
 .venv/bin/python -m aircontroller lab --name lab01                # ジェスチャーの候補を試してラベル付きで記録
 .venv/bin/python -m aircontroller lab-position                   # 位置ごとに カーソル・クリック・ピース を記録（集計は tools/position_report.py）
+.venv/bin/python -m aircontroller lab-position --suite edge      # 右端・右下・下端への往復・静止・ピースで、意図しないピンチが出るかを記録
 .venv/bin/python -m aircontroller lab-report recordings/lab01.jsonl  # 候補ごとの区別のしやすさ
 open tools/targets.html                                          # クリック精度テスト（ブラウザで開く）
 .venv/bin/python -m aircontroller modkeys --old --new             # 修飾キーが押されたままと扱われていないか確認

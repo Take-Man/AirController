@@ -899,10 +899,12 @@ LAB_OTHERS = [
 
 def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, str]], settle: float = 1.5,
                    purpose: str = "lab", title: str = "AirController lab",
-                   targets: dict[str, tuple[float, float]] | None = None) -> tuple[Path, list[dict]] | None:
+                   targets: dict[str, tuple[float, float] | list[tuple[float, float]]] | None = None
+                   ) -> tuple[Path, list[dict]] | None:
     """画面の指示に従って姿勢を順に記録する。label が None の段階は待ち時間。各段階の最初の settle 秒は集計しない。
     記録（.jsonl）とラベル（.labels.json）を保存し、(記録のパス, 区間のリスト) を返す。
-    targets: ラベルの先頭（"/" の前）→ 手のひら中心を置く位置（画像座標、非反転）。プレビューに円で示す。"""
+    targets: ラベル（全体、なければ "/" の前）→ 手のひら中心を置く位置（画像座標、非反転）。プレビューに円で示す。
+    位置のリストなら、それらを線で結んで示す（往復する動き）。"""
     import json
 
     import cv2
@@ -952,12 +954,16 @@ def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, st
                     f = latest["frame"]
                 if f is not None and f.hands:
                     _draw_hand(cv2, img, preferred_hand(f.hands, HAND))
-                key = (label or msg_next_label.get(msg, "")).split("/")[0]
-                if targets and key in targets:  # 手のひら中心を置く位置（プレビューは鏡像なので x を反転）
-                    tx, ty = targets[key]
-                    cx, cy = int((1 - tx) * img.shape[1]), int(ty * img.shape[0])
-                    cv2.circle(img, (cx, cy), 40, (0, 220, 255), 3)
-                    cv2.circle(img, (cx, cy), 4, (0, 220, 255), -1)
+                full = label or msg_next_label.get(msg, "")
+                tg = (targets or {}).get(full, (targets or {}).get(full.split("/")[0]))
+                if tg is not None:  # 手のひら中心を置く位置（プレビューは鏡像なので x を反転）
+                    pts = tg if isinstance(tg, list) else [tg]
+                    pix = [(int((1 - tx) * img.shape[1]), int(ty * img.shape[0])) for tx, ty in pts]
+                    for a_, b_ in zip(pix, pix[1:]):
+                        cv2.line(img, a_, b_, (0, 220, 255), 2)
+                    for cx, cy in pix:
+                        cv2.circle(img, (cx, cy), 40, (0, 220, 255), 3)
+                        cv2.circle(img, (cx, cy), 4, (0, 220, 255), -1)
                 left = t_end - time.monotonic()
                 if label:
                     sub = f"あと {left:3.1f} 秒" + ("（準備中）" if time.monotonic() < settle_until else "（記録中）")
@@ -1014,8 +1020,15 @@ POSITION_GESTURES = [("cursor", "人差し指だけを立てて、止めてお�
                      ("peace", "ピースにして、止めておく", 4.0)]
 
 
+EDGE_POSITIONS = [("center", "画面の中央", (0.5, 0.5)), ("right", "画面の右端", (0.97, 0.5)),
+                  ("downright", "画面の右下", (0.95, 0.92)), ("down", "画面の下端", (0.5, 0.95))]
+
+
 def cmd_lab_position(args, cfg: dict) -> int:
-    """位置ごとに、カーソル・クリック・ピースをラベル付きで記録する（SPEC 13.41: 位置によって判定が崩れる件の原因の特定）。
+    """位置ごとに、ラベル付きで記録する（SPEC 13.41: 位置によって判定が崩れる件の原因の特定）。
+    --suite basic: カーソル・クリック・ピース（5 か所）。
+    --suite edge: ふだんのカーソル操作で右端・右下・下端へ運ぶ往復（move）と、そこで止める（hold）、そこでピースを作って指を動かす
+    （peace_move）。意図しないピンチ・クリック・ドラッグが出るかを見る（作者の体験: 右端や右下でクリックやドラッグになりがち）。
     画面上の位置（カーソルがそこへ来る手の位置）をプレビューに円で示す。集計は tools/position_report.py。"""
     from .gesture import GestureConfig, GestureEngine
 
@@ -1024,13 +1037,29 @@ def cmd_lab_position(args, cfg: dict) -> int:
     iw, ih = cfg["camera"]["width"], cfg["camera"]["height"]
     x0, y0, w, h = eng.roi((iw, ih))
     # 画面上の位置 (sx, sy)（0..1）→ 手のひら中心の画像座標（map_to_screen の逆。左右は反転）
-    targets = {key: (x0 + (1 - sx) * w, y0 + sy * h) for key, _, (sx, sy) in POSITIONS}
+    def img_pt(sx, sy):
+        return x0 + (1 - sx) * w, y0 + sy * h
+
     settle = 1.5
     steps: list[tuple[str | None, float, str]] = [(None, 4.0, "準備: 右手をカメラに映してください。黄色の円に手のひらの中心を合わせます")]
-    for key, pdesc, _ in POSITIONS:
-        steps.append((None, 3.0, f"次の位置: {pdesc}（黄色の円へ手のひらを動かす）"))
-        for g, gdesc, dur in POSITION_GESTURES:
-            steps.append((f"{key}/{g}", dur + settle, f"{pdesc}: {gdesc}"))
+    if args.suite == "edge":
+        targets: dict = {key: img_pt(*xy) for key, _, xy in EDGE_POSITIONS}
+        center = targets["center"]
+        steps.append((None, 3.0, "次: 画面の中央で、人差し指だけを立てて止める（基準）"))
+        steps.append(("center/hold", 4.0 + settle, "画面の中央: 人差し指だけを立てて止める（カーソル）"))
+        steps.append(("center/peace_move", 5.0 + settle, "画面の中央: ピースを作り、指を少し動かしたり開閉したりする"))
+        for key, pdesc, _ in EDGE_POSITIONS[1:]:
+            targets[f"{key}/move"] = [center, targets[key]]
+            steps.append((None, 3.0, f"次: 中央 ⇄ {pdesc} を、ふだんのカーソル操作の速さで往復する"))
+            steps.append((f"{key}/move", 10.0 + settle, f"人差し指だけを立てたまま、中央 ⇄ {pdesc} を往復する（クリックはしない）"))
+            steps.append((f"{key}/hold", 5.0 + settle, f"{pdesc}: 人差し指だけを立てて止める（カーソル。クリックはしない）"))
+            steps.append((f"{key}/peace_move", 6.0 + settle, f"{pdesc}: ピースを作り、指を少し動かしたり開閉したりする"))
+    else:
+        targets = {key: img_pt(sx, sy) for key, _, (sx, sy) in POSITIONS}
+        for key, pdesc, _ in POSITIONS:
+            steps.append((None, 3.0, f"次の位置: {pdesc}（黄色の円へ手のひらを動かす）"))
+            for g, gdesc, dur in POSITION_GESTURES:
+                steps.append((f"{key}/{g}", dur + settle, f"{pdesc}: {gdesc}"))
     res = _guided_record(cfg, args.name or f"labpos-{time.strftime('%Y%m%d-%H%M%S')}", steps, settle,
                          purpose="lab-position", title="AirController lab-position", targets=targets)
     if res is None:
@@ -1561,6 +1590,8 @@ def main(argv=None) -> int:
     a.add_argument("path")
     lp = sub.add_parser("lab-position", help="位置ごとに、カーソル・クリック・ピースをラベル付きで記録する")
     lp.add_argument("--name", help="記録ファイル名（拡張子なし）")
+    lp.add_argument("--suite", choices=["basic", "edge"], default="basic",
+                    help="basic: 5 か所でカーソル・クリック・ピース / edge: 右端・右下・下端への往復と、そこでの静止・ピース")
     rp = sub.add_parser("report", help="イベントログ（logs/events-*.jsonl）を集計する")
     rp.add_argument("paths", nargs="+")
     rp.add_argument("--from-recording", action="store_true", help="ランドマークの記録からイベントログを作って集計する")

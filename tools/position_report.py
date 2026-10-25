@@ -7,6 +7,8 @@
   - 指の特徴量の中央値: 人差し指・中指・薬指の真っすぐさ、親指の畳み、手のひらの向き（+ が手の甲）、親指-人差し指の距離
     （最小と中央値）、人差し指と中指の先の画像上の距離、人差し指と中指の先の奥行きの差（world、カメラ方向に重なると大きい）
 使い方: .venv/bin/python tools/position_report.py recordings/labpos-....jsonl
+  （lab-position --suite edge の記録では、move = 中央との往復、hold = 静止、peace_move = ピースで指を動かす。これらの区間の
+  ピンチ・クリック・ドラッグは、すべて意図しないもの（「誤」と表示）。手を見失った区間に注意）
 """
 from __future__ import annotations
 
@@ -26,7 +28,10 @@ from aircontroller.gesture import (GestureConfig, GestureEngine, finger_straight
 from aircontroller.recording import iter_frames  # noqa: E402
 from aircontroller.types import INDEX_MCP, INDEX_TIP, MIDDLE_MCP, MIDDLE_TIP, MIDDLE_MCP as MM, RING_MCP, WRIST  # noqa: E402
 
-EXPECT = {"cursor": "cursor", "peace": "peace", "click": None}
+# 区間のジェスチャー → 正しいモード（None はピンチの回数だけを見る）。edge の move・hold・peace_move では、ピンチ・クリック・ドラッグは
+# すべて意図しないもの
+EXPECT = {"cursor": "cursor", "peace": "peace", "click": None, "hold": "cursor", "move": "cursor", "peace_move": "peace"}
+UNINTENDED = {"cursor", "peace", "hold", "move", "peace_move"}
 
 
 def main(path: str) -> None:
@@ -36,7 +41,10 @@ def main(path: str) -> None:
     gcfg.roi_adapt = False
     eng = GestureEngine(gcfg)
     per: dict[str, dict] = defaultdict(lambda: {"n": 0, "hand": 0, "modes": Counter(), "ev": Counter(), "f": defaultdict(list)})
+    misfires = []
+    t_first = None
     for f in iter_frames(p):
+        t_first = t_first if t_first is not None else f.t_capture_ns
         f = f.__class__(**{**f.__dict__, "active": True})
         ev = eng.update(f)
         lab = next((s["label"] for s in segs if s["t_start_ns"] <= f.t_capture_ns < s["t_end_ns"]), None)
@@ -48,6 +56,13 @@ def main(path: str) -> None:
         for e in ev:
             if e.kind in ("pinch_start", "click", "drag_start", "pinch_cancel"):
                 d["ev"][e.kind + (":" + e.data.get("button", "") if e.kind != "drag_start" else "")] += 1
+                if e.kind == "pinch_start" and lab.split("/")[-1] in UNINTENDED:
+                    hh = eng.primary_hand(f)
+                    m = image_pinch_metrics(hh, f.image_size) if hh is not None else {}
+                    cur = eng.state.cursor or (float("nan"), float("nan"))
+                    misfires.append((lab, round((f.t_capture_ns - t_first) / 1e9, 1), e.data.get("button"),
+                                     round(cur[0]), round(cur[1]), round(m.get("thumb_index_n", float("nan")), 3),
+                                     round(m.get("thumb_middle_n", float("nan")), 3)))
         h = eng.primary_hand(f)
         if h is None:
             continue
@@ -79,12 +94,18 @@ def main(path: str) -> None:
             ok = f"{d['modes'][exp] / n * 100:5.0f}%" if exp else "    -"
             modes = " ".join(f"{m}{c / n * 100:.0f}%" for m, c in d["modes"].most_common(3))
             evs = " ".join(f"{k}{v}" for k, v in sorted(d["ev"].items())) or "なし"
+            if g in UNINTENDED and d["ev"]:
+                evs = "誤 " + evs  # 意図しないピンチ・クリック・ドラッグ
             F = d["f"]
             med = lambda k: float(np.median(F[k])) if F[k] else float("nan")  # noqa: E731
             mn = float(np.min(F["親人"])) if F["親人"] else float("nan")
             print(f"{lab.split('/')[0]:10s} {d['hand'] / n * 100:3.0f}% {ok:>6s} {modes:34s} {evs:28s} "
                   f"{med('人'):5.2f}{med('中'):5.2f}{med('薬'):5.2f}{med('親畳'):+6.2f}{med('甲'):+6.2f}{mn:8.2f}"
                   f"{med('親人'):6.2f}{med('人中先'):7.2f}{med('奥差'):6.2f}  ({med('x'):.2f}, {med('y'):.2f})")
+    if misfires:
+        print("\n[意図しないピンチ] 区間、記録の先頭からの秒、ボタン、そのときのカーソル（画面 pt、1440x900）、親指-人差し指、親指-中指の距離")
+        for m in misfires:
+            print("  ", m)
     print("\n列: 手 = 手の検出率、人・中・薬 = 指の真っすぐさ、親畳 = 親指の畳み（+ で畳む）、甲 = 手のひらの向き（+ が手の甲）、"
           "親人 = 親指-人差し指の距離（成立 %.3f）、人中先 = 人差し指と中指の先の画像上の距離、奥差 = その奥行きの差" % gcfg.pinch_on)
 
