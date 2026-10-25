@@ -845,7 +845,9 @@ def cmd_calibrate(args, cfg: dict) -> int:
                              "roi_width": round(float(w), 4)}
         print(f"基準長 {base * 100:.1f}cm、操作範囲 中心 ({(x0 + x1) / 2:.2f}, {(y0 + y1) / 2:.2f}) 幅 {w:.2f}")
     try:
-        left = derive_pinch_thresholds(data["rest_ti"], data["pinch"], gdef.pinch_on, gdef.pinch_off, gdef.drag_off)
+        ck = cfg.get("click", {})
+        left = derive_pinch_thresholds(data["rest_ti"], data["pinch"], gdef.pinch_on, gdef.pinch_off, gdef.drag_off,
+                                       ck.get("calib_on_frac", 0.40), ck.get("calib_off_frac", 0.75))
         right = derive_pinch_thresholds(data["rest_tm"], data["rpinch"], gdef.right_on, gdef.right_off)
     except ValueError as e:
         print(f"ピンチの校正: {e}。もう一度実行してください。")

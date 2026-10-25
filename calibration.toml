@@ -1,23 +1,26 @@
-# 操作範囲は run の自動補正が更新（2026-10-26 01:54）。config.toml の値を上書きする。消せば config.toml の値に戻る
+# 操作範囲は run の自動補正が更新（2026-10-26 02:23）。config.toml の値を上書きする。消せば config.toml の値に戻る
 
 [gesture]
-base_length_m = 0.1941
+base_length_m = 0.1862
 
 [cursor]
-roi_cx = 0.511
-roi_cy = 0.4697
-roi_width = 0.7367
+roi_cx = 0.4305
+roi_cy = 0.4912
+roi_width = 0.3995
 
 [click]
-pinch_on = 0.2235
-pinch_off = 0.2448
-drag_off = 0.257
+pinch_on = 0.2589
+pinch_off = 0.314
+drag_off = 0.3611
+right_on = 0.2465
+right_off = 0.275
+right_arm = 0.355
 
 [peace]
-peace_neutral_yaw_deg = -56.19
-peace_neutral_pitch_deg = -5.7
-thumb_fold_on = 0.5013
-thumb_fold_off = 0.4498
+peace_neutral_yaw_deg = -37.6
+peace_neutral_pitch_deg = 6.7
+thumb_fold_on = 0.3405
+thumb_fold_off = 0.2564
 
 [thumbsup]
 thumbsup_thumb_far_min = 1.271

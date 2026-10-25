@@ -27,10 +27,11 @@ class PinchThresholds:
 
 
 def derive_pinch_thresholds(rest: list[float], pinch: list[float], default_on: float, default_off: float,
-                            default_drag_off: float = 0.0) -> PinchThresholds:
+                            default_drag_off: float = 0.0, on_frac: float = 0.40,
+                            off_frac: float = 0.75) -> PinchThresholds:
     """摘まんだ状態の p90 と、普段の姿勢の p2 の間を区切る。
 
-    成立は間の 40%、解除は 75%、ドラッグ中の解除は 95% の位置。間が広いときは 0.3 として扱う
+    成立は間の on_frac（既定 40%）、解除は off_frac（75%）、ドラッグ中の解除は 95% の位置。間が広いときは 0.3 として扱う
     （大きく開かないと離したことにならない、を防ぐ）。分布が重なっているときは既定値を返す。
     """
     r = np.asarray([v for v in rest if np.isfinite(v)])
@@ -41,7 +42,7 @@ def derive_pinch_thresholds(rest: list[float], pinch: list[float], default_on: f
     if hi >= lo:
         return PinchThresholds(default_on, default_off, default_drag_off, hi, lo, False)
     gap = min(lo - hi, 0.3)
-    return PinchThresholds(round(hi + 0.40 * gap, 4), round(hi + 0.75 * gap, 4),
+    return PinchThresholds(round(hi + on_frac * gap, 4), round(hi + off_frac * gap, 4),
                            round(hi + 0.95 * gap, 4) if default_drag_off else 0.0, hi, lo, True)
 
 
