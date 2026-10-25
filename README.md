@@ -60,6 +60,8 @@ open tools/targets.html                                          # クリック�
 .venv/bin/python tools/golden_diff.py --golden-config --set key=value   # 期待値との差（--write で書き直す）
 .venv/bin/python tools/cursor_smoothing.py                       # カーソルの平滑化の係数の比較
 .venv/bin/python tools/handedness_report.py                      # 左右ラベルの反転率
+.venv/bin/python tools/position_report.py recordings/labpos-....jsonl  # 位置ごとの判定と指の特徴量（lab-position の記録）
+.venv/bin/python tools/pinch_gate_eval.py                        # ピンチを止める案の効果測定（SPEC 13.42、実装はしていない）
 ```
 
 - 緊急停止: Control+Option+Command+ピリオド（ボタンを離して終了）
