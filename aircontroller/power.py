@@ -23,7 +23,7 @@ from .types import INDEX_MCP, MIDDLE_MCP, PINKY_MCP, RING_MCP, Hand
 
 @dataclass
 class PowerConfig:
-    auto_off_after_s: float = 10.0  # 操作中に設定の手がこの秒数見えなかったら、自動でオフ（0 で無効）
+    auto_off_after_s: float = 5.0  # 操作中に設定の手がこの秒数見えなかったら、自動でオフ（0 で無効）
     off_detect_hz: float = 1.0  # オフの間の推論の頻度
     wake_enabled: bool = True  # パーでオンにする
     wake_hold_s: float = 0.5  # パーをこの時間保ったらオン

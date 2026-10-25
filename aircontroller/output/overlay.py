@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+import time
 from typing import Callable
 
 import AppKit
@@ -328,6 +329,25 @@ class _Ticker(NSObject):
         self.cb()
 
 
+def _signature(s, collapsed: bool):
+    """待機中に、描き直す必要があるかを決めるための、表示の要約（数値の細かい揺れと、毎回変わる status の文字列は除く）。"""
+    if not s:
+        return None
+    out = [collapsed]
+    for k in sorted(s):
+        v = s[k]
+        if k in ("status", "landmarks", "roi"):
+            continue
+        if isinstance(v, float):
+            v = round(v, 2)
+        elif isinstance(v, tuple):
+            v = tuple(round(x, 3) if isinstance(x, float) else x for x in v)
+        elif not isinstance(v, (str, int, bool, type(None))):
+            v = repr(getattr(v, "__dict__", v))
+        out.append((k, v))
+    return tuple(out)
+
+
 class Overlay:
     def __init__(self, get_state: Callable[[], dict | None], tick: Callable[[], bool], hz: float = 30.0,
                  on_camera_button: Callable[[], None] | None = None, collapsed: bool = False,
@@ -368,9 +388,17 @@ class Overlay:
         self._tick = tick
         self._size = (W, H)
         self._n_tick = 0
+        self._last_sig = None
+        self._last_draw = 0.0
         self._screen = screen
 
         def on_tick():
+            # 待機中・カメラ停止中は、状態の取得と安全の確認（tick）も 3 回に 1 回にする（30Hz → 10Hz）。
+            # オフ（1Hz）の CPU の目標 15% に対し、待機中のメインスレッドが 5〜6% 使っていた（2026-10-25 の記録）
+            self._n_tick += 1
+            last = self.view.state
+            if last and not last.get("active", True) and self._n_tick % 3:
+                return
             if not self._tick():
                 self.stop()
                 return
@@ -391,10 +419,16 @@ class Overlay:
                 (small and s.get("camera") in ("stopped", "error")) or (not small and not s.get("active", True)))
             if clickable == self.win.ignoresMouseEvents():
                 self.win.setIgnoresMouseEvents_(not clickable)
-            # 待機中・カメラ停止中は、描画を 3 回に 1 回にする（30Hz → 10Hz。操作中は毎回）
-            self._n_tick += 1
-            if (s and s.get("active")) or self._n_tick % 3 == 0:
+            # 操作中は毎回描く。待機中・カメラ停止中は、表示が変わったときか 1 秒ごとだけ描く
+            now = time.monotonic()
+            if s and s.get("active"):
                 self.view.setNeedsDisplay_(True)
+                self._last_draw = now
+            else:
+                sig = _signature(s, self.view.collapsed)
+                if sig != self._last_sig or now - self._last_draw >= 1.0:
+                    self._last_sig, self._last_draw = sig, now
+                    self.view.setNeedsDisplay_(True)
 
         self._ticker = _Ticker.alloc().initWithCallback_(on_tick)
         self._timer = AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(

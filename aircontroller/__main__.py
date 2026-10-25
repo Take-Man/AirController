@@ -161,7 +161,7 @@ def cmd_run(args, cfg: dict) -> int:
     from .power import PowerConfig, PowerController
 
     pw = cfg.get("power", {})
-    idle_stop_s = float(pw.get("idle_stop_s", 0.0))
+    idle_stop_s = float(pw.get("idle_stop_s", 300.0))
     power_ctl = PowerController(PowerConfig.from_toml(cfg))
     if args.no_auto_off:
         power_ctl.cfg.auto_off_after_s = 0.0  # 負荷の計測（有効・手なし）用
@@ -272,6 +272,7 @@ def cmd_run(args, cfg: dict) -> int:
         if not active:
             release_all()  # 無効化した瞬間に、押下中のボタンを解除する（次のフレームを待たない）
         elif pipe.state in ("stopped", "error"):
+            slog.record(now, "camera", state="starting", reason="activation")
             print("[camera] 有効化したので、カメラを起動します")
             pipe.start_async()
 
@@ -281,9 +282,11 @@ def cmd_run(args, cfg: dict) -> int:
             release_all()
             pipe.stop()
             power["reason"] = "手動"
+            slog.record(time.perf_counter_ns(), "camera", state="stopped", reason="button")
             print("[camera] カメラを止めました（ボタン）")
         elif pipe.state in ("stopped", "error"):
             power["last_active"] = time.monotonic()
+            slog.record(time.perf_counter_ns(), "camera", state="starting", reason="button")
             print("[camera] カメラを起動します（ボタン）")
             pipe.start_async()
 
@@ -429,6 +432,7 @@ def cmd_run(args, cfg: dict) -> int:
                 and time.monotonic() - power["last_active"] > idle_stop_s):
             pipe.stop()
             power["reason"] = "自動"
+            slog.record(time.perf_counter_ns(), "camera", state="stopped", reason="idle")
             print(f"[camera] 有効化がオフのまま {idle_stop_s:.0f}秒経ったので、カメラを止めました")
         if timeout and time.monotonic() - t_start > timeout:
             print(f"\n{timeout:.0f}秒経過したので自動終了します。")
@@ -457,6 +461,7 @@ def cmd_run(args, cfg: dict) -> int:
                "threads_cpu_s": {k: round(v, 3) for k, v in cpustat.totals().items()},
                "proc_cpu_s": round(c1.user + c1.system, 3),
                "maxrss_mb": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 2**20, 1),
+               "rss_mb": round(cpustat.rss_mb() or 0.0, 1),
                "frames": frames, "dropped": dropped}
         if lat:
             rec["lat_p50"], rec["lat_p95"] = (round(float(v), 1) for v in np.percentile(lat, [50, 95]))
