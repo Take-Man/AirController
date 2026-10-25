@@ -22,6 +22,11 @@ from . import cpustat
 from .types import Hand, LandmarkFrame
 
 
+# 間引きのゆとり（秒）: カメラはこれだけ早めに次のフレームを渡し、推論はそれより少し甘く受け取る（両方で間引いて、1 つおきに
+# なるのを防ぐ）。30fps のフレーム間隔 33ms より短くする
+DECIMATE_SLACK_S = 0.02
+
+
 class CameraError(RuntimeError):
     pass
 
@@ -49,8 +54,13 @@ class Camera:
         self._cond = threading.Condition()
         self._frame: np.ndarray | None = None
         self._t_ns = 0
-        self.seq = 0  # 取得したフレームの通し番号
+        self.seq = 0  # 渡したフレームの、取得の通し番号（間引いたフレームも数えるので、飛びが出る）
+        self.n_grab = 0  # 取得したフレームの数
         self.capture_times: list[int] = []  # 取得間隔の計測用（取得時刻）
+        # 推論の最短間隔（秒）を返す関数（VisionPipeline が設定する）。間引くフレームは、取得だけして画像に変換しない
+        # （オフの間の負荷を下げる。カメラは 30fps 固定で、取得の頻度は下げられない）
+        self.decimate: Callable[[], float] | None = None
+        self._last_pub = 0
         self._stop = False
         self._thread = threading.Thread(target=self._loop, name="camera", daemon=True)
 
@@ -72,14 +82,24 @@ class Camera:
 
     def _loop(self) -> None:
         while not self._stop:
-            ok, frame = self._cap.read()
+            ok = self._cap.grab()
             t = time.perf_counter_ns()
             cpustat.mark("camera")
             if not ok:
                 time.sleep(0.005)
                 continue
+            self.n_grab += 1
+            interval = self.decimate() if self.decimate else 0.0
+            if interval > 0 and self._frame is not None and (t - self._last_pub) / 1e9 < interval - DECIMATE_SLACK_S:
+                with self._cond:
+                    self.capture_times.append(t)
+                continue  # 推論しないフレーム: 変換しない
+            ok, frame = self._cap.retrieve()
+            if not ok:
+                continue
+            self._last_pub = t
             with self._cond:
-                self.seq += 1
+                self.seq = self.n_grab
                 self._frame, self._t_ns = frame, t
                 self.capture_times.append(t)
                 self._cond.notify_all()
@@ -283,7 +303,7 @@ class Tracker:
                 last_seq = seq
                 cpustat.mark("inference-submit")
                 interval = self.min_interval() if self.min_interval else 0.0
-                if interval > 0 and (t_cap - last_proc) / 1e9 < interval - 0.005:
+                if interval > 0 and (t_cap - last_proc) / 1e9 < interval - DECIMATE_SLACK_S - 0.005:
                     continue  # 待機中は間引く（取得は続けるので、有効化した次のフレームから毎フレームに戻る）
                 last_proc = t_cap
                 rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)  # 新しい配列（取得スレッドの画像は書き換えない）
@@ -370,6 +390,7 @@ class VisionPipeline:
             self._cancel = False
         try:
             camera = open_camera(self.cam_cfg)
+            camera.decimate = self.min_interval
             camera.start()
             tracker = Tracker(camera, self.tracker_cfg, self.on_frame, self.min_interval, self.num_hands_fn,
                               self.mask_fn)

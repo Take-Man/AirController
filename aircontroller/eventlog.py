@@ -185,7 +185,9 @@ class SessionLogger:
         """フレームに依らない行（有効化のオン・オフ、印など）。"""
         self._rec(t_ns, type_, **kw)
 
-    def observe(self, frame: LandmarkFrame, events: Iterable[Event], mode: str, hand=None) -> None:
+    def observe(self, frame: LandmarkFrame, events: Iterable[Event], mode: str, hand=None,
+                palm: tuple[float, float] | None = None, roi: tuple[float, float, float, float] | None = None) -> None:
+        """palm: 最後に見えた手のひら中心（画像座標）、roi: 操作範囲 (x0, y0, w, h)。手を見失ったときの位置の記録に使う。"""
         t = frame.t_capture_ns
         for ev in events:
             k = ev.kind
@@ -194,6 +196,12 @@ class SessionLogger:
                 continue
             if k in ("hand_acquired", "hand_lost"):
                 kw = {"label": hand.handedness, "score": round(hand.score, 3)} if hand is not None else {}
+                if palm is not None:  # 画像の端からの距離と、操作範囲の外か（範囲の外で見失ったかを確かめる）
+                    kw["palm"] = [round(palm[0], 3), round(palm[1], 3)]
+                    kw["edge"] = round(min(palm[0], 1 - palm[0], palm[1], 1 - palm[1]), 3)
+                    if roi is not None:
+                        x0, y0, w, h = roi
+                        kw["outside_roi"] = not (x0 <= palm[0] <= x0 + w and y0 <= palm[1] <= y0 + h)
                 self._rec(t, k, active=frame.active, **kw)
                 continue
             if k == "scroll":

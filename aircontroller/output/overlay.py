@@ -339,7 +339,7 @@ def _signature(s, collapsed: bool):
         if k in ("status", "landmarks", "roi"):
             continue
         if isinstance(v, float):
-            v = round(v, 2)
+            v = None if math.isnan(v) else round(v, 2)  # NaN は NaN と等しくならず、毎回描き直していた
         elif isinstance(v, tuple):
             v = tuple(round(x, 3) if isinstance(x, float) else x for x in v)
         elif not isinstance(v, (str, int, bool, type(None))):
@@ -350,6 +350,7 @@ def _signature(s, collapsed: bool):
 
 class Overlay:
     def __init__(self, get_state: Callable[[], dict | None], tick: Callable[[], bool], hz: float = 30.0,
+                 idle_hz: float = 10.0,
                  on_camera_button: Callable[[], None] | None = None, collapsed: bool = False,
                  on_collapse_change: Callable[[bool], None] | None = None):
         """tick() は描画のたびに呼ばれ、False を返すとイベントループを止める。
@@ -387,7 +388,6 @@ class Overlay:
         self.win.orderFrontRegardless()
         self._tick = tick
         self._size = (W, H)
-        self._n_tick = 0
         self._last_sig = None
         self._last_draw = 0.0
         self._screen = screen
@@ -395,10 +395,6 @@ class Overlay:
         def on_tick():
             # 待機中・カメラ停止中は、状態の取得と安全の確認（tick）も 3 回に 1 回にする（30Hz → 10Hz）。
             # オフ（1Hz）の CPU の目標 15% に対し、待機中のメインスレッドが 5〜6% 使っていた（2026-10-25 の記録）
-            self._n_tick += 1
-            last = self.view.state
-            if last and not last.get("active", True) and self._n_tick % 3:
-                return
             if not self._tick():
                 self.stop()
                 return
@@ -419,6 +415,10 @@ class Overlay:
                 (small and s.get("camera") in ("stopped", "error")) or (not small and not s.get("active", True)))
             if clickable == self.win.ignoresMouseEvents():
                 self.win.setIgnoresMouseEvents_(not clickable)
+            # 待機中・カメラ停止中は、タイマーそのものを idle_hz に下げる（30Hz のタイマーの呼び出しだけで CPU 約 4% だった）
+            want_hz = hz if (s and s.get("active")) else min(hz, idle_hz)
+            if want_hz != self._hz:
+                self._schedule(want_hz)
             # 操作中は毎回描く。待機中・カメラ停止中は、表示が変わったときか 1 秒ごとだけ描く
             now = time.monotonic()
             if s and s.get("active"):
@@ -431,6 +431,14 @@ class Overlay:
                     self.view.setNeedsDisplay_(True)
 
         self._ticker = _Ticker.alloc().initWithCallback_(on_tick)
+        self._timer = None
+        self._hz = None
+        self._schedule(hz)
+
+    def _schedule(self, hz: float) -> None:
+        if self._timer is not None:
+            self._timer.invalidate()
+        self._hz = hz
         self._timer = AppKit.NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
             1.0 / hz, self._ticker, "tick:", None, True)
         AppKit.NSRunLoop.currentRunLoop().addTimer_forMode_(self._timer, AppKit.NSRunLoopCommonModes)

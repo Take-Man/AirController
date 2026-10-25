@@ -124,3 +124,53 @@ def test_tracker_switches_num_hands():
     assert wait(lambda: tr.current_num_hands == 2) and tr.error is None
     tr.stop()
     cam.stop()
+
+
+class FakeCap:
+    """cv2.VideoCapture の代わり: 30fps で grab でき、retrieve（画像への変換）の回数を数える。"""
+
+    def __init__(self, *a):
+        self.retrieves = 0
+        self._t = time.monotonic()
+
+    def isOpened(self):
+        return True
+
+    def set(self, *a):
+        return True
+
+    def get(self, prop):
+        return 30.0
+
+    def grab(self):
+        self._t += 1 / 30
+        d = self._t - time.monotonic()
+        if d > 0:
+            time.sleep(d)
+        return True
+
+    def retrieve(self):
+        self.retrieves += 1
+        return True, np.zeros((240, 320, 3), np.uint8)
+
+    def release(self):
+        pass
+
+
+def test_camera_skips_conversion_and_rates_match(monkeypatch):
+    """間引く間は、取得だけして画像に変換しない。カメラと推論の両方の間引きで、1 つおきにならない（1Hz と 10Hz を保つ）。"""
+    monkeypatch.setattr(inp.cv2, "VideoCapture", FakeCap)
+    for interval, lo, hi in ((1.0, 2, 4), (0.1, 25, 33), (0.0, 80, 95)):
+        cam = inp.Camera(inp.CameraConfig())
+        cam.decimate = lambda: interval
+        frames = []
+        tr = inp.Tracker(cam, inp.TrackerConfig(model_path=MODEL), frames.append, lambda: interval)
+        cam.start()
+        tr.start()
+        time.sleep(3.0)
+        tr.stop()
+        cam.stop()
+        n = len(frames)
+        assert lo <= n <= hi, (interval, n)  # 3 秒で 1Hz → 3 回、10Hz → 30 回、毎フレーム → 約 90 回
+        if interval > 0:  # 間引く間は、推論しないフレームを変換しない（毎フレームのときは、推論中に来たものも変換する）
+            assert cam._cap.retrieves <= n + 3, (interval, cam._cap.retrieves)

@@ -353,7 +353,8 @@ def cmd_run(args, cfg: dict) -> int:
                     release_all()
         t_out = time.perf_counter_ns()
         hand = engine.primary_hand(frame)
-        slog.observe(frame, events, engine.state.mode, engine.raw_hand(frame))  # 左右ラベルは選ぶ前の手で記録する
+        slog.observe(frame, events, engine.state.mode, engine.raw_hand(frame),  # 左右ラベルは選ぶ前の手で記録する
+                     engine.state.palm, engine.roi(frame.image_size))
         prev_power = power_ctl.state
         action = power_ctl.update(frame.t_capture_ns, frame.active, engine.primary_hand(frame))
         if power_ctl.state != prev_power and "on" not in (prev_power, power_ctl.state):
