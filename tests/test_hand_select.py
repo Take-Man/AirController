@@ -150,3 +150,24 @@ def test_hand_count_policy():
     assert HandCountPolicy("both").update(seq[0], eng) == 0
 
 
+
+
+def test_switch_to_other_hand_during_mode_stops_operation():
+    """モードの途中でも、別の手（ラベルが変わり、位置が跳んだ）に乗り換えたら、すぐにその手では操作しない
+    （2026-10-26 段階7: ズーム・ピースの途中で、1 手の推論器が頬杖の左手に乗り換え、左手で操作が続いていた）。"""
+    from tests.test_stage4 import make_peace
+    right = make_peace(palm=(0.4, 0.5))
+    left = L(make_peace(palm=(0.75, 0.5)))
+    eng = GestureEngine(GestureConfig(hand="right", peace_enabled=True, peace_method="displacement",
+                                      nav_dwell_ms=0))
+    run(eng, frames([(40, right, True)]))
+    assert eng.state.mode == "peace"
+    ev = []
+    seq = frames([(30, left, True)])
+    t0 = 41 * 33_000_000
+    for f in seq:
+        f = f.__class__(**{**f.__dict__, "t_capture_ns": f.t_capture_ns + t0})
+        ev += eng.update(f)
+        assert eng.primary_hand(f) is None  # 最初のフレームから、左手は使わない
+    assert not [e for e in ev if e.kind in ("scroll", "nav")]
+    assert eng.state.mode != "peace" and eng.stable_label == "Left"

@@ -366,7 +366,9 @@ class GestureEngine:
         self._label_seen_t: int | None = None  # 最後に手が見えた時刻
         self._selected: tuple[int, Hand | None, Hand | None] | None = None  # (時刻, 選んだ手, 生の最良の手)
         self._label_palm: tuple[float, float] | None = None  # 直前のフレームの手のひら中心（ラベルの切り替えの判定用）
-        self._flip_jumped = False  # 今続いている別のラベルが、手のひら中心の跳びとともに始まったか
+        self._flip_jumped = False  # 今続いている別のラベルが、手のひら中心の跳びとともに始まったか（または跳びを問わない時期か）
+        self._flip_other = False  # 今続いている別のラベルが、跳びとともに始まった（別の手に乗り換えた）
+        self._label_palm_t: int | None = None  # _label_palm を見た時刻
         self._label_age = 0  # 今のラベルになってからのフレーム数
 
     @property
@@ -409,21 +411,39 @@ class GestureEngine:
                 self._label_age = 0
             self._label, self._label_run = want, 0
             self._label_palm = tuple(float(v) for v in chosen.landmarks[list(PALM), :2].mean(axis=0))
+            self._label_palm_t = t
             return chosen, best
         raw = best.handedness
         palm = tuple(float(v) for v in best.landmarks[list(PALM), :2].mean(axis=0))
         prev, self._label_palm = self._label_palm, palm
+        # 手のひら中心が画像の外（画角から出かけた手の、推定のランドマーク）にあるときは、同じ手でも位置が大きく揺れる
+        # （thumbsup01 の 33.15 秒: 0.15 動いた）ので、跳びの閾値を 2 倍にする。下から出ていった右手の後に、頬杖の左手が
+        # 映ったときは 0.58 跳んでいた（段階7の印 12）
+        def inside(q):
+            return 0.0 <= q[0] <= 1.0 and 0.0 <= q[1] <= 1.0
+
+        jump_thr = c.hand_switch_jump * (1.0 if prev is None or (inside(prev) and inside(palm)) else 2.0)
+        self._label_palm_t = t
         self._label_age += 1
         if self._label is None:
             self._label, self._label_age = raw, 0
         elif raw != self._label:
-            if self._label_run == 0:  # 別のラベルが始まった: そのとき手が跳んだか（今のラベルが落ち着く前なら問わない）
-                self._flip_jumped = (c.hand_switch_jump <= 0 or prev is None or self._label_age < c.hand_settle_frames
-                                     or math.dist(palm, prev) >= c.hand_switch_jump)
+            # 別のラベルが続いている間に手のひら中心が跳んだら、別の手に乗り換えた証拠（1 手の推論器が、頬杖の左手などに
+            # 乗り換える: 2026-10-26 段階7の印 6・12。最初の 1 フレームは元の位置のままラベルだけ変わり、次で跳ぶこともある）
+            jumped = c.hand_switch_jump > 0 and prev is not None and math.dist(palm, prev) >= jump_thr
+            if self._label_run == 0:  # 別のラベルが始まった（今のラベルが落ち着く前なら、跳びを問わない）
+                self._flip_other = jumped
+                self._flip_jumped = (jumped or c.hand_switch_jump <= 0 or prev is None
+                                     or self._label_age < c.hand_settle_frames)
+            elif jumped:
+                self._flip_other = self._flip_jumped = True
             self._label_run += 1
+            # 別の手に乗り換えたときは、モードの途中でも切り替える（同じ手のラベルの反転だけを、モードの途中で無視する）
             if (self._label_run >= c.hand_switch_frames and self._flip_jumped
-                    and self.state.mode not in self.LOCKED_MODES):
+                    and (self._flip_other or self.state.mode not in self.LOCKED_MODES)):
                 self._label, self._label_run, self._label_age = raw, 0, 0
+            elif self._flip_other:
+                return None, best  # 切り替わるまでの数フレームも、乗り換えた先の手では操作しない（グーと同じく何もしない）
         else:
             self._label_run = 0
         return (best if self._label == want else None), best
