@@ -357,7 +357,9 @@ class GestureEngine:
         self._last_hand_t = 0
         self._last_active = False
         self.state = GestureState()
-        self.roi_cx, self.roi_cy, self.roi_width = self.cfg.roi_cx, self.cfg.roi_cy, self.cfg.roi_width
+        # 幅は上限・下限に収める（calibration.toml に、上限を下げる前の広い幅が残っていても使わない）
+        self.roi_cx, self.roi_cy = self.cfg.roi_cx, self.cfg.roi_cy
+        self.roi_width = min(max(self.cfg.roi_width, self.cfg.roi_width_min), self.cfg.roi_width_max)
         self._last_t: int | None = None
         self._label: str | None = None  # 左右ラベル（ヒステリシスをかけた値）
         self._label_run = 0  # 別のラベルが続いたフレーム数

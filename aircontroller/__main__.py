@@ -836,6 +836,10 @@ def cmd_calibrate(args, cfg: dict) -> int:
         y0, y1 = np.percentile(P[:, 1], [5, 95])
         # 操作範囲は画面と同じアスペクト比。測った範囲（5〜95%）がちょうど収まる幅にする
         w = max(x1 - x0, (y1 - y0) * ih * sw / (iw * sh))
+        w_max = gdef.roi_width_max  # 範囲の外でも手が画角に収まる余白を残す（SPEC 13.36）
+        if w > w_max:
+            print(f"測った操作範囲の幅 {w:.2f} は上限 {w_max:.2f} を超えるので、{w_max:.2f} にします（中心はそのまま）")
+            w = w_max
         updates["gesture"] = {"base_length_m": round(base, 4)}
         updates["cursor"] = {"roi_cx": round(float((x0 + x1) / 2), 4), "roi_cy": round(float((y0 + y1) / 2), 4),
                              "roi_width": round(float(w), 4)}

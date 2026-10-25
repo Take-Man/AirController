@@ -105,7 +105,7 @@
   "roi_adapt_shift": 0.5,
   "roi_adapt_grow": 0.05,
   "roi_width_min": 0.15,
-  "roi_width_max": 0.9
+  "roi_width_max": 0.6
  },
  "events": [
   {

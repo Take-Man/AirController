@@ -33,3 +33,9 @@ def test_click_and_peace_outside_roi():
     eng = GestureEngine(cfg())
     run(eng, frames([(20, make_peace(palm=(0.9, 0.2)), True)]))
     assert eng.state.mode == "peace"
+
+
+def test_roi_width_capped_at_start():
+    """calibration.toml に上限より広い幅が残っていても、起動時に上限に収める（SPEC 13.36）。"""
+    eng = GestureEngine(GestureConfig(roi_width=0.74, roi_width_max=0.6))
+    assert eng.roi_width == 0.6
