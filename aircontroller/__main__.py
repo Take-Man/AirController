@@ -123,7 +123,8 @@ def _open_camera(cfg: dict):
 def _tracker_config(cfg: dict):
     from .input import TrackerConfig
 
-    t = dict(cfg["tracker"])
+    # [tracker] には run が直接読む項目（two_hands_hz など）もあるので、TrackerConfig の項目だけを渡す
+    t = {k: v for k, v in cfg["tracker"].items() if k in TrackerConfig.__dataclass_fields__}
     t["model_path"] = str(_resolve(t["model_path"]))
     return TrackerConfig(**t)
 
