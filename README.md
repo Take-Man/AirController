@@ -9,7 +9,7 @@
 - `aircontroller/filters.py` One Euro Filter
 - `aircontroller/peace.py` ピースモード（スクロール、戻る・進む）といいねモード（デスクトップ移動など）
 - `aircontroller/zoom.py` ズームモード（指先の前後の測り方の候補と、ズームの段の送出）
-- `aircontroller/calibration.py` 校正・学習の計算
+- `aircontroller/calibration.py` 校正・学習の計算と、測定ユニット（U1〜U6）の段階・候補・統計・警告
 - `aircontroller/features.py` 手の形の特徴量（候補のジェスチャーを比べる）
 - `aircontroller/output/` 出力層: `mouse.py`（CGEvent）、`activation.py`（CGEventTap による有効化キー・緊急停止）、`overlay.py`、`permissions.py`
 - `aircontroller/recording.py` ランドマークの記録・再生（JSON Lines。有効化の状態も記録）
@@ -34,8 +34,12 @@ uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
 .venv/bin/python -m aircontroller report logs/events-*.jsonl     # イベントログの集計（印、取り消し、誤ドラッグの候補など）
 .venv/bin/python -m aircontroller report --from-recording recordings/xxx.jsonl  # 記録から集計
 .venv/bin/python -m aircontroller run --record --no-output --activation hold --name pinch01   # ラベル付き記録（¥ 押下中 = ラベル）
-.venv/bin/python -m aircontroller calibrate                      # 基準長・操作範囲・ピンチの閾値 → calibration.toml
-.venv/bin/python -m aircontroller calibrate --pinch-only         # ピンチ・ピースの閾値と中立方向だけ（基準長・操作範囲は測らない）
+.venv/bin/python -m aircontroller calibrate                      # 操作範囲・ピンチ・右クリック・ピース → 候補を calibration-history/ に出す
+.venv/bin/python -m aircontroller calibrate --unit pinch         # ユニットだけ（range, pinch, right, peace, thumbsup, zoom, all。カンマ区切り）
+.venv/bin/python -m aircontroller calibrate --unit pinch --write # 候補を calibration.toml に書く（既定は書かない）
+.venv/bin/python -m aircontroller calibrate --unit pinch --repeat  # 続けて 2 回測り、差を見る（書かない）
+.venv/bin/python -m aircontroller calibrate --from recordings/calib-....jsonl  # 測らずに記録から計算し直す
+.venv/bin/python -m aircontroller calibrate --pinch-only         # ピンチ・右クリック・ピースだけ（--unit pinch,right,peace と同じ）
 .venv/bin/python -m aircontroller learn-thumbsup                 # いいねモードを上下左右 1回分の記録から学習 → calibration.toml
 .venv/bin/python -m aircontroller learn-zoom                     # ズームモードを手招きの記録から学習 → calibration.toml
 .venv/bin/python -m aircontroller settings-history               # 設定の履歴の一覧（undo: 前の保存に戻す、name 快適 / restore 快適）

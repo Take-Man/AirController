@@ -275,3 +275,288 @@ def learn_zoom(frames, segments: list[dict], hand: str = "both") -> LearnResult:
                      + (f"、入る条件（手の甲 > 0.50 かつ指を伸ばす）{np.mean([r['_back'] > 0.5 and r['_open'] > 0.8 for r in rs]) * 100:.0f}%"
                         if k == "neutral" else ""))
     return LearnResult(params, "\n".join(lines))
+
+
+# ---------------------------------------------------------------- 測定ユニット（設定画面の第3節、SPEC 13.44）
+# 各ユニットは、画面の指示に従って姿勢を記録する段階（ラベル, 秒, 指示）の並び。ラベル None は待ち時間。
+# 各段階の最初の SETTLE 秒は、前の姿勢から移る途中なので集計しない（calib-034725 で動作が約 1.5 秒遅れていた）。
+# 「普段の姿勢」（rest）は U2〜U4 で共通。まとめて測るときは 1 回だけ記録する。
+SETTLE = 1.5
+UNIT_ORDER = ("range", "pinch", "right", "peace", "thumbsup", "zoom")
+UNIT_TITLES = {"range": "U1 操作範囲", "pinch": "U2 左ピンチ", "right": "U3 右クリック", "peace": "U4 ピース",
+               "thumbsup": "U5 いいね", "zoom": "U6 ズーム"}
+REST_UNITS = ("pinch", "right", "peace")
+PREP_STEP = (None, 3.0, "準備: 楽な姿勢で手をカメラに映してください")
+REST_STEPS = [(None, 2.5, "次: 普段カーソルを動かすときの手の形（人差し指を立て、親指は楽に）"),
+              ("rest", 8.0 + SETTLE, "普段のカーソル操作の手の形で、画面のあちこちを指す（摘ままない）")]
+_TU = "いいね（親指を立て、ほかの指は握る）"
+THUMBSUP_STEPS = [
+    ("neg_fist_side", 4.0 + SETTLE, "グーで、小指側をカメラに向ける（親指は隠す）。手を少し動かす"),
+    (None, 2.0, "次: 普通のグー"),
+    ("neg_fist", 4.0 + SETTLE, "普通のグー（親指は握った指の上）。手を少し動かす"),
+    (None, 2.0, "次: カーソル操作の形"),
+    ("neg_cursor", 4.0 + SETTLE, "人差し指だけを立てて、あちこちを指す"),
+    (None, 3.0, f"次: {_TU}。これから上・左・右を1回ずつ"),
+    ("center", 3.0 + SETTLE, f"{_TU}で、正面に止める"),
+]
+for _d, _dj in (("up", "上"), ("left", "左"), ("right", "右")):
+    THUMBSUP_STEPS += [(_d, 3.0 + SETTLE, f"いいねのまま、{_dj}へ（動かす・ひねる、やりやすい方法で）して止める"),
+                       ("center", 2.0 + SETTLE, "いいねのまま、正面に戻して止める")]
+_BACK = "手の甲をカメラに向け、指を伸ばす"
+ZOOM_STEPS = []
+for _ in range(2):
+    ZOOM_STEPS += [("neutral", 2.5 + SETTLE, f"{_BACK}。楽な姿勢で止める"),
+                   ("in", 2.5 + SETTLE, "手招きのように、指先をカメラから遠ざけて止める（ズームイン）"),
+                   ("neutral", 2.0 + SETTLE, f"{_BACK}。元の姿勢に戻して止める"),
+                   ("out", 2.5 + SETTLE, "指先をカメラに近づけて止める（ズームアウト）")]
+ZOOM_STEPS += [("neutral", 2.0 + SETTLE, f"{_BACK}。元の姿勢に戻して止める")]
+
+
+def unit_steps(units, range_s: float = 10.0) -> list[tuple[str | None, float, str]]:
+    """選んだユニットの段階を、決まった順に並べる（普段の姿勢は 1 回だけ）。"""
+    own = {
+        "range": [(None, 2.0, "次: 楽な姿勢のまま、届く範囲の端まで手を動かします"),
+                  ("range", range_s + SETTLE, "上下左右の端まで、ゆっくり手のひらを動かす")],
+        "pinch": [(None, 2.5, "次: 親指と人差し指で摘まんだままにします"),
+                  ("pinch", 6.0 + SETTLE, "親指と人差し指で摘まんだまま、手を動かす・横に向ける")],
+        "right": [(None, 2.5, "次: 親指と中指で摘まんだままにします"),
+                  ("rpinch", 5.0 + SETTLE, "親指と中指で摘まんだまま、手を動かす・横に向ける")],
+        "peace": [(None, 2.5, "次: ピースの形（人差し指と中指を立て、親指を畳む）"),
+                  ("peace", 5.0 + SETTLE, "ピースの形で、楽に正面を指したまま止める")],
+        "thumbsup": [(None, 2.5, f"次: いいねのユニット。まず間違えやすい形を記録します")] + THUMBSUP_STEPS,
+        "zoom": [(None, 2.5, f"次: ズームのユニット。{_BACK}")] + ZOOM_STEPS,
+    }
+    steps = [PREP_STEP]
+    rest_done = False
+    for u in UNIT_ORDER:
+        if u not in units:
+            continue
+        if u in REST_UNITS and not rest_done:
+            steps += REST_STEPS
+            rest_done = True
+        steps += own[u]
+    return steps
+
+
+def collect_samples(frames, segments: list[dict], hand: str = "both") -> dict[str, list]:
+    """ラベルの区間ごとに、校正に使う値を集める（以前の calibrate の on_frame と同じ値）。
+    frames_<label> は区間のフレーム数、seen_<label> はそのうち手が見えたフレーム数。"""
+    from .gesture import image_pinch_metrics, preferred_hand, thumb_fold_metric
+    from .peace import direction_angles
+    from .types import PALM
+
+    want = {"range", "rest", "pinch", "rpinch", "peace"}
+    d: dict[str, list] = {k: [] for k in ("range", "rest_ti", "rest_tm", "rest_thumb", "pinch", "rpinch",
+                                          "peace_thumb", "peace_dir")}
+    count: dict[str, list] = {}
+    segs = [s for s in segments if s["label"] in want]
+    for f in frames:
+        lab = next((s["label"] for s in segs if s["t_start_ns"] <= f.t_capture_ns < s["t_end_ns"]), None)
+        if lab is None:
+            continue
+        c = count.setdefault(lab, [0, 0])
+        c[0] += 1
+        h = preferred_hand(f.hands, hand) if f.hands else None
+        if h is None:
+            continue
+        c[1] += 1
+        if lab == "range":
+            d["range"].append(tuple(float(v) for v in h.landmarks[list(PALM), :2].mean(axis=0)))
+            continue
+        m = image_pinch_metrics(h, f.image_size)
+        if lab == "rest":
+            d["rest_ti"].append(m["thumb_index_n"])
+            d["rest_tm"].append(m["thumb_middle_n"])
+            d["rest_thumb"].append(thumb_fold_metric(h))
+        elif lab == "pinch":
+            d["pinch"].append(m["thumb_index_n"])
+        elif lab == "rpinch":
+            d["rpinch"].append(m["thumb_middle_n"])
+        elif lab == "peace":
+            d["peace_thumb"].append(thumb_fold_metric(h))
+            d["peace_dir"].append(direction_angles(h))
+    for lab, (n, seen) in count.items():
+        d[f"frames_{lab}"], d[f"seen_{lab}"] = [n], [seen]
+    return d
+
+
+@dataclass
+class UnitResult:
+    unit: str
+    params: dict | None  # 候補 {節: {キー: 値}}。分離できない・データ不足なら None
+    stats: dict
+    warnings: list
+    report: str
+
+    def to_json(self) -> dict:
+        return {"unit": self.unit, "title": UNIT_TITLES[self.unit], "candidate": self.params, "stats": self.stats,
+                "warnings": self.warnings, "report": self.report}
+
+
+# 段階ごとの、警告を出すサンプル数（30fps の記録時間の約半分）
+MIN_SAMPLES = {"range": 30, "rest": 120, "pinch": 90, "rpinch": 75, "peace": 75}
+
+
+def _pct(a, q) -> float:
+    return round(float(np.percentile(np.asarray(a, dtype=np.float64), q)), 4)
+
+
+def _finite(v) -> list[float]:
+    return [float(x) for x in v if np.isfinite(x)]
+
+
+def _seen_warnings(d: dict, labels, warnings: list) -> dict:
+    stats = {}
+    for lab in labels:
+        n, seen = (d.get(f"frames_{lab}") or [0])[0], (d.get(f"seen_{lab}") or [0])[0]
+        stats[f"{lab}_frames"], stats[f"{lab}_seen"] = n, seen
+        if n == 0:
+            warnings.append(f"{lab}: 区間のフレームがない")
+        elif seen < 0.8 * n:
+            warnings.append(f"{lab}: 手が見えたフレームが {seen / n * 100:.0f}%（80% 未満）")
+        if seen < MIN_SAMPLES[lab]:
+            warnings.append(f"{lab}: サンプル不足（{seen} フレーム。目安 {MIN_SAMPLES[lab]} 以上）")
+    return stats
+
+
+def _pair_unit(unit: str, rest: list, op: list, op_label: str, default_on, default_off, default_drag_off=0.0,
+               on_frac=0.40, off_frac=0.75):
+    """ピンチ型（距離が小さいほど操作）の閾値の候補と、統計。"""
+    r, p = _finite(rest), _finite(op)
+    stats = {"rest_n": len(r), "op_n": len(p)}
+    if len(r) >= 1:
+        stats.update(rest_p2=_pct(r, 2), rest_p10=_pct(r, 10), rest_median=_pct(r, 50))
+    if len(p) >= 1:
+        stats.update(op_p50=_pct(p, 50), op_p90=_pct(p, 90))
+    try:
+        th = derive_pinch_thresholds(r, p, default_on, default_off, default_drag_off, on_frac, off_frac)
+    except ValueError as e:
+        stats["separated"] = False
+        return None, stats, [f"{op_label}: {e}"]
+    stats.update(separated=th.separated, gap=round(th.rest_lo - th.pinch_hi, 4))
+    warnings = []
+    if not th.separated:
+        warnings.append(f"{op_label}: 分布が重なっている（操作の p90 {th.pinch_hi:.3f} ≥ 普段の姿勢の p2 {th.rest_lo:.3f}）。候補なし")
+        return None, stats, warnings
+    if th.rest_lo - th.pinch_hi < 0.03:
+        warnings.append(f"{op_label}: 分布の間が狭い（{th.rest_lo - th.pinch_hi:.3f}）")
+    if th.rest_lo - th.pinch_hi > 0.3:
+        warnings.append(f"{op_label}: 分布の間が 0.3 より広いので、0.3 として閾値を置いた")
+    return th, stats, warnings
+
+
+def compute_units(units, frames, segments: list[dict], gdef, click_cfg: dict, image_size: tuple[int, int],
+                  screen_size: tuple[float, float], hand: str = "both") -> dict[str, UnitResult]:
+    """記録（frames と区間）から、ユニットごとの候補・統計・警告を出す。gdef は config.toml だけの GestureConfig
+    （既定値と上限）、click_cfg は [click]（calib_on_frac / calib_off_frac、calibration.toml を重ねた値）。"""
+    d = collect_samples(frames, segments, hand)
+    out: dict[str, UnitResult] = {}
+    if "range" in units:
+        warnings: list = []
+        stats = _seen_warnings(d, ["range"], warnings)
+        params = None
+        if len(d["range"]) < 30:
+            warnings.append(f"範囲: データが足りない（{len(d['range'])} フレーム）。候補なし")
+            lines = [warnings[-1]]
+        else:
+            iw, ih = image_size
+            sw, sh = screen_size
+            P = np.array(d["range"])
+            x0, x1 = np.percentile(P[:, 0], [5, 95])
+            y0, y1 = np.percentile(P[:, 1], [5, 95])
+            # 操作範囲は画面と同じアスペクト比。測った範囲（5〜95%）がちょうど収まる幅にする
+            w = max(x1 - x0, (y1 - y0) * ih * sw / (iw * sh))
+            lines = []
+            if w > gdef.roi_width_max:  # 範囲の外でも手が画角に収まる余白を残す（SPEC 13.36）
+                warnings.append(f"測った幅 {w:.2f} は上限 {gdef.roi_width_max:.2f} を超えるので、上限にした（中心はそのまま）")
+                w = gdef.roi_width_max
+            params = {"cursor": {"roi_cx": round(float((x0 + x1) / 2), 4), "roi_cy": round(float((y0 + y1) / 2), 4),
+                                 "roi_width": round(float(w), 4)}}
+            stats.update(x_p5=round(float(x0), 4), x_p95=round(float(x1), 4), y_p5=round(float(y0), 4),
+                         y_p95=round(float(y1), 4))
+            lines.append(f"操作範囲 中心 ({(x0 + x1) / 2:.2f}, {(y0 + y1) / 2:.2f}) 幅 {w:.2f}")
+        out["range"] = UnitResult("range", params, stats, warnings, "\n".join(lines))
+    if "pinch" in units:
+        warnings = []
+        seen = _seen_warnings(d, ["rest", "pinch"], warnings)
+        th, stats, w2 = _pair_unit("pinch", d["rest_ti"], d["pinch"], "親指-人差し指", gdef.pinch_on, gdef.pinch_off,
+                                   gdef.drag_off, click_cfg.get("calib_on_frac", 0.40), click_cfg.get("calib_off_frac", 0.75))
+        params = {"click": {"pinch_on": th.on, "pinch_off": th.off, "drag_off": th.drag_off}} if th else None
+        out["pinch"] = UnitResult("pinch", params, {**seen, **stats}, warnings + w2,
+                                  th.summary("親指-人差し指") if th else "\n".join(w2))
+    if "right" in units:
+        warnings = []
+        seen = _seen_warnings(d, ["rest", "rpinch"], warnings)
+        th, stats, w2 = _pair_unit("right", d["rest_tm"], d["rpinch"], "親指-中指", gdef.right_on, gdef.right_off)
+        # 右クリックの「直前に離れていた」条件（right_arm）は、解除の閾値より十分大きくしておく
+        params = {"click": {"right_on": th.on, "right_off": th.off,
+                            "right_arm": round(max(gdef.right_arm, th.off + 0.08), 4)}} if th else None
+        out["right"] = UnitResult("right", params, {**seen, **stats}, warnings + w2,
+                                  th.summary("親指-中指") if th else "\n".join(w2))
+    if "peace" in units:
+        warnings = []
+        stats = _seen_warnings(d, ["rest", "peace"], warnings)
+        r, p = _finite(d["rest_thumb"]), _finite(d["peace_thumb"])
+        stats.update(rest_n=len(r), op_n=len(p))
+        if r:
+            stats.update(rest_p98=_pct(r, 98), rest_p90=_pct(r, 90), rest_median=_pct(r, 50))
+        if p:
+            stats.update(op_p10=_pct(p, 10), op_p50=_pct(p, 50))
+        params, lines = None, []
+        try:
+            thumb = derive_thumb_fold(r, p, gdef.thumb_fold_on, gdef.thumb_fold_off)
+            yaw, pitch = neutral_direction(d["peace_dir"])
+            stats.update(separated=thumb.separated, gap=round(thumb.pinch_hi - thumb.rest_lo, 4),
+                         neutral_yaw=round(yaw, 2), neutral_pitch=round(pitch, 2))
+            lines.append(f"親指を畳んだ判定: ピース p10 {thumb.pinch_hi:.3f} / 普段の姿勢 p98 {thumb.rest_lo:.3f} → "
+                         f"{'分離できた' if thumb.separated else '分布が重なっている（候補なし）'}  成立 {thumb.on:.3f}  解除 {thumb.off:.3f}")
+            lines.append(f"ピースの中立方向: 方位角 {yaw:+.1f}°（右が正）  仰角 {pitch:+.1f}°（上が正）")
+            # 中立方向は分離とは関係なく出す（以前の calibrate と同じ）
+            params = {"peace": {"peace_neutral_yaw_deg": round(yaw, 2), "peace_neutral_pitch_deg": round(pitch, 2)}}
+            if thumb.separated:
+                params["peace"].update(thumb_fold_on=round(thumb.on, 4), thumb_fold_off=round(thumb.off, 4))
+            else:
+                warnings.append("親指の畳み: 分布が重なっている。親指の閾値の候補なし")
+        except ValueError as e:
+            stats["separated"] = False
+            warnings.append(f"ピース: {e}")
+            lines.append(warnings[-1])
+        out["peace"] = UnitResult("peace", params, stats, warnings, "\n".join(lines))
+    for unit, fn, section in (("thumbsup", learn_thumbsup, "thumbsup"), ("zoom", learn_zoom, "zoom")):
+        if unit in units:
+            try:
+                r = fn(frames, segments, hand)
+                out[unit] = UnitResult(unit, {section: r.params}, {}, [], r.report)
+            except ValueError as e:
+                out[unit] = UnitResult(unit, None, {}, [f"学習できなかった: {e}"], str(e))
+    return out
+
+
+def reconstruct_old_segments(frames) -> list[dict]:
+    """ラベルのない以前の calibrate の記録（2026-10-24 04:05 以降の手順）から、段階の区間を時刻で復元する。
+    摘まんでいる段階（pinch, rpinch）は active = True で記録されているので、それを起点に、決まった段階の長さで前後をたどる。
+    手順: [準備 3, 手を開く 5.5, 待ち 2, 範囲 11.5, 待ち 2.5]（--pinch-only では 準備 3 だけ）, 待ち 2.5, 普段の姿勢 9.5, 待ち 2.5,
+    摘まむ 7.5, 待ち 2.5, 中指で摘まむ 6.5, 待ち 2.5, ピース 6.5（秒。各段階の最初の 1.5 秒は集計しない）。"""
+    runs, prev = [], False
+    for f in frames:
+        if f.active and not prev:
+            runs.append([f.t_capture_ns, None])
+        if prev and not f.active:
+            runs[-1][1] = f.t_capture_ns
+        prev = f.active
+    if len(runs) != 2 or runs[1][1] is None:
+        raise ValueError("摘まんでいる段階（active）が 2 つ見つからない。手順が違う記録")
+    s = 1e9
+    (p0, p1), (r0, r1) = runs
+    if abs((p1 - p0) / s - 7.5) > 0.3 or abs((r1 - r0) / s - 6.5) > 0.3 or abs((r0 - p1) / s - 2.5) > 0.3:
+        raise ValueError(f"段階の長さが今の手順と違う（摘まむ {(p1 - p0) / s:.1f} 秒、中指 {(r1 - r0) / s:.1f} 秒）。以前の手順の記録")
+
+    def seg(label, start, dur):
+        return {"label": label, "t_start_ns": int(start + SETTLE * s), "t_end_ns": int(start + dur * s)}
+    rest0 = p0 - (2.5 + 9.5) * s
+    segs = [seg("rest", rest0, 9.5), seg("pinch", p0, 7.5), seg("rpinch", r0, 6.5), seg("peace", r1 + 2.5 * s, 6.5)]
+    t_first = frames[0].t_capture_ns
+    range0 = rest0 - (2.5 + 11.5) * s
+    if range0 - (3.0 + 5.5 + 2.0) * s >= t_first - 0.5 * s:  # 範囲を測った記録（--pinch-only でない）
+        segs.insert(0, seg("range", range0, 11.5))
+    return segs

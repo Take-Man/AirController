@@ -684,179 +684,159 @@ def _draw_hand(cv2, img, hand) -> None:
 
 
 # ---------------------------------------------------------------- 検証用コマンド
-def cmd_calibrate(args, cfg: dict) -> int:
-    """校正: 基準長、操作範囲、ピンチの閾値（SPEC 13.8, 13.10）。
+CALIB_HISTORY = ROOT / "calibration-history"
 
-    ピンチの閾値は、普段のカーソル操作の姿勢と、摘まんだ状態の距離から、利用者ごとに決める。
-    記録は recordings/calib-*.jsonl に残す（active = 摘まんでいる段階）。
-    """
+
+def _screen_size() -> tuple[float, float]:
+    try:
+        import Quartz
+
+        b = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
+        return float(b.size.width), float(b.size.height)
+    except Exception:  # noqa: BLE001  画面のない環境（テスト）
+        return 1440.0, 900.0
+
+
+def _calib_units(args) -> list[str]:
+    from .calibration import UNIT_ORDER
+
+    if args.unit:
+        names = [u.strip() for u in args.unit.split(",") if u.strip()]
+        if "all" in names:
+            return list(UNIT_ORDER)
+        bad = [u for u in names if u not in UNIT_ORDER]
+        if bad:
+            raise ValueError(f"知らないユニット: {', '.join(bad)}（{', '.join(UNIT_ORDER)}, all）")
+        return [u for u in UNIT_ORDER if u in names]
+    if args.pinch_only:
+        return ["pinch", "right", "peace"]  # 以前の --pinch-only と同じ段階（普段の姿勢、摘まむ、中指で摘まむ、ピース）
+    return ["range", "pinch", "right", "peace"]
+
+
+def _calib_decorate():
+    """calibrate のプレビュー: 親指と指先の距離を出し、範囲の段階では手のひら中心の軌跡を描く。"""
     import cv2
-    import Quartz
 
-    from .calibration import derive_pinch_thresholds, derive_thumb_fold, neutral_direction
-    from .gesture import GestureConfig, finger_straightness, image_pinch_metrics, thumb_fold_metric
-    from .peace import direction_angles
-    from .input import Tracker
-    from .recording import Recorder
-    from .types import MIDDLE_TIP, PALM, WRIST, LandmarkFrame
+    from .gesture import image_pinch_metrics
+    from .types import PALM
 
-    camera = _open_camera(cfg)
-    if camera is None:
-        return 2
-    iw, ih = camera.actual_size
-    b = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
-    sw, sh = float(b.size.width), float(b.size.height)
-    gdef = GestureConfig.from_toml(load_config(args.config, calibration=False))
-    lock = threading.Lock()
-    latest: dict = {"frame": None, "ti": float("nan"), "tm": float("nan")}
-    data: dict[str, list] = {"open": [], "range": [], "rest_ti": [], "rest_tm": [], "pinch": [], "rpinch": [],
-                             "rest_thumb": [], "peace_thumb": [], "peace_dir": []}
-    phase = {"name": "wait"}
-    stamp = time.strftime("%Y%m%d-%H%M%S")
-    recorder = Recorder(_resolve(cfg["log"]["recordings_dir"]) / f"calib-{stamp}.jsonl",
-                        {"camera": cfg["camera"], "actual_size": [iw, ih], "purpose": "calibrate"})
+    pts: list = []
 
-    def on_frame(frame: LandmarkFrame) -> None:
-        name = phase["name"]
-        recorder.write(dataclasses.replace(frame, active=name in ("pinch", "rpinch")))
-        if time.monotonic() < phase.get("settle_until", 0):
-            name = "settling"  # 移行中のフレームは集計しない
-        h = preferred_hand(frame.hands, HAND) if frame.hands else None
-        m = image_pinch_metrics(h, frame.image_size) if h else {}
-        with lock:
-            latest.update(frame=frame, ti=m.get("thumb_index_n", float("nan")), tm=m.get("thumb_middle_n", float("nan")))
+    def deco(img, f, label, recording) -> list[str]:
+        h = preferred_hand(f.hands, HAND) if f is not None and f.hands else None
         if h is None:
-            return
-        if name == "open":
-            if all(finger_straightness(h.world, k) > 0.9 for k in (5, 9, 13, 17)):
-                data["open"].append(float(np.linalg.norm(h.world[MIDDLE_TIP] - h.world[WRIST])))
-        elif name == "range":
-            data["range"].append(tuple(h.landmarks[list(PALM), :2].mean(axis=0)))
-        elif name == "rest":
-            data["rest_ti"].append(m["thumb_index_n"])
-            data["rest_tm"].append(m["thumb_middle_n"])
-            data["rest_thumb"].append(thumb_fold_metric(h))
-        elif name == "peace":
-            data["peace_thumb"].append(thumb_fold_metric(h))
-            data["peace_dir"].append(direction_angles(h))
-        elif name == "pinch":
-            data["pinch"].append(m["thumb_index_n"])
-        elif name == "rpinch":
-            data["rpinch"].append(m["thumb_middle_n"])
+            return []
+        if label == "range":
+            if recording:
+                pts.append(tuple(h.landmarks[list(PALM), :2].mean(axis=0)))
+            for x, y in pts[-300:]:
+                cv2.circle(img, (int((1 - x) * img.shape[1]), int(y * img.shape[0])), 2, (255, 200, 0), -1)
+        m = image_pinch_metrics(h, f.image_size)
+        return [f"親指-人差し指 {m['thumb_index_n']:.2f}   親指-中指 {m['thumb_middle_n']:.2f}"]
+    return deco
 
-    settle = 1.5  # 各段階の最初の 1.5 秒は、前の姿勢から移る途中なので使わない（calib-034725 で動作が約 1.5 秒遅れていた）
-    steps = [("wait", 3.0, "準備: 楽な姿勢で手をカメラに映してください")]
-    if not args.pinch_only:
-        steps += [("open", 4.0 + settle, "手を大きく開いて、手のひらをカメラに向ける"),
-                  ("wait", 2.0, "次: 楽な姿勢のまま、届く範囲の端まで手を動かします"),
-                  ("range", args.seconds + settle, "上下左右の端まで、ゆっくり手のひらを動かす")]
-    steps += [("wait", 2.5, "次: 普段カーソルを動かすときの手の形（人差し指を立て、親指は楽に）"),
-              ("rest", 8.0 + settle, "普段のカーソル操作の手の形で、画面のあちこちを指す（摘ままない）"),
-              ("wait", 2.5, "次: 親指と人差し指で摘まんだままにします"),
-              ("pinch", 6.0 + settle, "親指と人差し指で摘まんだまま、手を動かす・横に向ける"),
-              ("wait", 2.5, "次: 親指と中指で摘まんだままにします"),
-              ("rpinch", 5.0 + settle, "親指と中指で摘まんだまま、手を動かす・横に向ける"),
-              ("wait", 2.5, "次: ピースの形（人差し指と中指を立て、親指を畳む）"),
-              ("peace", 5.0 + settle, "ピースの形で、楽に正面を指したまま止める")]
-    tracker = Tracker(camera, _tracker_config(cfg), on_frame)
-    tracker.start()
+
+def cmd_calibrate(args, cfg: dict) -> int:
+    """校正（SPEC 13.8, 13.10, 13.44）。測定ユニット（U1 操作範囲、U2 左ピンチ、U3 右クリック、U4 ピース、U5 いいね、U6 ズーム）を
+    選んで測り、候補を calibration-history/<時刻>.json に出す（統計・品質の指標・警告つき）。--write のときだけ calibration.toml に書く。
+    記録は recordings/calib-*.jsonl と .labels.json（段階の区間）。--from で既存の記録から計算し直す。"""
+    import json
+
+    from .calibration import SETTLE, UNIT_TITLES, compute_units, reconstruct_old_segments, unit_steps
+    from .gesture import GestureConfig
+    from .recording import iter_frames, read_header
+    from .settings import write_atomic
+
     try:
-        n_data = sum(1 for st in steps if st[0] != "wait")
-        k_data = 0
-        for i, (name, dur, msg) in enumerate(steps):
-            phase["name"] = name
-            phase["settle_until"] = time.monotonic() + (settle if name != "wait" else 0)
-            if name != "wait":
-                k_data += 1
-            print(msg)
-            t_end = time.monotonic() + dur
-            while time.monotonic() < t_end:
-                _, _, bgr = camera.latest()
-                if bgr is None:
-                    time.sleep(0.01)
-                    continue
-                img = cv2.flip(bgr, 1)
-                with lock:
-                    f, ti, tm = latest["frame"], latest["ti"], latest["tm"]
-                if f is not None and f.hands:
-                    _draw_hand(cv2, img, preferred_hand(f.hands, HAND))
-                if name == "range":
-                    for x, y in data["range"][-300:]:
-                        cv2.circle(img, (int((1 - x) * iw), int(y * ih)), 2, (255, 200, 0), -1)
-                left = t_end - time.monotonic()
-                head = msg if name == "wait" else f"[{k_data}/{n_data}] {msg}"
-                sub = (f"あと {left:3.1f} 秒" + ("（準備中: まだ記録していません）" if time.monotonic() < phase["settle_until"] else "（記録中）")
-                       if name != "wait" else f"{left:3.1f} 秒後に始まります")
-                img = _put_jp(img, [head, sub, f"親指-人差し指 {ti:.2f}   親指-中指 {tm:.2f}"])
-                # 残り時間のバー
-                w = int(img.shape[1] * max(0.0, left) / dur)
-                cv2.rectangle(img, (0, img.shape[0] - 10), (w, img.shape[0]), (0, 200, 255) if name != "wait" else (160, 160, 160), -1)
-                cv2.imshow("AirController calibrate", img)
-                if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
-                    print("中断しました")
-                    return 1
-    finally:
-        tracker.stop()
-        camera.stop()
-        recorder.close()
-        cv2.destroyAllWindows()
-        cv2.waitKey(1)
-
-    updates: dict[str, dict] = {}
-    if not args.pinch_only:
-        if len(data["open"]) < 10 or len(data["range"]) < 30:
-            print(f"データが足りません（開いた手 {len(data['open'])}、範囲 {len(data['range'])} フレーム）。もう一度実行してください。")
+        units = _calib_units(args)
+    except ValueError as e:
+        print(e)
+        return 2
+    if args.repeat and (args.write or args.source):
+        print("--repeat は --write・--from と一緒に使えません（2 回の差を見るだけ）")
+        return 2
+    gdef = GestureConfig.from_toml(load_config(args.config, calibration=False))  # 既定値と上限は config.toml だけから
+    screen = _screen_size()
+    print("ユニット: " + "、".join(UNIT_TITLES[u] for u in units))
+    runs = []
+    if args.source:
+        rec = Path(args.source)
+        frames = list(iter_frames(rec))
+        lab = rec.with_suffix(".labels.json")
+        try:
+            segments = json.loads(lab.read_text())["segments"] if lab.exists() else reconstruct_old_segments(frames)
+        except ValueError as e:
+            print(f"段階を復元できません: {e}")
             return 1
-        base = float(np.median(data["open"]))
-        P = np.array(data["range"])
-        x0, x1 = np.percentile(P[:, 0], [5, 95])
-        y0, y1 = np.percentile(P[:, 1], [5, 95])
-        # 操作範囲は画面と同じアスペクト比。測った範囲（5〜95%）がちょうど収まる幅にする
-        w = max(x1 - x0, (y1 - y0) * ih * sw / (iw * sh))
-        w_max = gdef.roi_width_max  # 範囲の外でも手が画角に収まる余白を残す（SPEC 13.36）
-        if w > w_max:
-            print(f"測った操作範囲の幅 {w:.2f} は上限 {w_max:.2f} を超えるので、{w_max:.2f} にします（中心はそのまま）")
-            w = w_max
-        updates["gesture"] = {"base_length_m": round(base, 4)}
-        updates["cursor"] = {"roi_cx": round(float((x0 + x1) / 2), 4), "roi_cy": round(float((y0 + y1) / 2), 4),
-                             "roi_width": round(float(w), 4)}
-        print(f"基準長 {base * 100:.1f}cm、操作範囲 中心 ({(x0 + x1) / 2:.2f}, {(y0 + y1) / 2:.2f}) 幅 {w:.2f}")
-    try:
-        ck = cfg.get("click", {})
-        left = derive_pinch_thresholds(data["rest_ti"], data["pinch"], gdef.pinch_on, gdef.pinch_off, gdef.drag_off,
-                                       ck.get("calib_on_frac", 0.40), ck.get("calib_off_frac", 0.75))
-        right = derive_pinch_thresholds(data["rest_tm"], data["rpinch"], gdef.right_on, gdef.right_off)
-    except ValueError as e:
-        print(f"ピンチの校正: {e}。もう一度実行してください。")
+        runs.append((rec, segments, frames))
+    else:
+        for i in range(2 if args.repeat else 1):
+            if i:
+                print("\n同じユニットを、もう一度測ります")
+            status: dict = {}
+            res = _guided_record(cfg, f"calib-{time.strftime('%Y%m%d-%H%M%S')}", unit_steps(units, args.seconds), SETTLE,
+                                 purpose="calibrate", title="AirController calibrate", decorate=_calib_decorate(),
+                                 status=status)
+            if res is None:
+                return 2
+            if status.get("aborted"):
+                print("中断したので、候補は出しません")
+                return 1
+            runs.append((res[0], res[1], list(iter_frames(res[0]))))
+
+    all_results = []
+    for rec, segments, frames in runs:
+        if not frames:
+            print(f"記録が空です: {rec}")
+            return 1
+        size = tuple(read_header(rec).get("actual_size") or frames[0].image_size)
+        results = compute_units(units, frames, segments, gdef, cfg.get("click", {}), size, screen, HAND)
+        all_results.append((rec, results))
+        print(f"\n--- {rec.name}")
+        for r in results.values():
+            print(f"[{UNIT_TITLES[r.unit]}] " + ("候補あり" if r.params else "候補なし"))
+            if r.report:
+                print("  " + r.report.replace("\n", "\n  "))
+            for w in r.warnings:
+                print(f"  警告: {w}")
+
+    if args.repeat and len(all_results) == 2:
+        print("\n2 回の差（1 回目 → 2 回目）:")
+        (_, a), (_, b) = all_results
+        for u in units:
+            pa, pb = (a[u].params or {}), (b[u].params or {})
+            for sec in sorted(set(pa) | set(pb)):
+                for k in sorted(set(pa.get(sec, {})) | set(pb.get(sec, {}))):
+                    va, vb = pa.get(sec, {}).get(k), pb.get(sec, {}).get(k)
+                    if isinstance(va, (int, float)) and isinstance(vb, (int, float)) and not isinstance(va, bool):
+                        rel = f"（{(vb - va) / abs(va) * 100:+.0f}%）" if va else ""
+                        print(f"  {sec}.{k}: {va} → {vb}  差 {vb - va:+.4f}{rel}")
+                    else:
+                        print(f"  {sec}.{k}: {va} → {vb}")
+
+    rec, results = all_results[-1]
+    candidate: dict[str, dict] = {}
+    for r in results.values():
+        for sec, vals in (r.params or {}).items():
+            candidate.setdefault(sec, {}).update(vals)
+    written = bool(args.write and candidate)
+    for n, (rec_i, res_i) in enumerate(all_results):
+        path = CALIB_HISTORY / f"{rec_i.stem.removeprefix('calib-')}.json"
+        if args.source:
+            path = CALIB_HISTORY / f"{time.strftime('%Y%m%d-%H%M%S')}-from-{rec_i.stem}.json"
+        write_atomic(path, json.dumps({
+            "t": time.strftime("%Y-%m-%dT%H:%M:%S"), "recording": str(rec_i), "units": units, "screen": list(screen),
+            "repeat": (n + 1) if args.repeat else None, "written": written and n == len(all_results) - 1,
+            "results": {u: r.to_json() for u, r in res_i.items()}}, ensure_ascii=False, indent=1) + "\n")
+        print(f"\n候補と統計: {path.relative_to(ROOT) if path.is_relative_to(ROOT) else path}")
+    if not candidate:
+        print("候補はありません（どのユニットも分離できなかった、またはデータ不足）")
         return 1
-    print(left.summary("親指-人差し指"))
-    print(right.summary("親指-中指"))
-    peace_updates: dict = {}
-    try:
-        thumb = derive_thumb_fold(data["rest_thumb"], data["peace_thumb"], gdef.thumb_fold_on, gdef.thumb_fold_off)
-        yaw, pitch = neutral_direction(data["peace_dir"])
-        print(f"親指を畳んだ判定: ピース p10 {thumb.pinch_hi:.3f} / 普段の姿勢 p98 {thumb.rest_lo:.3f} → "
-              f"{'分離できた' if thumb.separated else '分布が重なっている（既定値を使う）'}  成立 {thumb.on:.3f}  解除 {thumb.off:.3f}")
-        print(f"ピースの中立方向: 方位角 {yaw:+.1f}°（右が正）  仰角 {pitch:+.1f}°（上が正）")
-        peace_updates = {"peace_neutral_yaw_deg": round(yaw, 2), "peace_neutral_pitch_deg": round(pitch, 2)}
-        if thumb.separated:
-            peace_updates.update(thumb_fold_on=round(thumb.on, 4), thumb_fold_off=round(thumb.off, 4))
-    except ValueError as e:
-        print(f"ピースの校正: {e}")
-    click = {}
-    if left.separated:
-        click.update(pinch_on=left.on, pinch_off=left.off, drag_off=left.drag_off)
-    if right.separated:
-        # 右クリックの「直前に離れていた」条件（right_arm）は、解除の閾値より十分大きくしておく
-        click.update(right_on=right.on, right_off=right.off, right_arm=round(max(gdef.right_arm, right.off + 0.08), 4))
-    if click:
-        updates["click"] = click
-    if peace_updates:
-        updates["peace"] = peace_updates
-    if updates:
-        save_calibration(updates, "calibrate が書いた値", "calibrate")
-        print(f"保存しました: {CALIBRATION}（消せば config.toml の値に戻ります）")
-    print(f"校正の記録: recordings/calib-{stamp}.jsonl")
+    if written:
+        save_calibration(candidate, "calibrate が書いた値", "calibrate")
+        print(f"保存しました: {CALIBRATION}（履歴は settings-history/）")
+    else:
+        print("calibration.toml には書いていません（書くには --write。設定画面で比べてから採用する）")
     return 0
 
 
@@ -876,12 +856,14 @@ LAB_OTHERS = [
 
 def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, str]], settle: float = 1.5,
                    purpose: str = "lab", title: str = "AirController lab",
-                   targets: dict[str, tuple[float, float] | list[tuple[float, float]]] | None = None
-                   ) -> tuple[Path, list[dict]] | None:
+                   targets: dict[str, tuple[float, float] | list[tuple[float, float]]] | None = None,
+                   decorate=None, status: dict | None = None) -> tuple[Path, list[dict]] | None:
     """画面の指示に従って姿勢を順に記録する。label が None の段階は待ち時間。各段階の最初の settle 秒は集計しない。
     記録（.jsonl）とラベル（.labels.json）を保存し、(記録のパス, 区間のリスト) を返す。
     targets: ラベル（全体、なければ "/" の前）→ 手のひら中心を置く位置（画像座標、非反転）。プレビューに円で示す。
-    位置のリストなら、それらを線で結んで示す（往復する動き）。"""
+    位置のリストなら、それらを線で結んで示す（往復する動き）。
+    decorate(img, frame, label, recording) は、プレビューに描き足し、表示する行を足す（行のリストを返す）。
+    status を渡すと、中断したら status["aborted"] = True にする。"""
     import json
 
     import cv2
@@ -947,13 +929,16 @@ def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, st
                     head = f"[{k}/{n_data}] {msg}"
                 else:
                     sub, head = f"{left:3.1f} 秒後に始まります", msg
-                img = _put_jp(img, [head, sub, "手が見えています" if f is not None and f.hands else "手が見えません"])
+                extra = decorate(img, f, label, bool(label) and time.monotonic() >= settle_until) if decorate else []
+                img = _put_jp(img, [head, sub, "手が見えています" if f is not None and f.hands else "手が見えません", *extra])
                 w = int(img.shape[1] * max(0.0, left) / dur)
                 cv2.rectangle(img, (0, img.shape[0] - 10), (w, img.shape[0]),
                               (0, 200, 255) if label else (160, 160, 160), -1)
                 cv2.imshow(title, img)
                 if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
                     print("中断しました（ここまでの記録は保存します）")
+                    if status is not None:
+                        status["aborted"] = True
                     if label:  # 途中の段階は、中断した時点までにする
                         segments[-1]["t_end_ns"] = time.perf_counter_ns()
                     raise KeyboardInterrupt
@@ -1057,21 +1042,10 @@ def cmd_learn_thumbsup(args, cfg: dict) -> int:
         rec_path = Path(args.source)
         segments = json.loads(rec_path.with_suffix(".labels.json").read_text())["segments"]
     else:
-        settle = 1.5
-        tu = "いいね（親指を立て、ほかの指は握る）"
-        steps: list[tuple[str | None, float, str]] = [
-            (None, 3.0, "準備: 楽な姿勢で、右手をカメラに映してください"),
-            ("neg_fist_side", 4.0 + settle, "グーで、小指側をカメラに向ける（親指は隠す）。手を少し動かす"),
-            (None, 2.0, "次: 普通のグー"),
-            ("neg_fist", 4.0 + settle, "普通のグー（親指は握った指の上）。手を少し動かす"),
-            (None, 2.0, "次: カーソル操作の形"),
-            ("neg_cursor", 4.0 + settle, "人差し指だけを立てて、あちこちを指す"),
-            (None, 3.0, f"次: {tu}。これから上・左・右を1回ずつ"),
-            ("center", 3.0 + settle, f"{tu}で、正面に止める"),
-        ]
-        for d, dj in (("up", "上"), ("left", "左"), ("right", "右")):
-            steps += [(d, 3.0 + settle, f"いいねのまま、{dj}へ（動かす・ひねる、やりやすい方法で）して止める"),
-                      ("center", 2.0 + settle, "いいねのまま、正面に戻して止める")]
+        from .calibration import SETTLE, THUMBSUP_STEPS
+
+        settle = SETTLE
+        steps = [(None, 3.0, "準備: 楽な姿勢で、右手をカメラに映してください"), *THUMBSUP_STEPS]
         res = _guided_record(cfg, args.name or f"learn-thumbsup-{time.strftime('%Y%m%d-%H%M%S')}", steps, settle,
                              purpose="learn-thumbsup", title="AirController learn-thumbsup")
         if res is None:
@@ -1101,15 +1075,10 @@ def cmd_learn_zoom(args, cfg: dict) -> int:
         rec_path = Path(args.source)
         segments = json.loads(rec_path.with_suffix(".labels.json").read_text())["segments"]
     else:
-        settle = 1.5
-        back = "手の甲をカメラに向け、指を伸ばす"
-        steps: list[tuple[str | None, float, str]] = [(None, 3.0, f"準備: 右手で、{back}")]
-        for _ in range(2):
-            steps += [("neutral", 2.5 + settle, f"{back}。楽な姿勢で止める"),
-                      ("in", 2.5 + settle, "手招きのように、指先をカメラから遠ざけて止める（ズームイン）"),
-                      ("neutral", 2.0 + settle, f"{back}。元の姿勢に戻して止める"),
-                      ("out", 2.5 + settle, "指先をカメラに近づけて止める（ズームアウト）")]
-        steps += [("neutral", 2.0 + settle, f"{back}。元の姿勢に戻して止める")]
+        from .calibration import SETTLE, ZOOM_STEPS
+
+        settle = SETTLE
+        steps = [(None, 3.0, "準備: 右手で、手の甲をカメラに向け、指を伸ばす"), *ZOOM_STEPS]
         res = _guided_record(cfg, args.name or f"learn-zoom-{time.strftime('%Y%m%d-%H%M%S')}", steps, settle,
                              purpose="learn-zoom", title="AirController learn-zoom")
         if res is None:
@@ -1553,9 +1522,14 @@ def main(argv=None) -> int:
     r.add_argument("--activation", choices=["toggle", "hold"], help="有効化の方式を上書きする（ラベル付き記録は hold）")
     r.add_argument("--no-eventlog", action="store_true", help="イベントログ（logs/events-*.jsonl）を書かない")
     r.add_argument("--no-auto-off", action="store_true", help="手の不在による自動オフを使わない（負荷の計測用）")
-    cb = sub.add_parser("calibrate", help="基準長と操作範囲を校正し、calibration.toml に保存する")
+    cb = sub.add_parser("calibrate", help="測定ユニットごとに校正し、候補を calibration-history/ に出す（--write で書く）")
     cb.add_argument("--seconds", type=float, default=10.0, help="操作範囲を測る時間")
-    cb.add_argument("--pinch-only", action="store_true", help="ピンチの閾値だけを校正する（基準長と操作範囲は測らない）")
+    cb.add_argument("--pinch-only", action="store_true", help="ピンチ・右クリック・ピースだけを測る（--unit pinch,right,peace と同じ）")
+    cb.add_argument("--unit", help="測るユニット（カンマ区切り）: range, pinch, right, peace, thumbsup, zoom, all。"
+                                   "既定は range,pinch,right,peace")
+    cb.add_argument("--write", action="store_true", help="候補を calibration.toml に書く（既定は候補を出すだけ）")
+    cb.add_argument("--repeat", action="store_true", help="同じユニットを続けて 2 回測り、差を表示する（書かない）")
+    cb.add_argument("--from", dest="source", help="測らずに、既存の記録（recordings/calib-*.jsonl）から計算し直す")
     v = sub.add_parser("view", help="段階0: カメラ画像にランドマークを描画し、遅延ログと記録を行う")
     v.add_argument("--record", action="store_true")
     v.add_argument("--name")
