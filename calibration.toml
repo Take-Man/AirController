@@ -1,15 +1,16 @@
-# 操作範囲は run の自動補正が更新（2026-10-26 03:31）。config.toml の値を上書きする。消せば config.toml の値に戻る
+# 位置を中央に寄せた（2026-10-26 21:48）。config.toml の値を上書きする。消せば config.toml の値に戻る
+# 書いた経路ごとの履歴は settings-history/changes.jsonl
 
 [gesture]
 base_length_m = 0.1862
 
 [cursor]
-roi_cx = 0.4765
-roi_cy = 0.6187
-roi_width = 0.5237
+roi_cx = 0.505
+roi_cy = 0.54
+roi_width = 0.5513
 
 [click]
-pinch_on = 0.2235
+pinch_on = 0.205
 pinch_off = 0.2448
 drag_off = 0.257
 
