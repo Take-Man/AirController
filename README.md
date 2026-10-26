@@ -22,6 +22,7 @@
 - `aircontroller/thresholds.py` 位置によって変えうる閾値の入口（ピンチ・親指の畳み・ピースの条件。今は位置を無視する）
 - `aircontroller/live.py` run に内蔵する、設定画面のライブのプレビュー用のサーバー（設定モード、今の値、変更中の値の差し替え）
 - `aircontroller/settings_server.py` 設定画面のサーバー（標準ライブラリ）。画面は `aircontroller/web/`（素の HTML/CSS/JS）
+- `aircontroller/settings_launch.py` オーバーレイのギアのボタンから設定画面を開く（動いているサーバーがあればそのページを開き、なければ別プロセスで起動する。`settings-server.json`）
 - `aircontroller/settings_eval.py` 効果の見積もり（基準記録を 2 つの設定で流して差を出す）。基準記録の一覧は `eval-manifest.toml`
 - 設定の層: `config.toml`（既定値と説明）< `calibration.toml`（利用者と測定が書く）< `auto.toml`（run の操作範囲の自動補正。calibrate で測り直すと使われなくなる）。オーバーレイを畳んだかは `ui_state.json`
 - `tools/` 計測・分析の道具（各ファイルの先頭に使い方）
@@ -85,9 +86,20 @@ open tools/targets.html                                          # クリック�
 - ¥ で印を付けると、前 6 秒・後 3 秒のランドマークを `recordings/mark-*.jsonl` に残し、イベントログにも書く
 - イベントログ `logs/events-*.jsonl` は常に書く（20MB で次のファイル、30 本を超えたら古いものを消す。`--no-eventlog` で書かない）
 - オフのまま 5 分経つとカメラを止める（止めている間はパーでオンにできない）。オーバーレイのカメラのボタンでも止められる（No signal）。ボタンか右 Command で再開。待機中に出る ▲ のボタンでオーバーレイを畳む（次回に引き継ぐ）
+- 待機中（オフ）とカメラの停止中（No signal）に出るギアのボタンで、設定画面をブラウザで開く（`settings` と同じ。run を終えても設定画面は残る。止めるには設定画面のヘッダの「終了」。出力は `logs/settings-server.log`）
 - 無効化すると、押下中のボタンとモードを解除する。Ctrl+C・終了時・例外時も解除する。
 
 記録を再現テストに加える: `recordings/` から `tests/fixtures/` にコピーし、`python -m tests.make_golden tests/fixtures/xxx.jsonl` で期待値を作る。
+
+今の設定でのゴールデンテスト（`tests/test_golden_current.py`、SPEC 13.50）: tests/fixtures/ と recordings/ の記録を今の設定
+（config.toml + calibration.toml。auto.toml は含めない）で流し、`tests/golden-current/` の要約と比べる。記録がなければスキップ。
+設定画面で設定を確定すると、このテストは「設定が違う」で失敗する。作り直すのは、挙動の変化を作者が意図したものと確かめたときだけ:
+```bash
+.venv/bin/python tools/golden_diff.py --current                  # 今の設定での差を記録ごとに（種類別の件数、消えた・増えたイベント）
+.venv/bin/python tools/golden_diff.py --current --golden-config  # 要約を作ったときの設定で流す（コードの変更だけの影響）
+.venv/bin/python tools/golden_diff.py --current --write          # 確かめた後で、要約を作り直す（git diff でも件数の差が見える）
+.venv/bin/python tools/golden_diff.py --current recordings/xxx.jsonl --write   # 新しい記録を加える
+```
 
 ## 権限（実行元のターミナルに付与）
 システム設定 → プライバシーとセキュリティ で、次の3つをオンにする。
