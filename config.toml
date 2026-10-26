@@ -227,3 +227,8 @@ forward_mods = ["cmd"]
 [log]
 dir = "logs"
 recordings_dir = "recordings"
+
+# 位置ごとの閾値の補正（SPEC 13.48。今は形式を確かめるだけで、使っていない）。項目ごとの 3×3 の倍率。
+# 行 = 上・中・下、列 = 利用者から見た左・中・右（操作範囲を 3×3 に分けたマス）。項目は aircontroller/thresholds.py の POSITION_KEYS
+# [position]
+# pinch_on = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]

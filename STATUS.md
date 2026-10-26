@@ -1,4 +1,4 @@
-# AirController 現状報告（2026-10-25、改善タスク TASKS-20261025 の後、段階7の前）
+# AirController 現状報告（2026-10-26、段階7と、設定画面の作業の後）
 
 設計の壁打ちをした Claude（元の Claude Chat）向けのまとめ。設計の原本は [SPEC.md](SPEC.md)、実装中に作者と決めた変更はその第13節（13.1〜13.33。2026-10-25 の改善は 13.24〜）に、計測の生データは [logs/stage1-verification-20261024.txt](logs/stage1-verification-20261024.txt) と [logs/load-20261025.md](logs/load-20261025.md) にある。このファイルは、それらを読まなくても現状が分かるように要点をまとめたもの。
 
@@ -107,12 +107,12 @@
 - 設定: `config.toml`（既定値と説明）< `calibration.toml`（校正・学習が書く、作者固有の値）< `auto.toml`（run の操作範囲の自動補正）。項目の定義は `aircontroller/params.py`、履歴は `settings-history/`（SPEC 13.43）。オーバーレイを畳んだかは `ui_state.json`。
 - 道具（`tools/`）: `latency_summary.py`（遅延ログの要約）、`bench_eventlog.py`・`latency_ab.py`（記録の負荷）、`golden_diff.py`（期待値の差を種類ごとに）、`cursor_smoothing.py`（平滑化の比較）、`handedness_report.py`（左右ラベルの反転率）、`cpu_states.py`・`monitor.py`・`load_report.py`（負荷の計測）。
 - 記録: `recordings/*.jsonl`（ランドマーク列＋有効化の状態。148MB。`mark-*.jsonl` は ¥ の印の前後）、`*.labels.json`（lab / learn の区間ラベル）。`logs/latency-*.csv`（フレームごとの時刻。古いものは `logs/archive/` に gzip）、`logs/events-*.jsonl`（イベントログ）、`logs/monitor-*.csv`（負荷の計測）。
-- テスト: `tests/`（178本）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。
+- テスト: `tests/`（188本）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。
 - 環境: Python 3.12 の `.venv`。依存は [requirements.txt](requirements.txt)。権限は実行元のターミナルにカメラ・入力監視・アクセシビリティの 3つ。
 
-## 7.5 設定画面の作業（2026-10-26〜、作業中）
+## 7.5 設定画面の作業（2026-10-26、第1〜7節が完了。第8節は見送り）
 
-設定画面とその土台を、節ごとに作者の確認を取って進めている（SPEC 13.43〜）。
+設定画面とその土台を、節ごとに作者の確認を取って進めた（SPEC 13.43〜13.49）。使い方: `python -m aircontroller settings`（run と一緒に開くとライブ）。
 - 第1節（調査）: 160 項目を A 29 / B 29 / C 62 / D 40 に分けた。base_length_m は D（測定しない）。
 - 第2節（設定の土台）: パラメータ台帳 `aircontroller/params.py`、設定の層（config.toml < calibration.toml < auto.toml）、
   原子的な保存、履歴（settings-history/、`python -m aircontroller settings-history`）。run の操作範囲の自動補正は auto.toml に書く。
@@ -125,6 +125,10 @@
   図（分布図、ピース・いいねの円、ズームの棒、操作範囲の四角）の上でドラッグして調整する形に見直した。
 - 第6節（ライブのプレビュー）: run に内蔵したサーバー（live.py）。設定画面を開いている間は設定モード（出力を止める）で、手の骨格・モード・メーターと、
   各図の今の値を出す。変更中の値は、安全な瞬間に run で差し替えて試せる（保存はしない。画面を閉じると確定済みに戻る。確定すると run も読み直す）。
+  負荷: 設定画面をつないだ間も、run の CPU（52.4%、前後 50.6 / 53.4%）と遅延 p95（15.2ms、前後 31.1 / 20.8ms）は変わらなかった（実機、SPEC 13.47）。
+- 第7節（位置依存の入口）: ピンチ・親指の畳み・ピースの条件の 12 の閾値を、手のひら中心の位置を受け取る 1 か所（thresholds.py）から取るようにした。
+  今は位置を無視する。設定に [position]（3×3 の倍率）の余地を残した。全 86 本の記録でイベント列が変わらないことを確かめた（SPEC 13.48）。
+- 第8節（閾値の詰め）: 作者の判断で見送り（今の設定でおおむね満足、閾値の複雑化を避ける。SPEC 13.49）。
 
 ## 8. 段階7の結果と次の一手
 

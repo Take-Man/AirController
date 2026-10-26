@@ -19,6 +19,7 @@
 - `aircontroller/latency.py` フレーム時刻ログ（CSV）と集計
 - `aircontroller/params.py` パラメータ台帳（config.toml の全項目の日本語名・区分 A/B/C/D・範囲・刻み・書く経路）
 - `aircontroller/settings.py` 設定の層・原子的な保存・履歴（`settings-history/`）
+- `aircontroller/thresholds.py` 位置によって変えうる閾値の入口（ピンチ・親指の畳み・ピースの条件。今は位置を無視する）
 - `aircontroller/live.py` run に内蔵する、設定画面のライブのプレビュー用のサーバー（設定モード、今の値、変更中の値の差し替え）
 - `aircontroller/settings_server.py` 設定画面のサーバー（標準ライブラリ）。画面は `aircontroller/web/`（素の HTML/CSS/JS）
 - `aircontroller/settings_eval.py` 効果の見積もり（基準記録を 2 つの設定で流して差を出す）。基準記録の一覧は `eval-manifest.toml`

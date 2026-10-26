@@ -21,6 +21,7 @@ import numpy as np
 
 from .filters import OneEuroFilter2D
 from .peace import PeaceController, ThumbsUpController
+from .thresholds import PositionThresholds
 from .zoom import ZoomController
 from .types import (INDEX_MCP, INDEX_TIP, MIDDLE_MCP, MIDDLE_TIP, PALM, PINKY_MCP, RING_MCP, THUMB_MCP, THUMB_TIP,
                     WRIST, Event, Hand, LandmarkFrame)
@@ -175,6 +176,8 @@ class GestureConfig:
     roi_adapt_grow: float = 0.5
     roi_width_min: float = 0.15
     roi_width_max: float = 0.9
+    # 位置ごとの閾値の補正（設定の [position] 表。項目ごとの 3×3 の倍率。thresholds.py）。形式だけ確かめ、まだ使わない（SPEC 13.48）
+    position_scale: dict | None = None
 
     @classmethod
     def from_toml(cls, cfg: dict, screen_size: tuple[float, float] | None = None) -> "GestureConfig":
@@ -184,6 +187,8 @@ class GestureConfig:
             merged.update({k: v for k, v in cfg.get(section, {}).items() if k in names})
         if screen_size:
             merged["screen_w"], merged["screen_h"] = screen_size
+        if isinstance(cfg.get("position"), dict) and cfg["position"]:
+            merged["position_scale"] = cfg["position"]
         return cls(**merged)
 
 
@@ -325,6 +330,7 @@ class GestureEngine:
         self._zoom_posture = Debounce(c.zoom_enter_hold_ms, c.posture_release_ms)
         self._zoom = ZoomController(c)
         self._filter = OneEuroFilter2D(c.cursor_min_cutoff, c.cursor_beta, c.cursor_d_cutoff)
+        self._th = PositionThresholds(c)  # ピンチ・親指の畳み・ピースの条件の閾値は、ここから取る（位置依存の入口）
         self.reset()
 
     def reset(self) -> None:
@@ -402,6 +408,7 @@ class GestureEngine:
         self._zoom._filter.min_cutoff, self._zoom._filter.beta = c.zoom_min_cutoff, c.zoom_beta
         self._peace.derive()
         self._thumbsup.derive()
+        self._th.refresh()
         if roi_changed:
             self.roi_cx, self.roi_cy = c.roi_cx, c.roi_cy
             self.roi_width = min(max(c.roi_width, c.roi_width_min), c.roi_width_max)
@@ -555,6 +562,9 @@ class GestureEngine:
         t = frame.t_capture_ns
         hand, raw_best = self._select(frame)
         self._selected = (t, hand, raw_best)
+        # 閾値（ピンチ・親指の畳み・ピースの条件）は、手のひら中心の位置を渡して取る。今は位置を無視して設定の値（thresholds.py）
+        th = self._th.at(tuple(float(v) for v in hand.landmarks[list(PALM), :2].mean(axis=0)) if hand is not None else None,
+                         self.roi(frame.image_size))
         st = self.state
         st.t_ns, st.active = t, frame.active
 
@@ -582,15 +592,15 @@ class GestureEngine:
             st.palm = palm
             # 姿勢: 人差し指が立っているか（ヒステリシス）
             s = finger_straightness(hand.world, INDEX_MCP)
-            self._index_up_raw = s > (c.index_up_exit if self._index_up_raw else c.index_up_enter)
+            self._index_up_raw = s > (th.index_up_exit if self._index_up_raw else th.index_up_enter)
             # グーの姿勢: 4本の指がすべて曲がっている（ヒステリシス）
             fingers = [finger_straightness(hand.world, m) for m in (INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP)]
             self._fist_raw = c.fist_enabled and (max(fingers) < (c.fist_exit if self._fist_raw else c.fist_enter))
             # ピースの姿勢: 人差し指と中指が立ち、薬指は畳み、親指を畳んでいる
             sm = finger_straightness(hand.world, MIDDLE_MCP)
-            self._middle_up_raw = sm > (c.index_up_exit if self._middle_up_raw else c.index_up_enter)
+            self._middle_up_raw = sm > (th.index_up_exit if self._middle_up_raw else th.index_up_enter)
             tf = thumb_fold_metric(hand)
-            self._thumb_folded_raw = tf > (c.thumb_fold_off if self._thumb_folded_raw else c.thumb_fold_on)
+            self._thumb_folded_raw = tf > (th.thumb_fold_off if self._thumb_folded_raw else th.thumb_fold_on)
             # ズームの姿勢: 入るときは手の甲を向けて人差し指・中指・薬指を伸ばす。入った後は手の甲の向きだけ見る
             back = palm_facing(hand)
             if self._zoom_posture.value:
@@ -615,27 +625,27 @@ class GestureEngine:
             if self._peace_posture.value:
                 # ピースモード中は、人差し指と中指が立っている限り保つ。指先を下に向けると、中指が曲がって見え、
                 # 親指の判定も崩れるため（peace01）。入るときだけ、親指と薬指も見る
-                self._peace_raw = (c.peace_enabled and s > c.peace_exit_straight
-                                   and finger_straightness(hand.world, MIDDLE_MCP) > c.peace_exit_straight)
+                self._peace_raw = (c.peace_enabled and s > th.peace_exit_straight
+                                   and finger_straightness(hand.world, MIDDLE_MCP) > th.peace_exit_straight)
             else:
                 self._peace_raw = (c.peace_enabled and self._index_up_raw and self._middle_up_raw
                                    and self._thumb_folded_raw and not self._thumbsup_raw
-                                   and finger_straightness(hand.world, RING_MCP) < c.ring_down_max)
+                                   and finger_straightness(hand.world, RING_MCP) < th.ring_down_max)
             # ピンチ: 親指と人差し指（左）、親指と中指（右）のうち、距離が小さい方のペアで判定する
             pm = image_pinch_metrics(hand, frame.image_size) if c.pinch_metric == "image" \
                 else pinch_metrics(hand, c.base_length_m)
             ti, tm = pm["thumb_index_n"], pm["thumb_middle_n"]
             if self._pinch_kind is not None:  # 進行中: そのペアが離れたら解除
                 if self._pinch_kind == "right":
-                    self._pinch_raw = tm <= c.right_off
+                    self._pinch_raw = tm <= th.right_off
                 else:
-                    self._pinch_raw = ti <= (c.drag_off if self._dragging else c.pinch_off)
+                    self._pinch_raw = ti <= (th.drag_off if self._dragging else th.pinch_off)
             else:
-                self._pinch_raw = ti < c.pinch_on or tm < c.right_on
+                self._pinch_raw = ti < th.pinch_on or tm < th.right_on
             if frame.active:
-                if ti > c.pinch_off:
+                if ti > th.pinch_off:
                     self._far_t["left"] = t
-                if tm > c.right_arm:
+                if tm > th.right_arm:
                     self._far_t["right"] = t
             # カーソル位置は常に計算し、フィルタを温めておく（有効化した瞬間に古い状態を使わないため）
             raw = self.map_to_screen(palm, frame.image_size)
@@ -739,10 +749,10 @@ class GestureEngine:
                 and st.cursor is not None and not peace_like and not fist_like:
             # 右（親指と中指）は、親指が人差し指から離れているときだけ。人差し指に触れているなら左として扱う
             # （以前は中指の方が近いと「右」と判定し、右の条件を満たさず何も起きず、左クリックが失われていた）
-            kind = "right" if (tm < c.right_on and ti > c.pinch_off) else "left" if ti < c.pinch_on else "right"
+            kind = "right" if (tm < th.right_on and ti > th.pinch_off) else "left" if ti < th.pinch_on else "right"
             far = self._far_t[kind]
             armed = far is not None and (kind == "left" or ((t - far) / 1e6 <= c.right_arm_window_ms
-                                                            and ti > c.pinch_off))
+                                                            and ti > th.pinch_off))
             if armed:
                 self._pinch_kind = kind
                 self._pinch_start = t
