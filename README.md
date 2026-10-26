@@ -17,7 +17,9 @@
 - `aircontroller/power.py` 手の不在による自動オフ、オフの間の 1Hz、パーでのオン
 - `aircontroller/cpustat.py` スレッド別の CPU 時間（負荷の計測用）
 - `aircontroller/latency.py` フレーム時刻ログ（CSV）と集計
-- `config.toml` 設定（`calibration.toml` が上書きする。オーバーレイを畳んだかは `ui_state.json`）
+- `aircontroller/params.py` パラメータ台帳（config.toml の全項目の日本語名・区分 A/B/C/D・範囲・刻み・書く経路）
+- `aircontroller/settings.py` 設定の層・原子的な保存・履歴（`settings-history/`）
+- 設定の層: `config.toml`（既定値と説明）< `calibration.toml`（利用者と測定が書く）< `auto.toml`（run の操作範囲の自動補正。calibrate で測り直すと使われなくなる）。オーバーレイを畳んだかは `ui_state.json`
 - `tools/` 計測・分析の道具（各ファイルの先頭に使い方）
 
 ## 準備
@@ -36,6 +38,7 @@ uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
 .venv/bin/python -m aircontroller calibrate --pinch-only         # ピンチ・ピースの閾値と中立方向だけ（基準長・操作範囲は測らない）
 .venv/bin/python -m aircontroller learn-thumbsup                 # いいねモードを上下左右 1回分の記録から学習 → calibration.toml
 .venv/bin/python -m aircontroller learn-zoom                     # ズームモードを手招きの記録から学習 → calibration.toml
+.venv/bin/python -m aircontroller settings-history               # 設定の履歴の一覧（undo: 前の保存に戻す、name 快適 / restore 快適）
 .venv/bin/python -m aircontroller lab --name lab01                # ジェスチャーの候補を試してラベル付きで記録
 .venv/bin/python -m aircontroller lab-position                   # 位置ごとに カーソル・クリック・ピース を記録（集計は tools/position_report.py）
 .venv/bin/python -m aircontroller lab-position --suite edge      # 右端・右下・下端への往復・静止・ピースで、意図しないピンチが出るかを記録

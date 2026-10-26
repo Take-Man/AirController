@@ -73,7 +73,8 @@ def test_save_calibration_writes_valid_toml(tmp_path, monkeypatch):
     import tomllib
 
     import aircontroller.__main__ as m
-    monkeypatch.setattr(m, "CALIBRATION", tmp_path / "c.toml")
-    m.save_calibration({"zoom": {"zoom_signal": "depth", "zoom_sign": -1.0, "flag": True}}, "test")
-    assert tomllib.loads((tmp_path / "c.toml").read_text())["zoom"] == {"zoom_signal": "depth", "zoom_sign": -1.0,
-                                                                         "flag": True}
+    (tmp_path / "config.toml").write_text("[zoom]\nzoom_sign = 1.0\n")
+    monkeypatch.setattr(m, "ROOT", tmp_path)
+    m.save_calibration({"zoom": {"zoom_signal": "depth", "zoom_sign": -1.0, "flag": True}}, "test", "test")
+    assert tomllib.loads((tmp_path / "calibration.toml").read_text())["zoom"] == {"zoom_signal": "depth", "zoom_sign": -1.0,
+                                                                                   "flag": True}

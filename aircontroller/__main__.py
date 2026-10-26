@@ -19,7 +19,6 @@ import signal
 import sys
 import threading
 import time
-import tomllib
 from collections import deque
 from pathlib import Path
 
@@ -38,44 +37,21 @@ def preferred_hand(hands, hand: str = "both"):
     return ph(hands, hand)
 
 
+def settings_store(path: str | None = None):
+    """設定の層（config.toml < calibration.toml < auto.toml）と履歴。aircontroller/settings.py。"""
+    from .settings import SettingsStore
+
+    return SettingsStore(ROOT, Path(path) if path else None)
+
+
 def load_config(path: str | None, calibration: bool = True) -> dict:
-    """設定ファイルを読む。calibration.toml（calibrate コマンドが書く）があれば、その値で上書きする。"""
-    p = Path(path) if path else ROOT / "config.toml"
-    with p.open("rb") as fp:
-        cfg = tomllib.load(fp)
-    if calibration and CALIBRATION.exists():
-        with CALIBRATION.open("rb") as fp:
-            for section, values in tomllib.load(fp).items():
-                if isinstance(values, dict):
-                    cfg.setdefault(section, {}).update(values)
-    return cfg
+    """設定ファイルを読む。calibration.toml（利用者と測定が書く）と auto.toml（操作範囲の自動補正）があれば、その順に上書きする。"""
+    return settings_store(path).load(calibration)
 
 
-def _toml_value(v) -> str:
-    import json
-
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (int, float)):
-        return repr(float(v)) if isinstance(v, float) else str(v)
-    if isinstance(v, (list, tuple)):
-        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
-    return json.dumps(str(v), ensure_ascii=False)
-
-
-def save_calibration(updates: dict[str, dict], note: str) -> None:
-    """calibration.toml の値を更新する（他の値は残す）。値は数値だけを想定した簡単な書き出し。"""
-    data: dict[str, dict] = {}
-    if CALIBRATION.exists():
-        with CALIBRATION.open("rb") as fp:
-            data = {k: dict(v) for k, v in tomllib.load(fp).items() if isinstance(v, dict)}
-    for section, values in updates.items():
-        data.setdefault(section, {}).update(values)
-    lines = [f"# {note}（{time.strftime('%Y-%m-%d %H:%M')}）。config.toml の値を上書きする。消せば config.toml の値に戻る"]
-    for section, values in data.items():
-        lines.append(f"\n[{section}]")
-        lines += [f"{k} = {_toml_value(v)}" for k, v in values.items()]
-    CALIBRATION.write_text("\n".join(lines) + "\n")
+def save_calibration(updates: dict[str, dict], note: str, route: str) -> None:
+    """calibration.toml の値を更新する（他の値は残す）。原子的に書き、スナップショットと変更の記録を settings-history/ に残す。"""
+    settings_store().save(updates, route, note)
 
 
 UI_STATE = ROOT / "ui_state.json"  # オーバーレイを畳んだかなど、次回の起動に引き継ぐ表示の状態
@@ -549,10 +525,11 @@ def cmd_run(args, cfg: dict) -> int:
     if err:
         raise err[0]
     if gcfg.roi_adapt and (engine.roi_cx, engine.roi_cy, engine.roi_width) != (gcfg.roi_cx, gcfg.roi_cy, gcfg.roi_width):
-        save_calibration({"cursor": {"roi_cx": round(engine.roi_cx, 4), "roi_cy": round(engine.roi_cy, 4),
-                                     "roi_width": round(engine.roi_width, 4)}}, "操作範囲は run の自動補正が更新")
+        # calibration.toml（測った値）ではなく auto.toml に書く。calibrate で測り直すと、こちらは使われなくなる
+        settings_store(args.config).save_auto({"cursor": {"roi_cx": round(engine.roi_cx, 4), "roi_cy": round(engine.roi_cy, 4),
+                                                          "roi_width": round(engine.roi_width, 4)}}, "run の操作範囲の自動補正")
         print(f"操作範囲を補正しました: 中心 ({gcfg.roi_cx:.3f}, {gcfg.roi_cy:.3f}) 幅 {gcfg.roi_width:.3f} → "
-              f"中心 ({engine.roi_cx:.3f}, {engine.roi_cy:.3f}) 幅 {engine.roi_width:.3f}（{CALIBRATION.name} に保存）")
+              f"中心 ({engine.roi_cx:.3f}, {engine.roi_cy:.3f}) 幅 {engine.roi_width:.3f}（auto.toml に保存）")
     print(f"\n遅延ログ: {log_path}")
     if evlog:
         print(f"イベントログ: {', '.join(str(p) for p in evlog.paths)}（{evlog.lines} 行）"
@@ -877,7 +854,7 @@ def cmd_calibrate(args, cfg: dict) -> int:
     if peace_updates:
         updates["peace"] = peace_updates
     if updates:
-        save_calibration(updates, "calibrate が書いた値")
+        save_calibration(updates, "calibrate が書いた値", "calibrate")
         print(f"保存しました: {CALIBRATION}（消せば config.toml の値に戻ります）")
     print(f"校正の記録: recordings/calib-{stamp}.jsonl")
     return 0
@@ -1108,7 +1085,7 @@ def cmd_learn_thumbsup(args, cfg: dict) -> int:
         return 1
     print(result.report)
     if not args.dry_run:
-        save_calibration({"thumbsup": result.params}, "learn-thumbsup が書いた値")
+        save_calibration({"thumbsup": result.params}, "learn-thumbsup が書いた値", "learn-thumbsup")
         print(f"保存しました: {CALIBRATION}（[thumbsup] の値。消せば config.toml の値に戻ります）")
     return 0
 
@@ -1145,7 +1122,7 @@ def cmd_learn_zoom(args, cfg: dict) -> int:
         return 1
     print(result.report)
     if not args.dry_run:
-        save_calibration({"zoom": result.params}, "learn-zoom が書いた値")
+        save_calibration({"zoom": result.params}, "learn-zoom が書いた値", "learn-zoom")
         print(f"保存しました: {CALIBRATION}（[zoom] の値。消せば config.toml の値に戻ります）")
     return 0
 
@@ -1497,6 +1474,34 @@ def cmd_analyze(args, cfg: dict) -> int:
     return 0
 
 
+def cmd_settings_history(args, cfg: dict) -> int:
+    """設定の履歴（settings-history/）。calibration.toml と auto.toml の全体を、保存のたびに残している。"""
+    store = settings_store(args.config)
+    if args.action in ("name", "restore") and not args.name:
+        print(f"{args.action} には名前が要ります")
+        return 2
+    try:
+        if args.action == "undo":
+            changes = store.undo()
+        elif args.action == "name":
+            print(f"名前を付けました: {store.name(args.name)}")
+            return 0
+        elif args.action == "restore":
+            changes = store.restore_named(args.name)
+        else:
+            for s in store.snapshots():
+                print(f"{s['id']}  {s['route']}")
+            print("名前を付けた状態: " + ("、".join(store.named_states()) or "なし"))
+            return 0
+    except ValueError as e:
+        print(e)
+        return 1
+    for c in changes:
+        print(f"  {c['key']}: {c['before']} → {c['after']}")
+    print(f"戻しました（{len(changes)} 項目）")
+    return 0
+
+
 def cmd_report(args, cfg: dict) -> int:
     """イベントログの集計（TASKS-20261025 1.3）。--from-recording では、ランドマークの記録をジェスチャー層に流して
     イベントログを作ってから集計する（有効化の状態は記録のものを使う。手の不在の自動オフなどは含まない）。"""
@@ -1595,13 +1600,17 @@ def main(argv=None) -> int:
     rp = sub.add_parser("report", help="イベントログ（logs/events-*.jsonl）を集計する")
     rp.add_argument("paths", nargs="+")
     rp.add_argument("--from-recording", action="store_true", help="ランドマークの記録からイベントログを作って集計する")
+    sh = sub.add_parser("settings-history", help="設定の履歴: 一覧、前の保存に戻す、名前を付ける・その状態に戻す")
+    sh.add_argument("action", nargs="?", choices=["list", "undo", "name", "restore"], default="list")
+    sh.add_argument("name", nargs="?", help="name / restore の名前")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     global HAND
     HAND = cfg.get("gesture", {}).get("hand", "both")
     return {"run": cmd_run, "calibrate": cmd_calibrate, "lab": cmd_lab, "lab-report": cmd_lab_report,
             "learn-thumbsup": cmd_learn_thumbsup, "learn-zoom": cmd_learn_zoom, "modkeys": cmd_modkeys, "view": cmd_view, "keytest": cmd_keytest, "camlatency": cmd_camlatency,
-            "replay": cmd_replay, "stats": cmd_stats, "analyze": cmd_analyze, "report": cmd_report, "lab-position": cmd_lab_position}[args.cmd](args, cfg)
+            "replay": cmd_replay, "stats": cmd_stats, "analyze": cmd_analyze, "report": cmd_report, "lab-position": cmd_lab_position,
+            "settings-history": cmd_settings_history}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

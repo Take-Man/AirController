@@ -104,11 +104,18 @@
 ## 7. コードとデータの構成
 
 - `aircontroller/`: `eventlog.py`（イベントログ・印の記録）、`report.py`（イベントログの集計）、`power.py`（自動オフ・パーでのオン・1Hz）、`cpustat.py`（スレッド別の CPU）、`input.py`（カメラ・推論・停止と再起動・1 手と 2 手の切り替え）、`gesture.py`（状態機械。フレーム時刻と有効化の状態だけで動き、記録から再現できる）、`peace.py`（ピース・いいね）、`zoom.py`、`calibration.py`（校正・学習）、`features.py`、`recording.py`、`latency.py`、`output/`（`mouse.py` CGEvent、`activation.py` CGEventTap、`overlay.py` AppKit、`permissions.py`）。
-- 設定: `config.toml`（既定値と説明）を、`calibration.toml`（校正・学習・操作範囲の自動補正が書く、作者固有の値）が上書きする。オーバーレイを畳んだかは `ui_state.json`。
+- 設定: `config.toml`（既定値と説明）< `calibration.toml`（校正・学習が書く、作者固有の値）< `auto.toml`（run の操作範囲の自動補正）。項目の定義は `aircontroller/params.py`、履歴は `settings-history/`（SPEC 13.43）。オーバーレイを畳んだかは `ui_state.json`。
 - 道具（`tools/`）: `latency_summary.py`（遅延ログの要約）、`bench_eventlog.py`・`latency_ab.py`（記録の負荷）、`golden_diff.py`（期待値の差を種類ごとに）、`cursor_smoothing.py`（平滑化の比較）、`handedness_report.py`（左右ラベルの反転率）、`cpu_states.py`・`monitor.py`・`load_report.py`（負荷の計測）。
 - 記録: `recordings/*.jsonl`（ランドマーク列＋有効化の状態。148MB。`mark-*.jsonl` は ¥ の印の前後）、`*.labels.json`（lab / learn の区間ラベル）。`logs/latency-*.csv`（フレームごとの時刻。古いものは `logs/archive/` に gzip）、`logs/events-*.jsonl`（イベントログ）、`logs/monitor-*.csv`（負荷の計測）。
-- テスト: `tests/`（116本）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。
+- テスト: `tests/`（130本）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。
 - 環境: Python 3.12 の `.venv`。依存は [requirements.txt](requirements.txt)。権限は実行元のターミナルにカメラ・入力監視・アクセシビリティの 3つ。
+
+## 7.5 設定画面の作業（2026-10-26〜、作業中）
+
+設定画面とその土台を、節ごとに作者の確認を取って進めている（SPEC 13.43〜）。
+- 第1節（調査）: 160 項目を A 29 / B 29 / C 62 / D 40 に分けた。base_length_m は D（測定しない）。
+- 第2節（設定の土台）: パラメータ台帳 `aircontroller/params.py`、設定の層（config.toml < calibration.toml < auto.toml）、
+  原子的な保存、履歴（settings-history/、`python -m aircontroller settings-history`）。run の操作範囲の自動補正は auto.toml に書く。
 
 ## 8. 段階7の結果と次の一手
 

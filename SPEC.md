@@ -494,3 +494,22 @@ Mac のトラックパッド操作を、ハンドジェスチャーだけで行�
   - 案 1+2（0.90 + 0.3/3f）: 9 まで減るが、クリックが 236 に減る。
   - 残る意図しないピンチ（11〜12 回）は、親指先が跳ばずに人差し指の先へ徐々に寄るもので、この方法では止められない。
 - 作者の判断: ここまでにとどめ、実装しない。案と効果の記録として残す（位置による判定の崩れは、13.41 の解決の候補とあわせて扱う）。
+
+### 13.43 設定画面の土台: パラメータ台帳と設定の層（2026-10-26、設定画面の作業の第1・2節、作者が確認）
+- 調査（第1節。logs/settings-survey-20261026.md）: config.toml の全 160 項目を、A（利用者が触る）29 / B（測定で決まる）29 /
+  C（詳細）62 / D（内部・環境）40 に分けた（作者が確認）。B は測定ユニット（calibrate、learn-thumbsup、learn-zoom）が書く項目。
+  位置依存の候補（13.41 の (b)）は、ピンチ・右クリックの閾値、親指の畳み、指の真っすぐさ（index_up_*、peace_exit_straight、ring_down_max）。
+- `base_length_m` は `pinch_metric = "world"` のときしか使わない（今は image）。区分 D とし、測定ユニット（U7）は作らない（作者の判断）。
+- 台帳 `aircontroller/params.py`: 1 項目 1 定義（日本語名、区分、範囲、刻み、単位、説明、書く経路、位置依存の候補）。既定値は config.toml にあり、
+  台帳には持たない。テストで、config.toml の全キーが台帳にあり、台帳に余分なキーがなく、既定値が範囲と刻みの格子の上にあることを確かめる。
+- 設定の層: config.toml < calibration.toml（利用者と測定が書く）< auto.toml（run の操作範囲の自動補正）。
+  - 以前は run が終了時に操作範囲を calibration.toml に書いていたため、calibrate で測った値と自動補正の値の区別がつかなかった。
+  - auto.toml は、書いたときの下の層の値（[base.cursor]）を一緒に持ち、下の層の値が変わったら（calibrate で測り直した、手で直した）その項目を使わない。
+  - 以前 run が calibration.toml に書いた roi_* はそのまま読む（移行はしない。次の run から auto.toml に書く）。
+- 保存は一時ファイルに書いてから置き換える（原子的）。calibration.toml を保存するたびに、利用者の層（calibration.toml と auto.toml）の全体を
+  settings-history/YYYYmmdd-HHMMSS.toml に残し、変わった項目を settings-history/changes.jsonl（時刻、項目、前、後、層、経路）に書く。
+  スナップショットは最新 50 件。名前を付けた状態は settings-history/named/（数に入れない）。`settings-history`（一覧）、`undo`（前の保存に戻す）、
+  `name 快適`、`restore 快適`。戻すことも保存の 1 回として残す。git の自動コミットはしない。auto.toml と settings-history/ は git の管理外。
+- auto.toml の保存（run の終了のたび）は changes.jsonl にだけ書き、スナップショットは作らない（毎回の run で 50 件が流れないように）。
+- ジェスチャーの挙動は変えていない: ゴールデンテストは変わらず、今の config.toml・calibration.toml を読んだ結果は以前の読み方と同じ（テストを足した）。
+  ゴールデンテストは期待値に保存した設定で流すので、設定の読み込みは確かめない。今の設定で流すと 16 本中 6 本でイベントの数が変わる（期待値の設定が古い）。
