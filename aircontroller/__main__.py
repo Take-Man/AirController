@@ -1534,6 +1534,26 @@ def cmd_settings_eval(args, cfg: dict) -> int:
     return 0
 
 
+def cmd_settings(args, cfg: dict) -> int:
+    """設定画面（SPEC 13.46）。127.0.0.1 に Web 画面を出す。Ctrl+C で終わる。"""
+    import webbrowser
+
+    from .settings_server import App, serve
+
+    app = App(ROOT, args.config)
+    httpd, url = serve(app, args.port)
+    print(f"設定画面: {url}\n（この URL にはトークンが入っています。終わるには Ctrl+C）", flush=True)
+    if not args.no_open:
+        webbrowser.open(url)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n設定画面を終わります")
+    finally:
+        httpd.server_close()
+    return 0
+
+
 def cmd_report(args, cfg: dict) -> int:
     """イベントログの集計（TASKS-20261025 1.3）。--from-recording では、ランドマークの記録をジェスチャー層に流して
     イベントログを作ってから集計する（有効化の状態は記録のものを使う。手の不在の自動オフなどは含まない）。"""
@@ -1648,6 +1668,9 @@ def main(argv=None) -> int:
     se.add_argument("--manifest", help="基準記録の一覧（既定 eval-manifest.toml）")
     se.add_argument("--only", choices=["labeled", "unlabeled"], help="ラベル付き / ラベルのない記録だけを流す")
     se.add_argument("--json", help="結果を JSON で書く")
+    sv = sub.add_parser("settings", help="設定画面（127.0.0.1 の Web 画面）を開く")
+    sv.add_argument("--port", type=int, default=0, help="待ち受けるポート（既定: 空いているもの）")
+    sv.add_argument("--no-open", action="store_true", help="ブラウザを開かない（URL を表示するだけ）")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     global HAND
@@ -1655,7 +1678,8 @@ def main(argv=None) -> int:
     return {"run": cmd_run, "calibrate": cmd_calibrate, "lab": cmd_lab, "lab-report": cmd_lab_report,
             "learn-thumbsup": cmd_learn_thumbsup, "learn-zoom": cmd_learn_zoom, "modkeys": cmd_modkeys, "view": cmd_view, "keytest": cmd_keytest, "camlatency": cmd_camlatency,
             "replay": cmd_replay, "stats": cmd_stats, "analyze": cmd_analyze, "report": cmd_report, "lab-position": cmd_lab_position,
-            "settings-history": cmd_settings_history, "settings-eval": cmd_settings_eval}[args.cmd](args, cfg)
+            "settings-history": cmd_settings_history, "settings-eval": cmd_settings_eval,
+            "settings": cmd_settings}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

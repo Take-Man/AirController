@@ -2,7 +2,7 @@
 import tomllib
 from pathlib import Path
 
-from aircontroller.params import PARAMS
+from aircontroller.params import OFF_AT_ZERO, PARAMS
 
 CONFIG = Path(__file__).resolve().parent.parent / "config.toml"
 
@@ -37,6 +37,29 @@ def test_range_and_step_contain_default():
             continue
         assert not isinstance(v, bool) and isinstance(v, (int, float)), f"{p.id}: 数値でない項目に範囲がある"
         assert p.lo < p.hi and p.step > 0, p.id
+        if p.id in OFF_AT_ZERO and v == 0:
+            continue  # 無効（0）
         assert p.lo <= v <= p.hi, f"{p.id}: 既定値 {v} が範囲 {p.lo}〜{p.hi} の外"
         q = (v - p.lo) / p.step
         assert abs(q - round(q)) < 1e-6, f"{p.id}: 既定値 {v} が刻み {p.step} の格子にない"
+
+
+def test_choices_contain_default():
+    from aircontroller.params import BY_ID, CHOICES, SECTION_JA
+
+    cfg = _config()
+    for pid, ch in CHOICES.items():
+        p = BY_ID[pid]
+        assert p.lo is None and cfg[p.section][p.key] in ch, pid
+    assert set(SECTION_JA) == set(cfg)
+
+
+def test_toggles():
+    from aircontroller.params import BY_ID, FEATURE_TOGGLES
+
+    cfg = _config()
+    for pid in OFF_AT_ZERO:
+        assert BY_ID[pid].lo > 0
+    for t, members in FEATURE_TOGGLES.items():
+        assert isinstance(cfg[BY_ID[t].section][BY_ID[t].key], bool)
+        assert members and all(m in BY_ID for m in members)

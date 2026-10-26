@@ -1,0 +1,239 @@
+:root {
+  --bg: #f6f6f3; --panel: #ffffff; --fg: #1d1d1b; --muted: #6b6b66; --line: #e2e1dc; --soft: #efeee9;
+  --accent: #1f6feb; --accent-fg: #ffffff; --saved: #77776f; --measured: #c2410c; --edit: #1f6feb;
+  --warn-bg: #fff4d6; --warn: #8a5a00; --rest: rgba(70, 120, 200, 0.5); --op: rgba(220, 110, 40, 0.5);
+  --chip-on: #dcfce7; --chip-on-fg: #166534;
+  /* 図の中の各項目の色（k-0 〜 k-5） */
+  --k0: #1f6feb; --k1: #d97706; --k2: #7c3aed; --k3: #059669; --k4: #db2777; --k5: #475569;
+  /* いいね・ズームの区間の色 */
+  --l-up: #7c3aed; --l-left: #059669; --l-right: #db2777; --l-down: #a3a3a3; --l-center: #9ca3af;
+  --l-in: #059669; --l-out: #db2777; --l-neutral: #9ca3af; --pt: rgba(60, 60, 60, 0.35);
+  --dial: rgba(0, 0, 0, 0.06); --sector: rgba(31, 111, 235, 0.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615; --panel: #1f1f1d; --fg: #ecebe6; --muted: #9a9a93; --line: #34342f; --soft: #2a2a27;
+    --accent: #5b9bff; --accent-fg: #0b1220; --saved: #a8a8a0; --measured: #fb923c; --edit: #6ea8ff;
+    --warn-bg: #3a2e10; --warn: #f5c451; --rest: rgba(110, 160, 240, 0.5); --op: rgba(250, 150, 80, 0.5);
+    --chip-on: #12391f; --chip-on-fg: #86efac;
+    --k0: #6ea8ff; --k1: #fbbf24; --k2: #a78bfa; --k3: #34d399; --k4: #f472b6; --k5: #cbd5e1;
+    --l-up: #a78bfa; --l-left: #34d399; --l-right: #f472b6; --l-down: #737373; --l-center: #8b8b8b;
+    --l-in: #34d399; --l-out: #f472b6; --l-neutral: #8b8b8b; --pt: rgba(220, 220, 220, 0.35);
+    --dial: rgba(255, 255, 255, 0.05); --sector: rgba(110, 168, 255, 0.1);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 17px; margin: 0; }
+h2 { font-size: 16px; margin: 0; }
+h3 { font-size: 14px; margin: 14px 0 6px; }
+.small { font-size: 12px; }
+.bar { position: sticky; top: 0; z-index: 5; display: flex; gap: 10px; align-items: center; padding: 10px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+.spacer { flex: 1; }
+.muted { color: var(--muted); }
+.note { color: var(--muted); font-size: 13px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
+.panel > h2 { margin-bottom: 8px; }
+.phead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.row.end { justify-content: flex-end; margin-top: 12px; }
+button { font: inherit; padding: 5px 11px; border-radius: 7px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--fg); cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+button.ghost { background: transparent; }
+button.small { padding: 1px 8px; font-size: 12px; }
+input[type=text], input[type=number], select { font: inherit; padding: 3px 6px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--bg); color: var(--fg); }
+input[type=number] { width: 92px; font-variant-numeric: tabular-nums; }
+input.wide { width: 100%; margin-top: 8px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); }
+.chip.on { background: var(--chip-on); color: var(--chip-on-fg); border-color: transparent; }
+.hidden { display: none !important; }
+
+/* トグルスイッチ */
+.switch { position: relative; display: inline-block; width: 38px; height: 22px; flex: none; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch .knob { position: absolute; inset: 0; background: var(--line); border-radius: 99px; transition: background 0.15s; cursor: pointer; }
+.switch .knob::before { content: ""; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff;
+  border-radius: 50%; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); }
+.switch input:checked + .knob { background: var(--accent); }
+.switch input:checked + .knob::before { transform: translateX(16px); }
+.switch input:focus-visible + .knob { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* セグメント */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; padding: 4px 16px; background: transparent; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-fg); }
+
+/* 項目の行 */
+.item { border-top: 1px solid var(--line); padding: 9px 0; }
+.pbody > .item:first-child, .pbody > .widget:first-child { border-top: 0; }
+.item.changed { background: linear-gradient(90deg, rgba(31, 111, 235, 0.07), transparent 60%); }
+.item .line { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.item .name { font-weight: 600; }
+.key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
+.ctl { display: grid; grid-template-columns: 1fr auto 72px; gap: 10px; align-items: center; margin-top: 4px; }
+.track { position: relative; padding-top: 13px; }
+.track input[type=range] { width: 100%; margin: 0; accent-color: var(--edit); }
+.track input[type=range]:disabled { accent-color: var(--line); filter: grayscale(1); opacity: 0.5; }
+.marker { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; line-height: 12px; pointer-events: none; }
+.marker.saved { color: var(--saved); }
+.marker.measured { color: var(--measured); }
+.vals { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+.s, .c-saved { color: var(--saved); }
+.m, .c-measured { color: var(--measured); }
+.e, .c-edit { color: var(--edit); }
+.warn { background: var(--warn-bg); color: var(--warn); border-radius: 4px; padding: 0 6px; font-size: 12px; }
+/* 機能がオフ、0 で使わない */
+.off, .item.off { opacity: 0.42; }
+.item.zero .unit { opacity: 0.5; }
+
+/* 図 */
+.widget { border-top: 1px solid var(--line); padding: 10px 0; }
+.widget.hint { display: flex; gap: 10px; align-items: center; }
+.wtitle { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
+.wbody { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.figbox { min-width: 0; }
+svg.fig { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
+svg.fig.sq { max-width: 330px; }
+svg.fig.grab { cursor: grab; }
+svg.fig.dragging { cursor: grabbing; }
+.legend { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+.sw.h-rest { background: var(--rest); } .sw.h-op { background: var(--op); } .sw.pt { background: var(--pt); border-radius: 50%; }
+.sw.k-0 { background: var(--k0); } .sw.k-1 { background: var(--k1); } .sw.k-2 { background: var(--k2); }
+.sw.k-3 { background: var(--k3); } .sw.k-4 { background: var(--k4); } .sw.k-5 { background: var(--k5); }
+.c-up { color: var(--l-up); } .c-left { color: var(--l-left); } .c-right { color: var(--l-right); } .c-down { color: var(--l-down); }
+.c-in { color: var(--l-in); } .c-out { color: var(--l-out); }
+table.keys { font-size: 12px; margin: 0; }
+table.keys td { padding: 3px 4px; white-space: nowrap; }
+table.keys .kname { white-space: normal; }
+table.keys input[type=number] { width: 78px; }
+table.keys tr.changed td { background: rgba(31, 111, 235, 0.06); }
+.kbtn button + button { margin-left: 3px; }
+
+.fig text { font-size: 11px; fill: var(--muted); }
+.fig .tick { font-size: 10px; }
+.fig .lbl { font-size: 11px; fill: var(--fg); }
+.fig .axis { stroke: var(--line); }
+.fig .h-rest { fill: var(--rest); } .fig .h-op { fill: var(--op); }
+.fig .mk-saved { fill: var(--saved); } .fig .mk-measured { fill: var(--measured); }
+.fig .thr { stroke-width: 2; } .fig .thr.dashed { stroke-dasharray: 5 4; }
+.fig .thr-saved { stroke: var(--saved); stroke-width: 2; }
+.fig .handle { stroke: var(--panel); stroke-width: 1.5; }
+.fig .k-0 { stroke: var(--k0); } .fig .k-1 { stroke: var(--k1); } .fig .k-2 { stroke: var(--k2); }
+.fig .k-3 { stroke: var(--k3); } .fig .k-4 { stroke: var(--k4); } .fig .k-5 { stroke: var(--k5); }
+.fig .handle.k-0, .fig text.k-0 { fill: var(--k0); } .fig .handle.k-1, .fig text.k-1 { fill: var(--k1); } .fig .handle.k-2, .fig text.k-2 { fill: var(--k2); }
+.fig .pt { fill: var(--pt); }
+.fig .pt.l-up { fill: var(--l-up); } .fig .pt.l-left { fill: var(--l-left); } .fig .pt.l-right { fill: var(--l-right); }
+.fig .pt.l-down { fill: var(--l-down); } .fig .pt.l-center { fill: var(--l-center); }
+.fig .pt.l-in { fill: var(--l-in); } .fig .pt.l-out { fill: var(--l-out); } .fig .pt.l-neutral { fill: var(--l-neutral); }
+.fig .frame { fill: var(--soft); stroke: var(--line); }
+.fig .roi-saved { fill: none; stroke: var(--saved); stroke-dasharray: 4 3; }
+.fig .roi-measured { fill: none; stroke: var(--measured); stroke-dasharray: 4 3; }
+.fig .roi-edit { fill: rgba(31, 111, 235, 0.08); stroke: var(--edit); stroke-width: 2; }
+.fig .handle-sq { fill: var(--edit); }
+.fig .dial-bg { fill: var(--dial); }
+.fig .nav-sector { fill: var(--sector); }
+.fig .down-sector { fill: var(--soft); opacity: 0.7; }
+.fig .diag { stroke: var(--line); }
+.fig .ring-saved { fill: none; stroke: var(--saved); stroke-dasharray: 2 3; }
+.fig .ring-max { fill: none; stroke-width: 2; }
+.fig .ring-fire { fill: none; stroke-width: 2; stroke-dasharray: 5 4; }
+.fig .ring-dead { fill: var(--dial); stroke-width: 2; }
+.fig .ring-rearm { fill: none; stroke-width: 1.5; stroke-dasharray: 2 3; }
+.fig .arc-fire { fill: none; stroke-width: 3; stroke-dasharray: 6 4; }
+.fig .arc-saved { fill: none; stroke: var(--saved); stroke-width: 1.5; stroke-dasharray: 2 3; }
+.fig .bar-bg { fill: var(--soft); }
+.fig .dead-band { fill: var(--dial); stroke-width: 1.5; }
+.fig .grid { fill: none; stroke: var(--line); } .fig .grid.strong { stroke: var(--muted); stroke-opacity: 0.5; }
+.fig .dot-saved { fill: var(--saved); }
+
+/* 進み具合 */
+.pbar-wrap { display: flex; gap: 10px; align-items: center; }
+.pbar { flex: 1; height: 8px; background: var(--soft); border-radius: 99px; overflow: hidden; }
+.pbar-fill { height: 100%; width: 0; background: var(--accent); border-radius: 99px; }
+
+.job { margin-top: 10px; }
+.job pre, pre.out { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px;
+  max-height: 260px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
+details.detail > summary { cursor: pointer; color: var(--muted); margin: 6px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0; }
+th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.up { color: var(--measured); }
+td.down { color: var(--edit); }
+.list-row { display: flex; gap: 10px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.list-row .grow { flex: 1; }
+
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--fg); max-width: 640px; width: 92vw; }
+dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
+.toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg);
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 10; max-width: 90vw; }
+@media (max-width: 760px) {
+  .wbody { grid-template-columns: 1fr; }
+  .ctl { grid-template-columns: 1fr auto; }
+  .bar { flex-wrap: wrap; }
+}
+
+/* 見出しの横の測定のボタン */
+.unit-btns { display: inline-flex; gap: 6px; }
+.unit-btn { font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--accent);
+  color: var(--accent); background: rgba(31, 111, 235, 0.08); }
+.unit-btn:hover:not(:disabled) { background: rgba(31, 111, 235, 0.16); }
+
+/* 測定: U1〜U6 を横に並べ、その下に範囲を示すボタン */
+.unit-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; }
+.unit-cell { font-weight: 600; }
+.range-btn { position: relative; border-top: 0; border-radius: 0 0 10px 10px; padding-top: 2px; font-size: 13px;
+  background: rgba(31, 111, 235, 0.05); }
+.range-btn.span4 { grid-column: 1 / span 4; }
+.range-btn.span6 { grid-column: 1 / span 6; }
+@media (max-width: 640px) { .unit-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .range-btn.span4 { grid-column: 1 / span 3; } .range-btn.span6 { grid-column: 1 / span 3; } }
+
+/* 時間の項目: 円のダイヤル */
+.dials { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0; border-top: 1px solid var(--line); }
+.pbody > .dials:first-child { border-top: 0; }
+.item.dial-card { border-top: 0; padding: 4px 0; width: 170px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.dial-card .name { font-weight: 600; font-size: 13px; text-align: center; }
+.dial-box { position: relative; width: 150px; height: 150px; }
+.dial-box svg.dial { width: 150px; height: 150px; }
+.dial-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
+.dial-center > * { pointer-events: auto; }
+.dial-num { display: flex; align-items: baseline; gap: 3px; }
+.dial-num input[type=number] { width: 64px; text-align: center; }
+.fig .dial-track { fill: none; stroke: var(--soft); stroke-width: 9; stroke-linecap: round; }
+.fig .dial-val { fill: none; stroke: var(--edit); stroke-width: 9; stroke-linecap: round; }
+.fig .dial-knob { fill: var(--panel); stroke: var(--edit); stroke-width: 3; }
+.dial-card.zero .fig .dial-val, .dial-card.zero .fig .dial-knob { display: none; }
+.dial-card.zero .fig .dial-track { stroke: var(--line); }
+.vals.center { justify-content: center; text-align: center; }
+.fig .arc-edit { fill: none; stroke-width: 3; }
+
+/* スイッチの横の「有効 / 無効」 */
+.switch-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.sw-state { font-size: 12px; color: var(--accent); min-width: 2.2em; text-align: right; }
+.switch-wrap.is-off .sw-state { color: var(--muted); }
+
+/* 小見出しのグループ（項目を横に並べる） */
+.group { border-top: 1px solid var(--line); padding: 8px 0 4px; }
+.pbody > .group:first-child { border-top: 0; }
+.ghead { display: flex; align-items: center; gap: 10px; }
+.ghead h3 { margin: 4px 0; }
+.group-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; }
+.group-grid .item { border-top: 0; padding: 4px 0; }
+.group-grid .ctl { grid-template-columns: 1fr auto 40px; }
+.group-grid input[type=number] { width: 76px; }
+.ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 1px; }
+@media (max-width: 760px) { .group-grid { grid-template-columns: 1fr; } }
+
+/* スクロールの速さの曲線 */
+.fig .curve { fill: none; stroke-width: 2.5; }
+.fig .curve-saved { fill: none; stroke: var(--saved); stroke-width: 1.5; stroke-dasharray: 4 3; }

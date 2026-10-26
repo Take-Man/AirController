@@ -50,8 +50,8 @@ PARAMS: tuple[Param, ...] = (
     P('power', 'wake_palm_max', 'パー: 手のひらの向き', 'C', -1.0, 0.0, 0.05, '-1..1', 'B の候補（測定ユニットなし）', ()),
     P('power', 'wake_open_min', 'パー: 指の真っすぐさ', 'C', 0.6, 1.0, 0.01, '0..1', 'B の候補', ()),
     P('power', 'wake_thumb_max', 'パー: 親指が開いている', 'C', -1.0, 0.5, 0.05, '親指の畳み', 'B の候補', ()),
-    P('power', 'auto_off_after_s', '自動オフまでの時間', 'A', 0, 30, 1, '秒', '手が見えない時間。0 で無効', ()),
-    P('power', 'idle_stop_s', 'カメラを止めるまでの時間', 'A', 0, 1800, 30, '秒', 'オフのままの時間。0 で無効', ()),
+    P('power', 'auto_off_after_s', '自動オフまでの時間', 'A', 1, 30, 1, '秒', '手が見えない時間。0 で無効', ()),
+    P('power', 'idle_stop_s', 'カメラを止めるまでの時間', 'A', 30, 1800, 30, '秒', 'オフのままの時間。0 で無効', ()),
     # [tracker]
     P('tracker', 'model_path', 'モデルのパス', 'D', None, None, None, '', '', ()),
     P('tracker', 'num_hands', '同時に検出する手の数', 'D', None, None, None, '', '', ()),
@@ -112,11 +112,11 @@ PARAMS: tuple[Param, ...] = (
     P('click', 'calib_on_frac', '校正: 成立の位置', 'C', 0.1, 0.9, 0.05, '割合', '測定の計算のパラメータ', ()),
     P('click', 'calib_off_frac', '校正: 解除の位置', 'C', 0.1, 0.95, 0.05, '割合', '同上', ()),
     # [cursor]
-    P('cursor', 'roi_cx', '操作範囲の中心 x', 'B', 0.0, 1.0, 0.005, '画像座標', 'U1', ("calibrate", "run-auto")),
-    P('cursor', 'roi_cy', '操作範囲の中心 y', 'B', 0.0, 1.0, 0.005, '画像座標', 'U1', ("calibrate", "run-auto")),
-    P('cursor', 'roi_width', '操作範囲の幅（移動倍率）', 'B', 0.15, 0.6, 0.005, '画像幅比', 'U1。小さいほど少ない動きで大きく動く。上限は roi_width_max', ("calibrate", "run-auto")),
-    P('cursor', 'cursor_min_cutoff', 'カーソルの安定度', 'A', 0.1, 5.0, 0.1, 'Hz', '小さいほど揺れが減り、遅れが増える', ()),
-    P('cursor', 'cursor_beta', 'カーソルの追従', 'A', 0.0, 0.1, 0.005, '', '大きいほど速い動きに追従', ()),
+    P('cursor', 'roi_cx', '操作範囲の中心 x', 'A', 0.0, 1.0, 0.005, '画像座標', 'U1', ("calibrate", "run-auto")),
+    P('cursor', 'roi_cy', '操作範囲の中心 y', 'A', 0.0, 1.0, 0.005, '画像座標', 'U1', ("calibrate", "run-auto")),
+    P('cursor', 'roi_width', '操作範囲の幅（移動倍率）', 'A', 0.15, 0.6, 0.005, '画像幅比', 'U1。小さいほど少ない動きで大きく動く。上限は roi_width_max', ("calibrate", "run-auto")),
+    P('cursor', 'cursor_min_cutoff', 'カーソル: 手の動きが遅いときの反映度', 'A', 0.1, 5.0, 0.1, 'Hz', '小さいほど揺れが減り、遅れが増える', ()),
+    P('cursor', 'cursor_beta', 'カーソル: 手の動きが速いときの反映度', 'A', 0.0, 0.1, 0.005, '', '大きいほど速い動きに追従', ()),
     P('cursor', 'cursor_d_cutoff', '速度の平滑化', 'C', 0.1, 5.0, 0.1, 'Hz', '', ()),
     P('cursor', 'roi_adapt', '操作範囲の自動補正', 'A', None, None, None, '真偽', '', ()),
     P('cursor', 'roi_adapt_tau_s', '自動補正の時定数', 'C', 0.1, 5.0, 0.1, '秒', '', ()),
@@ -165,10 +165,10 @@ PARAMS: tuple[Param, ...] = (
     P('thumbsup', 'thumbsup_fire_right', 'いいねの発火: 右', 'B', 0.3, 3.0, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",)),
     P('thumbsup', 'thumbsup_fire_up', 'いいねの発火: 上', 'B', 0.3, 3.0, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",)),
     P('thumbsup', 'thumbsup_rearm_disp', 'いいねの再武装', 'B', 0.05, 1.5, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",)),
-    P('thumbsup', 'thumbsup_x_w_thumb', 'いいね左右: 親指の角度の重み', 'B', -2.0, 2.0, 0.25, '', 'U5（今は 0）', ("learn-thumbsup",)),
-    P('thumbsup', 'thumbsup_x_w_knuckle', 'いいね左右: 付け根の角度の重み', 'B', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
-    P('thumbsup', 'thumbsup_y_w_thumb', 'いいね上下: 親指の角度の重み', 'B', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
-    P('thumbsup', 'thumbsup_y_w_knuckle', 'いいね上下: 付け根の角度の重み', 'B', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
+    P('thumbsup', 'thumbsup_x_w_thumb', 'いいね左右: 親指の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5（今は 0）', ("learn-thumbsup",)),
+    P('thumbsup', 'thumbsup_x_w_knuckle', 'いいね左右: 付け根の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
+    P('thumbsup', 'thumbsup_y_w_thumb', 'いいね上下: 親指の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
+    P('thumbsup', 'thumbsup_y_w_knuckle', 'いいね上下: 付け根の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
     P('thumbsup', 'thumbsup_dwell_ms', 'いいねの発火までの時間', 'A', 100, 1500, 50, 'ms', '', ()),
     P('thumbsup', 'thumbsup_cooldown_ms', 'いいねのクールダウン', 'C', 0, 2000, 50, 'ms', '', ()),
     P('thumbsup', 'thumbsup_still_speed', 'いいね: 止まった判定の速さ', 'C', 0.1, 5.0, 0.1, '単位/秒', '', ()),
@@ -197,7 +197,7 @@ PARAMS: tuple[Param, ...] = (
     P('peace', 'peace_max_disp', '最大速度になる変位', 'A', 0.3, 3.0, 0.05, '手の大きさ比', '', ()),
     P('peace', 'peace_fire_disp', '戻る・進むの変位', 'A', 0.2, 2.0, 0.05, '手の大きさ比', '', ()),
     P('peace', 'peace_rearm_disp', '戻る・進むの再武装', 'C', 0.05, 1.0, 0.01, '手の大きさ比', '', ()),
-    P('peace', 'peace_min_cutoff', 'スクロールの安定度', 'A', 0.1, 5.0, 0.1, 'Hz', 'いいねの方向の平滑化にも使う', ()),
+    P('peace', 'peace_min_cutoff', 'スクロールの安定度', 'C', 0.1, 5.0, 0.1, 'Hz', 'いいねの方向の平滑化にも使う', ()),
     P('peace', 'peace_beta', 'スクロールの追従', 'C', 0.0, 0.5, 0.005, '', 'いいねにも使う', ()),
     P('peace', 'scroll_max_speed', 'スクロールの最大速度', 'A', 200, 6000, 100, 'px/秒', '', ()),
     P('peace', 'scroll_exponent', 'スクロールの速度カーブ', 'A', 1.0, 4.0, 0.1, '指数', '大きいほど中央付近が遅い', ()),
@@ -219,3 +219,33 @@ BY_ID: dict[str, Param] = {p.id: p for p in PARAMS}
 
 def get(section: str, key: str) -> Param:
     return BY_ID[f"{section}.{key}"]
+
+
+# 選ぶ項目（文字列・符号）の選択肢。画面ではスライダーの代わりに選択肢を出す
+CHOICES: dict[str, tuple] = {
+    "gesture.hand": ("right", "left", "both"),
+    "click.pinch_metric": ("image", "world"),
+    "zoom.zoom_signal": ("depth", "curl", "length"),
+    "zoom.zoom_sign": (1.0, -1.0),
+    "peace.peace_method": ("displacement", "angle"),
+}
+
+# 節の日本語名（画面の見出し）
+SECTION_JA = {"camera": "カメラ", "power": "オン・オフと省電力", "tracker": "手の検出", "activation": "有効化のキー",
+              "eventlog": "イベントログ", "marks": "印", "safety": "安全", "gesture": "使う手と検出", "mode": "モードの判定",
+              "click": "クリック・ピンチ・右クリック", "cursor": "カーソルと操作範囲", "zoom": "ズーム", "fist": "グー",
+              "thumbsup": "いいね", "peace": "ピース（スクロール、戻る・進む）", "log": "ログ"}
+
+
+# 0 で無効にする項目。画面ではトグルで無効にし（値は 0）、有効なときは範囲（lo〜hi）で調整する
+OFF_AT_ZERO = ("power.auto_off_after_s", "power.idle_stop_s")
+
+# 機能のトグルと、それに属する項目（トグルがオフのとき、画面でまとめてグレーアウトする）
+FEATURE_TOGGLES: dict[str, tuple[str, ...]] = {
+    "power.wake_enabled": ("power.wake_hold_s",),
+    "cursor.roi_adapt": ("cursor.roi_adapt_shift", "cursor.roi_adapt_grow"),
+    "zoom.zoom_enabled": tuple(p.id for p in PARAMS if p.section == "zoom" and p.key != "zoom_enabled"),
+    "thumbsup.thumbsup_enabled": tuple(p.id for p in PARAMS if p.section == "thumbsup" and p.key != "thumbsup_enabled"),
+    "peace.peace_enabled": tuple(p.id for p in PARAMS if p.section == "peace" and p.key != "peace_enabled"),
+    "fist.fist_enabled": tuple(p.id for p in PARAMS if p.section == "fist" and p.key != "fist_enabled"),
+}

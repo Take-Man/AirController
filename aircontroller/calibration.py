@@ -560,3 +560,62 @@ def reconstruct_old_segments(frames) -> list[dict]:
     if range0 - (3.0 + 5.5 + 2.0) * s >= t_first - 0.5 * s:  # 範囲を測った記録（--pinch-only でない）
         segs.insert(0, seg("range", range0, 11.5))
     return segs
+
+
+# ---------------------------------------------------------------- 設定画面の分布（SPEC 13.46）
+def thumbsup_points(frames, segments: list[dict], hand: str = "both", weights=(0.0, 0.0, 0.0, 0.0)) -> dict:
+    """いいねの記録（learn-thumbsup / calibrate --unit thumbsup）の、各方向の区間の方向の量（右・上が正、単位は
+    手首→中指付け根の長さ）と、親指の離れ（thumb_far）。方向の量は learn_thumbsup と同じく、直前の正面の区間の中央値から測る。
+    weights は (左右: 親指, 左右: 付け根, 上下: 親指, 上下: 付け根) の回転の重み。"""
+    from .gesture import preferred_hand, thumb_far
+    from .peace import _wrap, hand_angles, palm_position
+
+    xwt, xwk, ywt, ywk = weights
+    points, far = [], {"thumbsup": [], "neg": []}
+    origin = None
+    for sgm in segments:
+        lab = sgm["label"]
+        rs = []
+        for f in frames:
+            if sgm["t_start_ns"] <= f.t_capture_ns < sgm["t_end_ns"] and f.hands:
+                h = preferred_hand(f.hands, hand)
+                x, y, ref = palm_position(h, f.image_size)
+                at, ak = hand_angles(h, f.image_size)
+                rs.append((x, y, ref, at, ak, thumb_far(h, f.image_size)))
+        if not rs:
+            continue
+        if lab.startswith("neg_fist"):
+            far["neg"] += [r[5] for r in rs]
+        elif lab in ("center", "up", "left", "right", "down"):
+            far["thumbsup"] += [r[5] for r in rs]
+        if lab == "center":
+            origin = tuple(float(np.median([r[i] for r in rs])) for i in range(5))
+        if lab in ("center", "up", "left", "right", "down") and origin is not None:
+            ox, oy, oref, oat, oak = origin
+            for x, y, ref, at, ak, _ in rs:
+                dat, dak = _wrap(at - oat), _wrap(ak - oak)
+                points.append({"label": lab, "x": round(-(x - ox) / oref + (xwt * dat + xwk * dak) / 45.0, 3),
+                               "y": round(-(y - oy) / oref + (ywt * dat + ywk * dak) / 45.0, 3)})
+    return {"points": points, "far": {k: [round(v, 3) for v in vs] for k, vs in far.items()}}
+
+
+def zoom_points(frames, segments: list[dict], hand: str = "both", signal: str = "depth", sign: float = 1.0) -> list[dict]:
+    """ズームの記録（learn-zoom / calibrate --unit zoom）の、各区間の指先の前後の変化（ズームインが正）。
+    learn_zoom と同じく、直前の neutral の区間の中央値から測る。"""
+    from .gesture import preferred_hand
+    from .zoom import zoom_signals
+
+    out, origin = [], None
+    for sgm in segments:
+        lab = sgm["label"]
+        if lab not in ("neutral", "in", "out"):
+            continue
+        vs = [zoom_signals(preferred_hand(f.hands, hand), f.image_size)[signal] for f in frames
+              if sgm["t_start_ns"] <= f.t_capture_ns < sgm["t_end_ns"] and f.hands]
+        if not vs:
+            continue
+        if lab == "neutral":
+            origin = float(np.median(vs))
+        if origin is not None:
+            out += [{"label": lab, "v": round(sign * (v - origin), 4)} for v in vs]
+    return out

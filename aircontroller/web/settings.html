@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirController 設定</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="bar">
+  <h1>AirController 設定</h1>
+  <span id="run-chip" class="chip">run: —</span>
+  <span class="spacer"></span>
+  <span id="dirty" class="muted"></span>
+  <button id="btn-discard" class="ghost">変更をやり直す</button>
+  <button id="btn-save" class="primary" disabled>変更を確定</button>
+</header>
+
+<main>
+  <p class="note">確定した値は、run を起動し直すと使われます（動いている run には反映されません）。確定のたびに履歴（settings-history/）が残ります。</p>
+
+  <section class="panel" id="panel-measure">
+    <h2>測定</h2>
+    <p class="muted">calibrate を別のウィンドウで起動します。結果は候補として下に並び、確定するまで使われません。各見出しの「U◯ 測定」からも測れます。</p>
+    <div class="unit-grid" id="measure-buttons"></div>
+    <div id="measure-job" class="job hidden"></div>
+  </section>
+
+  <section class="panel" id="panel-candidates">
+    <h2>測定の候補</h2>
+    <div id="candidates"></div>
+  </section>
+
+  <section class="panel" id="panel-eval">
+    <h2>効果の見積もり</h2>
+    <p class="muted">基準記録（eval-manifest.toml）を、保存済みの値と、比べる値で流して差を出します（約 20 秒）。</p>
+    <div class="row wrap">
+      <button id="btn-eval-measured">測定の候補を見積もる</button>
+      <button id="btn-eval-edit">変更中の値を見積もる</button>
+    </div>
+    <div id="eval-job" class="job hidden"></div>
+    <div id="eval-result"></div>
+  </section>
+
+  <div id="sections"></div>
+
+  <section class="panel" id="panel-history">
+    <h2>履歴</h2>
+    <div class="row wrap">
+      <button id="btn-undo">前の保存に戻す</button>
+      <input id="name-input" type="text" placeholder="名前（例: 快適）" maxlength="64">
+      <button id="btn-name">今の確定済みの状態に名前を付ける</button>
+    </div>
+    <h3>名前を付けた状態</h3>
+    <div id="named"></div>
+    <h3>保存の履歴（新しい順、最新 50 件）</h3>
+    <div id="history"></div>
+  </section>
+</main>
+
+<dialog id="confirm">
+  <form method="dialog">
+    <h3 id="confirm-title"></h3>
+    <div id="confirm-body"></div>
+    <div class="row end">
+      <button value="cancel" class="ghost">やめる</button>
+      <button value="ok" class="primary" id="confirm-ok">実行する</button>
+    </div>
+  </form>
+</dialog>
+<div id="toast" class="toast hidden"></div>
+<script src="/app.js"></script>
+</body>
+</html>
