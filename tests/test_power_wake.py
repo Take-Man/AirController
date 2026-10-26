@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import dataclasses
 
-import numpy as np
 
 from aircontroller.gesture import palm_facing
 from aircontroller.power import PowerConfig, PowerController, is_wake_pose

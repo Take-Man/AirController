@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 from aircontroller.eventlog import EventLogConfig, EventLogWriter, MarkConfig, MarkRecorder, SessionLogger
 from aircontroller.gesture import GestureConfig, GestureEngine

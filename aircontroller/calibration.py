@@ -172,7 +172,7 @@ def learn_thumbsup(frames, segments: list[dict], hand: str = "both") -> LearnRes
         cand = max((evaluate(wt, wk) for wt in grid for wk in grid), key=lambda x: x[0])
         # 回転は、変位だけより 2割以上よくなるときだけ使う（1回分の記録への当てはめすぎを防ぐ）
         best[axis] = cand[1] if cand[0] > base_score + 0.2 * abs(base_score) + 0.3 else base
-    (xwt, xwk, xcp, xcn, xr20, xl20, xleak), (ywt, ywk, ycp, ycn, yu20, yd20, yleak) = best["x"], best["y"]
+    (xwt, xwk, xcp, xcn, xr20, xl20, xleak), (ywt, ywk, ycp, ycn, yu20, _yd20, yleak) = best["x"], best["y"]
     params.update(thumbsup_x_w_thumb=float(xwt), thumbsup_x_w_knuckle=float(xwk),
                   thumbsup_y_w_thumb=float(ywt), thumbsup_y_w_knuckle=float(ywk))
     fire = {"right": xcp + 0.5 * (xr20 - xcp), "left": xcn + 0.5 * (xl20 - xcn),
@@ -323,7 +323,7 @@ def unit_steps(units, range_s: float = 10.0) -> list[tuple[str | None, float, st
                   ("rpinch", 5.0 + SETTLE, "親指と中指で摘まんだまま、手を動かす・横に向ける")],
         "peace": [(None, 2.5, "次: ピースの形（人差し指と中指を立て、親指を畳む）"),
                   ("peace", 5.0 + SETTLE, "ピースの形で、楽に正面を指したまま止める")],
-        "thumbsup": [(None, 2.5, f"次: いいねのユニット。まず間違えやすい形を記録します")] + THUMBSUP_STEPS,
+        "thumbsup": [(None, 2.5, "次: いいねのユニット。まず間違えやすい形を記録します")] + THUMBSUP_STEPS,
         "zoom": [(None, 2.5, f"次: ズームのユニット。{_BACK}")] + ZOOM_STEPS,
     }
     steps = [PREP_STEP]
@@ -592,7 +592,7 @@ def thumbsup_points(frames, segments: list[dict], hand: str = "both", weights=(0
             origin = tuple(float(np.median([r[i] for r in rs])) for i in range(5))
         if lab in ("center", "up", "left", "right", "down") and origin is not None:
             ox, oy, oref, oat, oak = origin
-            for x, y, ref, at, ak, _ in rs:
+            for x, y, _ref, at, ak, _far in rs:
                 dat, dak = _wrap(at - oat), _wrap(ak - oak)
                 points.append({"label": lab, "x": round(-(x - ox) / oref + (xwt * dat + xwk * dak) / 45.0, 3),
                                "y": round(-(y - oy) / oref + (ywt * dat + ywk * dak) / 45.0, 3)})

@@ -843,7 +843,7 @@ function peaceRowWidget() {
 
 const WIDGETS = { peaceRow: peaceRowWidget, scrollCurve: scrollCurveWidget, roi: roiWidget, pinch: (o) => distWidget("pinch", o),
   right: (o) => distWidget("right", o), thumbfold: (o) => distWidget("thumbfold", o), far: (o) => distWidget("far", o),
-  peaceDial: peaceDialWidget, radar: radarWidget, zoom: zoomWidget, neutral: neutralWidget };
+  radar: radarWidget, zoom: zoomWidget }; // ピースの領域と中立方向は peaceRow の中で使う
 // 図の中で変更する項目（測定するまで図が出ないものも含む）
 const IN_WIDGETS = ["cursor.roi_cx", "cursor.roi_cy", "cursor.roi_width", "peace.peace_neutral_yaw_deg", "peace.peace_neutral_pitch_deg",
   "zoom.zoom_signal", "zoom.zoom_sign", ...Object.values(DIST_W).flatMap((c) => c.keys)];

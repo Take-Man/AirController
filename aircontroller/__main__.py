@@ -723,16 +723,6 @@ def _draw_hand(cv2, img, hand) -> None:
 CALIB_HISTORY = ROOT / "calibration-history"
 
 
-def _screen_size() -> tuple[float, float]:
-    try:
-        import Quartz
-
-        b = Quartz.CGDisplayBounds(Quartz.CGMainDisplayID())
-        return float(b.size.width), float(b.size.height)
-    except Exception:  # noqa: BLE001  画面のない環境（テスト）
-        return 1440.0, 900.0
-
-
 def _calib_units(args) -> list[str]:
     from .calibration import UNIT_ORDER
 
@@ -792,7 +782,9 @@ def cmd_calibrate(args, cfg: dict) -> int:
         print("--repeat は --write・--from と一緒に使えません（2 回の差を見るだけ）")
         return 2
     gdef = GestureConfig.from_toml(load_config(args.config, calibration=False))  # 既定値と上限は config.toml だけから
-    screen = _screen_size()
+    from .settings_server import screen_size
+
+    screen = screen_size()
     print("ユニット: " + "、".join(UNIT_TITLES[u] for u in units))
     runs = []
     if args.source:
@@ -1369,7 +1361,7 @@ def cmd_camlatency(args, cfg: dict) -> int:
     ts = np.array([s[0] for s in samples])
     br = np.array([s[1] for s in samples])
     lat = []
-    for t_f, to_white in flips:
+    for t_f, _to_white in flips:
         before = br[(ts > t_f - 250e6) & (ts <= t_f)]
         after = br[(ts > t_f + 350e6) & (ts <= t_f + 550e6)]
         if len(before) < 3 or len(after) < 3:
@@ -1558,7 +1550,9 @@ def cmd_settings_eval(args, cfg: dict) -> int:
         entries = [e for e in entries if (e.kind == "unlabeled") == (args.only == "unlabeled")]
     print(f"基準記録 {len(entries)} 本を流します（保存済みと候補の 2 回ずつ）")
     t0 = time.monotonic()
-    res = evaluate(entries, base, cand, _screen_size())
+    from .settings_server import screen_size
+
+    res = evaluate(entries, base, cand, screen_size())
     res["params"] = params
     print(f"（{time.monotonic() - t0:.0f} 秒）\n")
     print(format_result(res, params, args.threshold))

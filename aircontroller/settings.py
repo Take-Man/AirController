@@ -21,7 +21,6 @@ import tomllib
 from pathlib import Path
 
 KEEP = 50
-LAYERS = ("calibration", "auto")
 
 
 # ---------------------------------------------------------------- TOML の書き出し（値は数値・真偽・文字列・それらのリスト）

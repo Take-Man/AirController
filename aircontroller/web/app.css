@@ -2,10 +2,10 @@
   --bg: #f6f6f3; --panel: #ffffff; --fg: #1d1d1b; --muted: #6b6b66; --line: #e2e1dc; --soft: #efeee9;
   --accent: #1f6feb; --accent-fg: #ffffff; --saved: #77776f; --measured: #c2410c; --edit: #1f6feb;
   --warn-bg: #fff4d6; --warn: #8a5a00; --rest: rgba(70, 120, 200, 0.5); --op: rgba(220, 110, 40, 0.5);
-  --chip-on: #dcfce7; --chip-on-fg: #166534;
+  --chip-on: #dcfce7; --chip-on-fg: #166534; --live: #10b981;
   /* 図の中の各項目の色（k-0 〜 k-5） */
   --k0: #1f6feb; --k1: #d97706; --k2: #7c3aed; --k3: #059669; --k4: #db2777; --k5: #475569;
-  /* いいね・ズームの区間の色 */
+  /* いいね・ズームの区間の色（l-<ラベル>） */
   --l-up: #7c3aed; --l-left: #059669; --l-right: #db2777; --l-down: #a3a3a3; --l-center: #9ca3af;
   --l-in: #059669; --l-out: #db2777; --l-neutral: #9ca3af; --pt: rgba(60, 60, 60, 0.35);
   --dial: rgba(0, 0, 0, 0.06); --sector: rgba(31, 111, 235, 0.08);
@@ -22,6 +22,8 @@
     --dial: rgba(255, 255, 255, 0.05); --sector: rgba(110, 168, 255, 0.1);
   }
 }
+
+/* ---------------------------------------------------------------- 全体 */
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--fg);
   font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; }
@@ -35,6 +37,7 @@ h3 { font-size: 14px; margin: 14px 0 6px; }
 .spacer { flex: 1; }
 .muted { color: var(--muted); }
 .note { color: var(--muted); font-size: 13px; }
+.hidden { display: none !important; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 14px 0; }
 .panel > h2 { margin-bottom: 8px; }
 .phead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
@@ -52,11 +55,33 @@ input[type=text], input[type=number], select { font: inherit; padding: 3px 6px; 
   border-radius: 6px; background: var(--bg); color: var(--fg); }
 input[type=number] { width: 92px; font-variant-numeric: tabular-nums; }
 input.wide { width: 100%; margin-top: 8px; }
+.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
 .chip { font-size: 12px; padding: 2px 8px; border-radius: 99px; border: 1px solid var(--line); }
 .chip.on { background: var(--chip-on); color: var(--chip-on-fg); border-color: transparent; }
-.hidden { display: none !important; }
+.key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
+.warn { background: var(--warn-bg); color: var(--warn); border-radius: 4px; padding: 0 6px; font-size: 12px; }
+.s, .c-saved { color: var(--saved); }
+.m, .c-measured { color: var(--measured); }
+.e, .c-edit { color: var(--edit); }
 
-/* トグルスイッチ */
+/* ---------------------------------------------------------------- 配置（ブロッキング） */
+/* 節を横に並べる（{ pair }）、項目の横並び（{ row }）・縦並び（{ col }） */
+.panel-row { display: flex; gap: 14px; align-items: stretch; }
+.panel-row > .panel { flex: 1 1 0; min-width: 0; margin: 14px 0; }
+.panel-row > .panel.flex-3 { flex-grow: 3; }
+.lrow { display: flex; gap: 18px; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 4px; }
+.pbody > .lrow:first-child { border-top: 0; }
+.lrow > .widget { flex: 1 1 auto; min-width: 0; border-top: 0; }
+.lrow.with-dial { align-items: center; } /* 時間のダイヤルは、隣の図の高さの中で上下の中央に */
+.lrow.with-dial > .dial-card { flex: none; }
+.lcol { display: flex; flex-direction: column; gap: 4px; flex: 1 1 0; min-width: 0; }
+.lcol > .item { border-top: 0; }
+.lcol > .dial-card { align-self: flex-start; }
+/* 機能がオフ、0 で使わない */
+.off, .item.off { opacity: 0.42; }
+.item.zero .unit { opacity: 0.5; }
+
+/* ---------------------------------------------------------------- 部品: スイッチ、セグメント */
 .switch { position: relative; display: inline-block; width: 38px; height: 22px; flex: none; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
 .switch .knob { position: absolute; inset: 0; background: var(--line); border-radius: 99px; transition: background 0.15s; cursor: pointer; }
@@ -65,20 +90,20 @@ input.wide { width: 100%; margin-top: 8px; }
 .switch input:checked + .knob { background: var(--accent); }
 .switch input:checked + .knob::before { transform: translateX(16px); }
 .switch input:focus-visible + .knob { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* セグメント */
+.switch-wrap { display: inline-flex; align-items: center; gap: 6px; } /* スイッチの横の「有効 / 無効」 */
+.sw-state { font-size: 12px; color: var(--accent); min-width: 2.2em; text-align: right; }
+.switch-wrap.is-off .sw-state { color: var(--muted); }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { border: 0; border-radius: 0; padding: 4px 16px; background: transparent; }
 .seg button + button { border-left: 1px solid var(--line); }
 .seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-fg); }
 
-/* 項目の行 */
+/* ---------------------------------------------------------------- 項目の行 */
 .item { border-top: 1px solid var(--line); padding: 9px 0; }
 .pbody > .item:first-child, .pbody > .widget:first-child { border-top: 0; }
 .item.changed { background: linear-gradient(90deg, rgba(31, 111, 235, 0.07), transparent 60%); }
 .item .line { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .item .name { font-weight: 600; }
-.key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); }
 .ctl { display: grid; grid-template-columns: 1fr auto 72px; gap: 10px; align-items: center; margin-top: 4px; }
 .track { position: relative; padding-top: 13px; }
 .track input[type=range] { width: 100%; margin: 0; accent-color: var(--edit); }
@@ -86,25 +111,43 @@ input.wide { width: 100%; margin-top: 8px; }
 .marker { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; line-height: 12px; pointer-events: none; }
 .marker.saved { color: var(--saved); }
 .marker.measured { color: var(--measured); }
+.ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 1px; }
 .vals { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
-.s, .c-saved { color: var(--saved); }
-.m, .c-measured { color: var(--measured); }
-.e, .c-edit { color: var(--edit); }
-.warn { background: var(--warn-bg); color: var(--warn); border-radius: 4px; padding: 0 6px; font-size: 12px; }
-/* 機能がオフ、0 で使わない */
-.off, .item.off { opacity: 0.42; }
-.item.zero .unit { opacity: 0.5; }
+.vals.center { justify-content: center; text-align: center; }
 
-/* 図 */
+/* 小見出しのグループ（項目を横に並べる） */
+.group { border-top: 1px solid var(--line); padding: 8px 0 4px; }
+.pbody > .group:first-child { border-top: 0; }
+.ghead { display: flex; align-items: center; gap: 10px; }
+.ghead h3 { margin: 4px 0; }
+.group-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; }
+.group-grid .item { border-top: 0; padding: 4px 0; }
+.group-grid .ctl { grid-template-columns: 1fr auto 40px; }
+.group-grid input[type=number] { width: 76px; }
+
+/* 時間の項目: 円のダイヤル */
+.dials { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0; border-top: 1px solid var(--line); }
+.pbody > .dials:first-child { border-top: 0; }
+.item.dial-card { border-top: 0; padding: 4px 0; width: 170px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.dial-card .name { font-weight: 600; font-size: 13px; text-align: center; }
+.dial-box { position: relative; width: 150px; height: 150px; }
+.dial-box svg.dial { width: 150px; height: 150px; }
+.dial-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
+.dial-center > * { pointer-events: auto; }
+.dial-num { display: flex; align-items: baseline; gap: 3px; }
+.dial-num input[type=number] { width: 64px; text-align: center; }
+.dial-card.zero .fig .dial-val, .dial-card.zero .fig .dial-knob { display: none; }
+.dial-card.zero .fig .dial-track { stroke: var(--line); }
+
+/* ---------------------------------------------------------------- 図（ウィジェット） */
 .widget { border-top: 1px solid var(--line); padding: 10px 0; }
 .widget.hint { display: flex; gap: 10px; align-items: center; }
 .wtitle { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-bottom: 4px; }
 .wbody { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.widget.stack .wbody { grid-template-columns: 1fr; }
 .figbox { min-width: 0; }
-svg.fig { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
-svg.fig.sq { max-width: 330px; }
-svg.fig.grab { cursor: grab; }
-svg.fig.dragging { cursor: grabbing; }
+.tablecol { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.tablecol > .keys-wrap { align-self: stretch; }
 .legend { font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
 .sw.h-rest { background: var(--rest); } .sw.h-op { background: var(--op); } .sw.pt { background: var(--pt); border-radius: 50%; }
@@ -119,15 +162,40 @@ table.keys input[type=number] { width: 78px; }
 table.keys tr.changed td { background: rgba(31, 111, 235, 0.06); }
 .kbtn button + button { margin-left: 3px; }
 
-.fig text { font-size: 11px; fill: var(--muted); }
+/* ピース: 領域の円 / 真ん中（領域の値、中立方向の値）/ 中立方向の円 */
+.peace-row .pr-grid { display: grid; grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.5fr) minmax(0, 0.85fr); gap: 14px; align-items: center; }
+.pr-side { min-width: 0; }
+.pr-center { display: flex; flex-direction: column; gap: 4px; }
+.pr-cap { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 6px; }
+.pr-center table.keys .kname { min-width: 8.5em; }
+.pr-center table.keys input[type=number] { width: 64px; }
+/* スクロールの速さ: 値の表の下に、向き（セグメント 2 つ）と時間のダイヤル。上と左に区切りの線 */
+.lrow.scroll-extra { border-top: 1px solid var(--line); border-left: 1px solid var(--line); padding: 8px 0 0 14px; align-self: stretch; gap: 14px; }
+.scroll-extra .lcol > .item { padding: 6px 0; }
+.scroll-extra .lcol > .item + .item { border-top: 1px solid var(--line); }
+.scroll-extra .seg button { padding: 4px 12px; }
+.zoom-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+
+/* SVG の中身 */
+svg.fig { width: 100%; height: auto; display: block; touch-action: none; user-select: none; }
+svg.fig.sq { max-width: 330px; }
+svg.fig.grab { cursor: grab; }
+svg.fig.dragging { cursor: grabbing; }
+.fig text { font-size: 11px; fill: var(--muted); font-weight: 400; }
 .fig .tick { font-size: 10px; }
 .fig .lbl { font-size: 11px; fill: var(--fg); }
+/* 分布図は横に伸びるので、伸びの逆数（--k、app.js の keepTextSize）を掛けて、画面上の文字の大きさを保つ */
+.fig.dist text.lbl { font-size: calc(11px * var(--k, 1)); }
+.fig.dist text.tick, .fig.dist text.live-lbl { font-size: calc(10px * var(--k, 1)); }
 .fig .axis { stroke: var(--line); }
+.fig .grid { fill: none; stroke: var(--line); } .fig .grid.strong { stroke: var(--muted); stroke-opacity: 0.5; }
 .fig .h-rest { fill: var(--rest); } .fig .h-op { fill: var(--op); }
 .fig .mk-saved { fill: var(--saved); } .fig .mk-measured { fill: var(--measured); }
+.fig .dot-saved { fill: var(--saved); }
 .fig .thr { stroke-width: 2; } .fig .thr.dashed { stroke-dasharray: 5 4; }
 .fig .thr-saved { stroke: var(--saved); stroke-width: 2; }
 .fig .handle { stroke: var(--panel); stroke-width: 1.5; }
+.fig .handle-sq { fill: var(--edit); }
 .fig .k-0 { stroke: var(--k0); } .fig .k-1 { stroke: var(--k1); } .fig .k-2 { stroke: var(--k2); }
 .fig .k-3 { stroke: var(--k3); } .fig .k-4 { stroke: var(--k4); } .fig .k-5 { stroke: var(--k5); }
 .fig .handle.k-0, .fig text.k-0 { fill: var(--k0); } .fig .handle.k-1, .fig text.k-1 { fill: var(--k1); } .fig .handle.k-2, .fig text.k-2 { fill: var(--k2); }
@@ -139,32 +207,59 @@ table.keys tr.changed td { background: rgba(31, 111, 235, 0.06); }
 .fig .roi-saved { fill: none; stroke: var(--saved); stroke-dasharray: 4 3; }
 .fig .roi-measured { fill: none; stroke: var(--measured); stroke-dasharray: 4 3; }
 .fig .roi-edit { fill: rgba(31, 111, 235, 0.08); stroke: var(--edit); stroke-width: 2; }
-.fig .handle-sq { fill: var(--edit); }
 .fig .dial-bg { fill: var(--dial); }
 .fig .nav-sector { fill: var(--sector); }
 .fig .down-sector { fill: var(--soft); opacity: 0.7; }
 .fig .diag { stroke: var(--line); }
 .fig .ring-saved { fill: none; stroke: var(--saved); stroke-dasharray: 2 3; }
 .fig .ring-max { fill: none; stroke-width: 2; }
-.fig .ring-fire { fill: none; stroke-width: 2; stroke-dasharray: 5 4; }
 .fig .ring-dead { fill: var(--dial); stroke-width: 2; }
 .fig .ring-rearm { fill: none; stroke-width: 1.5; stroke-dasharray: 2 3; }
+.fig .arc-edit { fill: none; stroke-width: 3; }
 .fig .arc-fire { fill: none; stroke-width: 3; stroke-dasharray: 6 4; }
 .fig .arc-saved { fill: none; stroke: var(--saved); stroke-width: 1.5; stroke-dasharray: 2 3; }
 .fig .bar-bg { fill: var(--soft); }
 .fig .dead-band { fill: var(--dial); stroke-width: 1.5; }
-.fig .grid { fill: none; stroke: var(--line); } .fig .grid.strong { stroke: var(--muted); stroke-opacity: 0.5; }
-.fig .dot-saved { fill: var(--saved); }
+.fig .curve { fill: none; stroke-width: 2.5; }
+.fig .curve-saved { fill: none; stroke: var(--saved); stroke-width: 1.5; stroke-dasharray: 4 3; }
+.fig .dial-track { fill: none; stroke: var(--soft); stroke-width: 9; stroke-linecap: round; }
+.fig .dial-val { fill: none; stroke: var(--edit); stroke-width: 9; stroke-linecap: round; }
+.fig .dial-knob { fill: var(--panel); stroke: var(--edit); stroke-width: 3; }
+/* ライブの今の値 */
+.fig .live-line { stroke: var(--live); stroke-width: 2.5; }
+.fig .live-lbl { fill: var(--live); font-size: 11px; }
+.fig .live-dot { fill: var(--live); stroke: var(--panel); stroke-width: 2; }
 
-/* 進み具合 */
+/* ---------------------------------------------------------------- 測定 */
+.unit-btns { display: inline-flex; gap: 6px; } /* 見出しの横の「U◯ 測定」 */
+.unit-btn { font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--accent);
+  color: var(--accent); background: rgba(31, 111, 235, 0.08); }
+.unit-btn:hover:not(:disabled) { background: rgba(31, 111, 235, 0.16); }
+/* 測定の欄: U1〜U6 を横に並べ、その下に範囲を示すボタン */
+.unit-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; }
+.unit-cell { font-weight: 600; }
+.range-btn { position: relative; border-top: 0; border-radius: 0 0 10px 10px; padding-top: 2px; font-size: 13px;
+  background: rgba(31, 111, 235, 0.05); }
+.range-btn.span4 { grid-column: 1 / span 4; }
+.range-btn.span6 { grid-column: 1 / span 6; }
+.measure-progress { margin: 8px 0; }
+.measure-now { font-size: 18px; font-weight: 600; margin-bottom: 6px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.measure-tag { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.measure-tag.wait { background: var(--soft); color: var(--muted); }
+
+/* ---------------------------------------------------------------- 別プロセスの仕事、見積もり、履歴 */
 .pbar-wrap { display: flex; gap: 10px; align-items: center; }
 .pbar { flex: 1; height: 8px; background: var(--soft); border-radius: 99px; overflow: hidden; }
 .pbar-fill { height: 100%; width: 0; background: var(--accent); border-radius: 99px; }
-
 .job { margin-top: 10px; }
 .job pre, pre.out { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px;
   max-height: 260px; overflow: auto; font-size: 12px; white-space: pre-wrap; }
 details.detail > summary { cursor: pointer; color: var(--muted); margin: 6px 0; }
+details.tree { border-left: 2px solid var(--line); padding-left: 10px; margin: 6px 0; } /* 見積もりのツリー */
+details.tree > summary { cursor: pointer; }
+details.tree > summary > span { margin-left: 10px; }
+details.tree-root { border-left: 0; padding-left: 0; }
+details.tree-root > summary { font-size: 14px; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0; }
 th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -172,74 +267,30 @@ td.up { color: var(--measured); }
 td.down { color: var(--edit); }
 .list-row { display: flex; gap: 10px; align-items: center; padding: 3px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
 .list-row .grow { flex: 1; }
-
+.list-row .hname { font-weight: 600; min-width: 8em; } /* 履歴: 同じ設定には同じ名前 */
+.list-row.applied { background: rgba(16, 185, 129, 0.08); }
 dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--fg); max-width: 640px; width: 92vw; }
 dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg);
   padding: 8px 14px; border-radius: 8px; font-size: 13px; z-index: 10; max-width: 90vw; }
-@media (max-width: 760px) {
-  .wbody { grid-template-columns: 1fr; }
-  .ctl { grid-template-columns: 1fr auto; }
-  .bar { flex-wrap: wrap; }
-}
 
-/* 見出しの横の測定のボタン */
-.unit-btns { display: inline-flex; gap: 6px; }
-.unit-btn { font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--accent);
-  color: var(--accent); background: rgba(31, 111, 235, 0.08); }
-.unit-btn:hover:not(:disabled) { background: rgba(31, 111, 235, 0.16); }
-
-/* 測定: U1〜U6 を横に並べ、その下に範囲を示すボタン */
-.unit-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px 8px; }
-.unit-cell { font-weight: 600; }
-.range-btn { position: relative; border-top: 0; border-radius: 0 0 10px 10px; padding-top: 2px; font-size: 13px;
-  background: rgba(31, 111, 235, 0.05); }
-.range-btn.span4 { grid-column: 1 / span 4; }
-.range-btn.span6 { grid-column: 1 / span 6; }
-@media (max-width: 640px) { .unit-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .range-btn.span4 { grid-column: 1 / span 3; } .range-btn.span6 { grid-column: 1 / span 3; } }
-
-/* 時間の項目: 円のダイヤル */
-.dials { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0; border-top: 1px solid var(--line); }
-.pbody > .dials:first-child { border-top: 0; }
-.item.dial-card { border-top: 0; padding: 4px 0; width: 170px; display: flex; flex-direction: column; align-items: center; gap: 2px; }
-.dial-card .name { font-weight: 600; font-size: 13px; text-align: center; }
-.dial-box { position: relative; width: 150px; height: 150px; }
-.dial-box svg.dial { width: 150px; height: 150px; }
-.dial-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; pointer-events: none; }
-.dial-center > * { pointer-events: auto; }
-.dial-num { display: flex; align-items: baseline; gap: 3px; }
-.dial-num input[type=number] { width: 64px; text-align: center; }
-.fig .dial-track { fill: none; stroke: var(--soft); stroke-width: 9; stroke-linecap: round; }
-.fig .dial-val { fill: none; stroke: var(--edit); stroke-width: 9; stroke-linecap: round; }
-.fig .dial-knob { fill: var(--panel); stroke: var(--edit); stroke-width: 3; }
-.dial-card.zero .fig .dial-val, .dial-card.zero .fig .dial-knob { display: none; }
-.dial-card.zero .fig .dial-track { stroke: var(--line); }
-.vals.center { justify-content: center; text-align: center; }
-.fig .arc-edit { fill: none; stroke-width: 3; }
-
-/* スイッチの横の「有効 / 無効」 */
-.switch-wrap { display: inline-flex; align-items: center; gap: 6px; }
-.sw-state { font-size: 12px; color: var(--accent); min-width: 2.2em; text-align: right; }
-.switch-wrap.is-off .sw-state { color: var(--muted); }
-
-/* 小見出しのグループ（項目を横に並べる） */
-.group { border-top: 1px solid var(--line); padding: 8px 0 4px; }
-.pbody > .group:first-child { border-top: 0; }
-.ghead { display: flex; align-items: center; gap: 10px; }
-.ghead h3 { margin: 4px 0; }
-.group-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; }
-.group-grid .item { border-top: 0; padding: 4px 0; }
-.group-grid .ctl { grid-template-columns: 1fr auto 40px; }
-.group-grid input[type=number] { width: 76px; }
-.ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 1px; }
-@media (max-width: 760px) { .group-grid { grid-template-columns: 1fr; } }
-
-/* スクロールの速さの曲線 */
-.fig .curve { fill: none; stroke-width: 2.5; }
-.fig .curve-saved { fill: none; stroke: var(--saved); stroke-width: 1.5; stroke-dasharray: 4 3; }
-
-/* ライブ */
-.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+/* ---------------------------------------------------------------- ライブ（右の引き出し。上下に動かしても付いてくる） */
+.live-drawer { position: fixed; top: 52px; right: 0; bottom: 0; width: 380px; max-width: 92vw; z-index: 6; overflow-y: auto;
+  background: var(--panel); border-left: 1px solid var(--line); padding: 12px 14px; transform: translateX(100%);
+  transition: transform 0.2s ease; box-shadow: -6px 0 16px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; gap: 8px; }
+body.drawer-open .live-drawer { transform: none; }
+/* 閉じているときのつまみ: ‹、run とのつながり（緑の丸）、操作に反映しているか（手。反映していなければ灰色と斜線） */
+.live-handle { position: fixed; right: 0; top: 40%; z-index: 6; writing-mode: vertical-rl; padding: 14px 9px; border-radius: 8px 0 0 8px;
+  border-right: 0; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.15); }
+body.drawer-open .live-handle { display: none; }
+.live-handle .chev { writing-mode: horizontal-tb; font-size: 22px; line-height: 1; color: var(--muted); }
+.live-handle .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+body.live-on .live-handle .dot { background: var(--live); }
+.live-handle .out-icon { position: relative; writing-mode: horizontal-tb; font-size: 18px; line-height: 1; opacity: 0.35; filter: grayscale(1); }
+.live-handle .out-icon::after { content: ""; position: absolute; left: -2px; right: -2px; top: 50%; border-top: 2px solid var(--measured);
+  transform: rotate(-45deg); }
+body.output-on .live-handle .out-icon { opacity: 1; filter: none; }
+body.output-on .live-handle .out-icon::after { display: none; }
 .live-body { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
 .live-mode { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
 .live-mode-name { font-size: 20px; font-weight: 700; }
@@ -251,84 +302,20 @@ svg.fig.meter { width: 100%; height: 16px; }
 .fig .meter-val { fill: var(--accent); opacity: 0.65; }
 .fig .bone { stroke: var(--accent); stroke-width: 2; }
 .fig .joint { fill: var(--fg); } .fig .joint.tip { fill: var(--measured); }
-.fig .live-line { stroke: #10b981; stroke-width: 2.5; }
-.fig .live-lbl { fill: #10b981; font-size: 11px; }
-.fig .live-dot { fill: #10b981; stroke: var(--panel); stroke-width: 2; }
 
-.measure-progress { margin: 8px 0; }
-.measure-now { font-size: 18px; font-weight: 600; margin-bottom: 6px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.measure-tag { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--accent); color: var(--accent-fg); font-weight: 600; }
-.measure-tag.wait { background: var(--soft); color: var(--muted); }
-
-/* ライブの引き出し（右。上下に動かしても付いてくる） */
-.live-drawer { position: fixed; top: 52px; right: 0; bottom: 0; width: 380px; max-width: 92vw; z-index: 6; overflow-y: auto;
-  background: var(--panel); border-left: 1px solid var(--line); padding: 12px 14px; transform: translateX(100%);
-  transition: transform 0.2s ease; box-shadow: -6px 0 16px rgba(0, 0, 0, 0.12); display: flex; flex-direction: column; gap: 8px; }
-body.drawer-open .live-drawer { transform: none; }
-.live-handle { position: fixed; right: 0; top: 40%; z-index: 6; writing-mode: vertical-rl; padding: 12px 6px; border-radius: 8px 0 0 8px;
-  border-right: 0; display: flex; align-items: center; gap: 6px; font-weight: 600; }
-body.drawer-open .live-handle { display: none; }
-.live-handle .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
-body.live-on .live-handle .dot { background: #10b981; }
+/* ---------------------------------------------------------------- 画面の幅 */
 @media (min-width: 1180px) { body.drawer-open main { margin-right: 380px; } body.drawer-open .bar { padding-right: 396px; } }
-.list-row .hname { font-weight: 600; min-width: 8em; }
-.list-row.applied { background: rgba(16, 185, 129, 0.08); }
-.zoom-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
-
-/* 配置（ブロッキング） */
-.panel-row { display: flex; gap: 14px; align-items: stretch; }
-.panel-row > .panel { flex: 1 1 0; min-width: 0; margin: 14px 0; }
-.panel-row > .panel.flex-3 { flex-grow: 3; }
-.lrow { display: flex; gap: 18px; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 4px; }
-.pbody > .lrow:first-child { border-top: 0; }
-.lrow > .widget { flex: 1 1 auto; min-width: 0; border-top: 0; }
-.lrow.with-dial > .dial-card { flex: none; margin-top: 30px; }
-.lcol { display: flex; flex-direction: column; gap: 4px; flex: 1 1 0; min-width: 0; }
-.lcol > .item { border-top: 0; }
-.lcol > .dial-card { align-self: flex-start; }
-.scroll-row > .widget { flex: 0 0 340px; }
-.widget.stack .wbody { grid-template-columns: 1fr; }
-.tablecol { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
-.tablecol > .keys-wrap { align-self: stretch; }
-.peace-row .pr-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr) minmax(0, 1fr); gap: 14px; align-items: center; }
-.pr-side { min-width: 0; }
-.pr-center { display: flex; flex-direction: column; gap: 4px; }
-.pr-cap { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 6px; }
 @media (max-width: 900px) {
   .panel-row, .lrow { flex-direction: column; }
   .peace-row .pr-grid { grid-template-columns: 1fr; }
-  .scroll-row > .widget { flex: 1 1 auto; }
 }
-details.tree { border-left: 2px solid var(--line); padding-left: 10px; margin: 6px 0; }
-details.tree > summary { cursor: pointer; }
-details.tree > summary > span { margin-left: 10px; }
-details.tree-root { border-left: 0; padding-left: 0; }
-details.tree-root > summary { font-size: 14px; }
-.peace-row .pr-grid { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.5fr) minmax(0, 0.85fr); }
-.pr-center table.keys .kname { min-width: 8.5em; }
-.pr-center table.keys input[type=number] { width: 64px; }
-.scroll-row table.keys .kname { min-width: 9em; }
-/* スクロールの速さ: 値の表の下に、向き（セグメント 2 つ）と時間のダイヤル。上と左に区切りの線 */
-.lrow.scroll-extra { border-top: 1px solid var(--line); border-left: 1px solid var(--line); padding: 8px 0 0 14px; align-self: stretch; gap: 14px; }
-.scroll-extra .lcol > .item { padding: 6px 0; }
-.scroll-extra .lcol > .item + .item { border-top: 1px solid var(--line); }
-.scroll-extra .seg button { padding: 4px 12px; }
-
-/* 閉じているときのライブのつまみ（大きめ。‹、run とのつながり、操作に反映しているか） */
-.live-handle { padding: 14px 9px; gap: 10px; font-size: 15px; box-shadow: -2px 2px 8px rgba(0, 0, 0, 0.15); }
-.live-handle .chev { writing-mode: horizontal-tb; font-size: 22px; line-height: 1; color: var(--muted); }
-.live-handle .dot { width: 10px; height: 10px; }
-.live-handle .out-icon { position: relative; writing-mode: horizontal-tb; font-size: 18px; line-height: 1; opacity: 0.35; filter: grayscale(1); }
-.live-handle .out-icon::after { content: ""; position: absolute; left: -2px; right: -2px; top: 50%; border-top: 2px solid var(--measured);
-  transform: rotate(-45deg); }
-body.output-on .live-handle .out-icon { opacity: 1; filter: none; }
-body.output-on .live-handle .out-icon::after { display: none; }
-
-/* 分布図の閾値のラベル: 小さく、太字なし */
-.fig.dist text.lbl { font-size: calc(11px * var(--k, 1)); font-weight: 400; }
-.fig.dist text.tick, .fig.dist text.live-lbl { font-size: calc(10px * var(--k, 1)); }
-.fig text { font-weight: 400; }
-
-/* 時間のダイヤルは、横に並ぶ図の高さの中で上下の中央に */
-.lrow.with-dial { align-items: center; }
-.lrow.with-dial > .dial-card { margin-top: 0; }
+@media (max-width: 760px) {
+  .wbody { grid-template-columns: 1fr; }
+  .ctl { grid-template-columns: 1fr auto; }
+  .bar { flex-wrap: wrap; }
+  .group-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .unit-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .range-btn.span4, .range-btn.span6 { grid-column: 1 / span 3; }
+}

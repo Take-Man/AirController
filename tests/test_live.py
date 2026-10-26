@@ -79,15 +79,14 @@ def test_safe_moment_and_interrupt_during_drag():
     eng.reset()
     seen_unsafe = False
     for f in iter_frames(FIX / "use03.jsonl"):
-        evs = eng.update(f)
+        eng.update(f)
         if eng.state.mode == "drag":
             assert not eng.safe_to_reconfigure()
             seen_unsafe = True
             out = eng.interrupt(f.t_capture_ns)
             assert [e.kind for e in out] == ["drag_end", "release_all"]
-            assert eng.state.mode == "drag" or True  # 次のフレームでモードが決まり直す
-            nxt = eng.update(f)
-            assert eng.safe_to_reconfigure() or eng.state.mode in ("peace", "thumbsup", "zoom")
+            eng.update(f)  # 打ち切った後は、ピンチもドラッグも始まっていない
+            assert eng._pinch_start is None and not eng._dragging
             break
     assert seen_unsafe
 

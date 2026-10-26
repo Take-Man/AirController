@@ -211,7 +211,6 @@ def test_drag_tolerates_brief_opening():
 
 
 def test_roi_adapts_toward_hand_outside():
-    from aircontroller.types import LandmarkFrame as LF
     c = GestureConfig(roi_adapt=True, roi_width=0.3)
     eng = GestureEngine(c)
     x0, _, w, _ = eng.roi((1280, 720))
