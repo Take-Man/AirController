@@ -85,6 +85,7 @@ class App:
         self.calib_history = self.root / "calibration-history"
         self.token = secrets.token_urlsafe(24)
         self.jobs: dict[str, Job] = {}
+        self.closed_by_page = False  # 画面の「終了」で止めた
         self.lock = threading.Lock()
         self._dist_cache: dict = {}
 
@@ -368,6 +369,18 @@ class App:
             self.jobs[job.id] = job
         return {"job": job.id}
 
+    def shutdown(self, force: bool) -> dict:
+        """画面の「終了」（13.52）。測定・見積もりの途中なら、force でなければ止めずに知らせる。force のときは、見積もりは
+        結果を受け取れないので止め、測定（calibrate。候補は calibration-history/ に残る）は最後まで動かす。"""
+        running = sorted({j.kind for j in self.jobs.values() if j.proc.poll() is None})
+        if running and not force:
+            return {"busy": running}
+        for j in self.jobs.values():
+            if j.kind == "eval" and j.proc.poll() is None:
+                j.proc.terminate()
+        self.closed_by_page = True
+        return {"ok": True, "left": [k for k in running if k == "measure"]}
+
     def job(self, ident: str) -> dict:
         j = self.jobs.get(ident)
         if j is None:
@@ -512,10 +525,14 @@ def make_handler(app: App, port_ref: list[int]):
                     out = app.live_request("POST", "/mode", {"output": bool(body.get("output"))})
                 elif path == "/api/eval":
                     out = app.evaluate(body.get("values", {}), str(body.get("label", "")))
+                elif path == "/api/shutdown":
+                    out = app.shutdown(bool(body.get("force")))
                 else:
                     self._send(404, {"error": "ありません"})
                     return
                 self._send(200, out)
+                if path == "/api/shutdown" and out.get("ok"):  # 応答を返してから止める（serve_forever が戻り、settings コマンドが終わる）
+                    threading.Thread(target=self.server.shutdown, daemon=True).start()
             except (ValueError, TypeError, OSError) as e:
                 self._send(400, {"error": str(e)})
     return Handler

@@ -539,7 +539,10 @@ def cmd_run(args, cfg: dict) -> int:
 
             hb["collapsed"] = bool(ui.get("overlay_collapsed", False))
 
+            from .settings_launch import SettingsLauncher
+
             Overlay(overlay_state, tick, on_camera_button=camera_button,
+                    on_settings_button=SettingsLauncher(ROOT, args.config),
                     collapsed=bool(ui.get("overlay_collapsed", False)), on_collapse_change=collapse_changed).run()
     finally:
         cleanup()
@@ -1570,17 +1573,28 @@ def cmd_settings(args, cfg: dict) -> int:
 
     from .settings_server import App, serve
 
+    from .settings_launch import remove_info, write_info
+
     app = App(ROOT, args.config)
     httpd, url = serve(app, args.port)
+    write_info(ROOT, httpd.server_address[1], url)  # オーバーレイのギアのボタンが、動いているこのサーバーを開くため（13.51）
     print(f"設定画面: {url}\n（この URL にはトークンが入っています。終わるには Ctrl+C）", flush=True)
     if not args.no_open:
         webbrowser.open(url)
+
+    def on_term(*_):
+        raise KeyboardInterrupt  # kill <PID>（ギアのボタンから起動したものは端末を持たない）でも、settings-server.json を消して終わる
+
+    signal.signal(signal.SIGTERM, on_term)
     try:
         httpd.serve_forever()
+        if app.closed_by_page:
+            print("設定画面を終わります（画面の「終了」）")
     except KeyboardInterrupt:
         print("\n設定画面を終わります")
     finally:
         httpd.server_close()
+        remove_info(ROOT)
     return 0
 
 

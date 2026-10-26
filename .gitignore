@@ -11,3 +11,4 @@ auto.toml
 settings-history/
 calibration-history/
 live.json
+settings-server.json

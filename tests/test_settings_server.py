@@ -137,3 +137,47 @@ def test_dist_from_learn_recording(server, tmp_path):
     shutil.copy(src.with_suffix(".labels.json"), tmp_path / "recordings" / src.with_suffix(".labels.json").name)
     d = app.dist("zoom")
     assert d["available"] and {p["label"] for p in d["points"]} == {"neutral", "in", "out"}
+
+
+class _FakeJob:
+    def __init__(self, kind):
+        self.kind, self.terminated = kind, False
+        self.proc = self
+
+    def poll(self):
+        return 0 if self.terminated else None
+
+    def terminate(self):
+        self.terminated = True
+
+
+def test_shutdown_needs_token(server):
+    app, port = server
+    assert api(app, port, "POST", "/api/shutdown", {}, **{"X-Token": "x"})[0] == 403
+    assert not app.closed_by_page
+
+
+def test_shutdown_busy_then_force(server):
+    app, port = server
+    ev, me = _FakeJob("eval"), _FakeJob("measure")
+    app.jobs = {"a": ev, "b": me}
+    assert api(app, port, "POST", "/api/shutdown", {"force": False}) == (200, {"busy": ["eval", "measure"]})
+    assert not app.closed_by_page and not ev.terminated
+    assert api(app, port, "GET", "/api/run")[0] == 200  # まだ動いている
+    s, out = api(app, port, "POST", "/api/shutdown", {"force": True})
+    assert (s, out) == (200, {"ok": True, "left": ["measure"]})
+    assert ev.terminated and not me.terminated  # 見積もりは止め、測定は最後まで動かす
+    assert app.closed_by_page
+
+
+def test_shutdown_stops_server(tmp_path):
+    shutil.copy(ROOT / "config.toml", tmp_path / "config.toml")
+    app = App(tmp_path)
+    httpd, _ = serve(app, 0)
+    port = httpd.server_address[1]
+    th = threading.Thread(target=httpd.serve_forever, daemon=True)
+    th.start()
+    assert api(app, port, "POST", "/api/shutdown", {}) == (200, {"ok": True, "left": []})
+    th.join(timeout=5)  # serve_forever が戻る（settings コマンドが終わる）
+    assert not th.is_alive()
+    httpd.server_close()

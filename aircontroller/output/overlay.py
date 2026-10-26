@@ -14,8 +14,8 @@ import objc
 from Foundation import NSObject, NSMakeRect, NSMakePoint
 
 W, H = 280, 236
-SMALL_W, SMALL_H = 210, 52  # カメラを止めている間（No signal）の大きさ
-COMPACT_W, COMPACT_H = 236, 52  # 畳んだ状態（TASKS-20261025 第4節）。No signal の帯と同程度
+SMALL_W, SMALL_H = 252, 52  # カメラを止めている間（No signal）の大きさ（ギアのボタンの分、210 から広げた。13.51）
+COMPACT_W, COMPACT_H = 263, 52  # 畳んだ状態（TASKS-20261025 第4節）。ギアのボタンの分、236 から広げた（13.51）
 BTN = 30  # カメラのボタンの大きさ
 SBTN = 22  # 畳んだ帯のボタンの大きさ
 POWER_JA = {"on": "オン", "off": "オフ", "probe": "確認中"}
@@ -38,9 +38,9 @@ def _text(s, x, y, size=12, rgb=(1, 1, 1), bold=False):
     AppKit.NSString.stringWithString_(s).drawAtPoint_withAttributes_(NSMakePoint(x, y), attrs)
 
 
-def _text_fit(s, x, y, size, rgb, max_w: float) -> None:
+def _text_fit(s, x, y, size, rgb, max_w: float, bold: bool = False) -> None:
     """幅 max_w に収まるよう、末尾を … で切って描く。"""
-    font = AppKit.NSFont.monospacedDigitSystemFontOfSize_weight_(size, 0.0)
+    font = AppKit.NSFont.boldSystemFontOfSize_(size) if bold else AppKit.NSFont.monospacedDigitSystemFontOfSize_weight_(size, 0.0)
     attrs = {AppKit.NSFontAttributeName: font}
 
     def width(t):
@@ -50,7 +50,7 @@ def _text_fit(s, x, y, size, rgb, max_w: float) -> None:
         while s and width(s + "…") > max_w:
             s = s[:-1]
         s += "…"
-    _text(s, x, y, size, rgb)
+    _text(s, x, y, size, rgb, bold)
 
 
 def _draw_peace(v, cx: float, cy: float, r: float) -> None:
@@ -109,6 +109,30 @@ def _draw_camera_button(r, slashed: bool) -> None:
 def _draw_collapse_button(r, collapsed: bool) -> None:
     """畳む／広げるのボタン。"""
     _draw_symbol_button(r, "chevron.down" if collapsed else "chevron.up", "▼" if collapsed else "▲")
+
+
+def _draw_settings_button(r) -> None:
+    """設定画面を開くボタン（ギア）。"""
+    _draw_symbol_button(r, "gearshape.fill", "⚙")
+
+
+def full_buttons(ty: float) -> list[tuple[str, tuple]]:
+    """展開した表示のボタン（右から カメラ・設定・畳む）。ty はモードの行の上端。"""
+    return [("camera", (W - BTN - 10, ty, BTN, BTN)), ("settings", (W - 2 * BTN - 16, ty, BTN, BTN)),
+            ("collapse", (W - 3 * BTN - 22, ty, BTN, BTN))]
+
+
+def compact_buttons() -> list[tuple[str, tuple]]:
+    """畳んだ帯のボタン（右から カメラ・設定・広げる）。"""
+    y = (COMPACT_H - SBTN) / 2
+    return [("camera", (COMPACT_W - SBTN - 8, y, SBTN, SBTN)), ("settings", (COMPACT_W - 2 * SBTN - 13, y, SBTN, SBTN)),
+            ("collapse", (COMPACT_W - 3 * SBTN - 18, y, SBTN, SBTN))]
+
+
+def small_buttons() -> list[tuple[str, tuple]]:
+    """No signal の表示のボタン（右から カメラ・設定）。"""
+    y = (SMALL_H - BTN) / 2
+    return [("camera", (SMALL_W - BTN - 11, y, BTN, BTN)), ("settings", (SMALL_W - 2 * BTN - 17, y, BTN, BTN))]
 
 
 _SYMBOLS: dict = {}  # (名前, 大きさ) → 白く塗ったアイコン。毎回作ると、待機中の描画だけで CPU 15〜24% を使っていた
@@ -195,6 +219,7 @@ class OverlayView(AppKit.NSView):
         self.buttons = []  # 表示中のボタン [(rect, callback)]
         self.on_button = None  # カメラのボタン
         self.on_collapse = None  # 畳む／広げるのボタン
+        self.on_settings = None  # 設定画面を開くボタン（ギア。None なら出さない）
         self.collapsed = False
         return self
 
@@ -206,10 +231,31 @@ class OverlayView(AppKit.NSView):
 
     def mouseDown_(self, event):
         p = self.convertPoint_fromView_(event.locationInWindow(), None)
+        self.press(p.x, p.y)
+
+    @objc.python_method
+    def press(self, x: float, y: float) -> bool:
+        """(x, y)（ビューの座標、上が 0）にあるボタンのコールバックを呼ぶ。"""
         for r, cb in self.buttons:
-            if cb and r[0] <= p.x <= r[0] + r[2] and r[1] <= p.y <= r[1] + r[3]:
+            if cb and r[0] <= x <= r[0] + r[2] and r[1] <= y <= r[1] + r[3]:
                 cb()
-                return
+                return True
+        return False
+
+    @objc.python_method
+    def _add_buttons(self, rects: list[tuple[str, tuple]], collapsed: bool) -> None:
+        """ボタンを描き、押せるように登録する。"""
+        for name, r in rects:
+            cb = {"camera": self.on_button, "settings": self.on_settings, "collapse": self.on_collapse}[name]
+            if name == "settings" and cb is None:
+                continue
+            if name == "camera":
+                _draw_camera_button(r, slashed=self.state.get("camera", "running") == "running")
+            elif name == "settings":
+                _draw_settings_button(r)
+            else:
+                _draw_collapse_button(r, collapsed=collapsed)
+            self.buttons.append((r, cb))
 
     def drawRect_(self, rect):
         _color((0.08, 0.08, 0.1), 0.78).setFill()
@@ -220,13 +266,12 @@ class OverlayView(AppKit.NSView):
             return
         if s.get("camera", "running") != "running":  # カメラを止めている: No signal と、起動のボタンだけ
             msg = {"starting": "カメラを起動中…", "error": "カメラを起動できません"}.get(s["camera"], "No signal")
-            _text(msg, 14, 10, 15, (0.9, 0.9, 0.9), bold=True)
             sub = {"stopped": f"{s.get('camera_reason') or ''}停止・ボタンか有効化で再開"}.get(s["camera"], "")
-            _text(sub, 14, 30, 10, (0.7, 0.7, 0.7))
-            if s["camera"] in ("stopped", "error"):
-                r = (SMALL_W - BTN - 11, (SMALL_H - BTN) / 2, BTN, BTN)
-                _draw_camera_button(r, slashed=False)
-                self.buttons.append((r, self.on_button))
+            rects = small_buttons() if s["camera"] in ("stopped", "error") else []
+            max_w = min(r[0] for _, r in rects) - 14 - 6 if rects else SMALL_W - 28
+            _text_fit(msg, 14, 10, 15, (0.9, 0.9, 0.9), max_w, bold=True)
+            _text_fit(sub, 14, 30, 10, (0.7, 0.7, 0.7), max_w)
+            self._add_buttons(rects, collapsed=False)
             return
         if self.collapsed:
             self._draw_compact(s)
@@ -255,17 +300,12 @@ class OverlayView(AppKit.NSView):
             _color(mode_rgb, 1.0 if s["active"] else 0.5).setFill()
             AppKit.NSBezierPath.bezierPathWithOvalInRect_(NSMakeRect(cx - 7, cy - 7, 14, 14)).fill()
         tx = 52
-        max_w = COMPACT_W - tx - (2 * SBTN + 18 if not s["active"] else 8)
+        max_w = (min(r[0] for _, r in compact_buttons()) - 6 if not s["active"] else COMPACT_W - 8) - tx
         _text_fit(self._mode_label(s), tx, 5, 14, mode_rgb if s["active"] else (0.7, 0.7, 0.7), max_w)
         sub = s["warning"] if s.get("warning") else f"手 {s.get('hand_label', '-')}  {s.get('config_label', '')}"
         _text_fit(sub, tx, 29, 10, (1.0, 0.45, 0.4) if s.get("warning") else (0.8, 0.8, 0.8), max_w)
         if not s["active"]:  # 待機中だけボタンを出す（操作中はクリックを下のウィンドウへ通す）
-            y = (COMPACT_H - SBTN) / 2
-            r_cam = (COMPACT_W - SBTN - 8, y, SBTN, SBTN)
-            r_col = (COMPACT_W - 2 * SBTN - 13, y, SBTN, SBTN)
-            _draw_camera_button(r_cam, slashed=True)
-            _draw_collapse_button(r_col, collapsed=True)
-            self.buttons += [(r_cam, self.on_button), (r_col, self.on_collapse)]
+            self._add_buttons(compact_buttons(), collapsed=True)
 
     def _draw_full(self, s):
         # カメラ画像（鏡像）内の操作範囲と検出位置
@@ -302,19 +342,26 @@ class OverlayView(AppKit.NSView):
         else:
             _draw_ring(cx, cy, r, s.get("wake_progress", 0.0) if s.get("power") == "probe" else 0.0,
                        (0.3, 0.9, 0.5), 4)
-        _text(self._mode_label(s), ox + 38, ty + 2, 17, mode_rgb if s["active"] else (0.7, 0.7, 0.7), bold=True)
+        # 待機中は、ボタンの手前で切る（ギアの分、以前より 36pt 狭い。13.51）
+        max_w = (min(r[0] for _, r in full_buttons(ty)) - 6 if not s["active"] else W - PAD) - (ox + 38)
+        _text_fit(self._mode_label(s), ox + 38, ty + 2, 17, mode_rgb if s["active"] else (0.7, 0.7, 0.7), max_w, bold=True)
         pn = s["pinch_n"]
-        _text((f"pinch {pn:.2f}" if not math.isnan(pn) else "pinch -") + f"   {s.get('config_label', '')}",
-              ox + 38, ty + 22, 11, (0.85, 0.85, 0.85))
+        _text_fit((f"pinch {pn:.2f}" if not math.isnan(pn) else "pinch -") + f"   {s.get('config_label', '')}",
+                  ox + 38, ty + 22, 11, (0.85, 0.85, 0.85), max_w)
         _text(s["status"], ox, ty + 42, 11, (0.85, 0.85, 0.85))
         if s.get("warning"):
             _text(s["warning"], ox, ty + 58, 11, (1.0, 0.45, 0.4))
-        if not s["active"]:  # 待機中だけ、カメラを止めるボタンと、畳むボタンを出す
-            r_cam = (W - BTN - 10, ty, BTN, BTN)
-            r_col = (W - 2 * BTN - 16, ty, BTN, BTN)
-            _draw_camera_button(r_cam, slashed=True)
-            _draw_collapse_button(r_col, collapsed=False)
-            self.buttons += [(r_cam, self.on_button), (r_col, self.on_collapse)]
+        if not s["active"]:  # 待機中だけ、カメラを止めるボタン、設定画面を開くボタン、畳むボタンを出す
+            self._add_buttons(full_buttons(ty), collapsed=False)
+
+
+def buttons_shown(s) -> bool:
+    """ボタン（カメラ・設定・畳む）を出す状態: カメラが止まっている（No signal の停止・エラー）か、カメラが動いていて操作がオフ。"""
+    if not s:
+        return False
+    if s.get("camera", "running") != "running":
+        return s.get("camera") in ("stopped", "error")
+    return not s.get("active", True)
 
 
 class _Ticker(NSObject):
@@ -352,10 +399,12 @@ class Overlay:
     def __init__(self, get_state: Callable[[], dict | None], tick: Callable[[], bool], hz: float = 30.0,
                  idle_hz: float = 10.0,
                  on_camera_button: Callable[[], None] | None = None, collapsed: bool = False,
-                 on_collapse_change: Callable[[bool], None] | None = None):
+                 on_collapse_change: Callable[[bool], None] | None = None,
+                 on_settings_button: Callable[[], None] | None = None):
         """tick() は描画のたびに呼ばれ、False を返すとイベントループを止める。
         on_camera_button: カメラのボタンが押されたとき（メインスレッド）。ボタンを出している間だけクリックを受け取る。
-        collapsed: 畳んだ状態で始める。on_collapse_change: 畳む／広げるのボタンで切り替えたとき（状態の保存に使う）。"""
+        collapsed: 畳んだ状態で始める。on_collapse_change: 畳む／広げるのボタンで切り替えたとき（状態の保存に使う）。
+        on_settings_button: ギアのボタン（設定画面を開く。メインスレッドから呼ぶので、すぐ戻ること）。カメラのボタンと同じときに出す。"""
         self.app = AppKit.NSApplication.sharedApplication()
         self.app.setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)  # Dock に出さず、フォーカスを取らない
         screen = AppKit.NSScreen.mainScreen().visibleFrame()
@@ -376,6 +425,7 @@ class Overlay:
         self.view = OverlayView.alloc().initWithFrame_(NSMakeRect(0, 0, W, H))
         self.view.get_state = get_state
         self.view.on_button = on_camera_button
+        self.view.on_settings = on_settings_button
         self.view.collapsed = collapsed
 
         def toggle_collapse():
@@ -411,8 +461,8 @@ class Overlay:
                                                       sc.origin.y + sc.size.height - h - 16, w, h), True)
                 self.view.setFrame_(NSMakeRect(0, 0, w, h))
             # ボタンを出しているときだけクリックを受け取る（それ以外は下のウィンドウへ通す）
-            clickable = bool(s) and on_camera_button is not None and (
-                (small and s.get("camera") in ("stopped", "error")) or (not small and not s.get("active", True)))
+            clickable = bool(s) and (on_camera_button is not None or on_settings_button is not None) and \
+                buttons_shown(s)
             if clickable == self.win.ignoresMouseEvents():
                 self.win.setIgnoresMouseEvents_(not clickable)
             # 待機中・カメラ停止中は、タイマーそのものを idle_hz に下げる（30Hz のタイマーの呼び出しだけで CPU 約 4% だった）

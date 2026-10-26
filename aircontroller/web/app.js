@@ -971,6 +971,35 @@ function renderHistory() {
   document.getElementById("btn-undo").disabled = S.history.length < 2;
 }
 
+// ---------------------------------------------------------------- 終了（13.52）
+let runTimer = null;
+
+async function quit() {
+  const n = changedIds().length;
+  const body = [el("p", {}, "設定画面のサーバーを止めます。run は止めません（つながっていれば設定モードを抜け、操作に戻ります）。"),
+    n ? el("p", {}, `変更中の ${n} 項目は確定せずに捨てます。`) : null,
+    el("p", { class: "muted" }, "もう一度開くには、オーバーレイのギアのボタンか python -m aircontroller settings。")];
+  if (!(await confirmBox("設定画面を終了する", body, n ? "捨てて終了" : "終了"))) return;
+  try {
+    let r = await api("/api/shutdown", { force: false });
+    if (r.busy) {
+      const what = r.busy.map((k) => ({ measure: "測定", eval: "見積もり" }[k] || k)).join("・");
+      const ok = await confirmBox(`${what}の途中です`, [
+        r.busy.includes("eval") ? el("p", {}, "見積もりは止めます（結果は出ません）。") : null,
+        r.busy.includes("measure") ? el("p", {}, "測定（calibrate）は最後まで動き、候補は calibration-history/ に残ります。画面には出ません。") : null],
+      "それでも終了");
+      if (!ok) return;
+      r = await api("/api/shutdown", { force: true });
+    }
+  } catch (e) { return toast(`終了できませんでした: ${e.message}`); }
+  for (const k of Object.keys(edits)) delete edits[k]; // run には送らない（サーバーが止まると run は保存済みの値に戻る）
+  clearInterval(runTimer);
+  if (live.es) { live.es.close(); live.es = null; }
+  document.body.replaceChildren(el("main", {}, el("section", { class: "panel" }, el("h2", {}, "設定画面を終了しました"),
+    el("p", { class: "muted" }, "このタブは閉じてかまいません。もう一度開くには、オーバーレイのギアのボタンか python -m aircontroller settings。"))));
+  window.close(); // スクリプトで開いたタブでなければ閉じない（そのときは上の案内が残る）
+}
+
 function clearEdits() { for (const k of Object.keys(edits)) delete edits[k]; sendLiveConfig(); }
 
 async function restore(id, label) {
@@ -1324,7 +1353,8 @@ function setup() {
   };
   document.getElementById("btn-eval-edit").onclick = () => evaluate(Object.fromEntries(changedIds().map((id) => [id, edits[id]])), "変更中の値");
   window.addEventListener("beforeunload", (e) => { if (changedIds().length) { e.preventDefault(); e.returnValue = ""; } });
-  setInterval(async () => {
+  document.getElementById("btn-quit").onclick = quit;
+  runTimer = setInterval(async () => {
     try { const r = await api("/api/run"); S.run = r.run; live.available = r.live; refreshTop(); if (r.live) connectLive(); }
     catch (e) { /* サーバーが止まった */ }
   }, 3000);
