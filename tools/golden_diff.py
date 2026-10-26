@@ -5,6 +5,11 @@
   既定は今の config.toml + calibration.toml で流す（make_golden と同じ）。--golden-config は期待値に保存された設定で流す
   （コードの変更だけの影響を見る）。--set key=value（JSON の値）で、その設定だけ上書きする（変えた設定の影響を見る）。
   --write で、その設定で期待値を書き直す（差を確かめてから使う）。
+
+今の設定の期待値（tests/golden-current/、SPEC 13.50）: --current を付ける。
+  既定は tests/golden-current/ の全要約を、今の config.toml + calibration.toml（auto.toml は含めない）で流して比べる。記録を
+  指定するとそれだけ（新しい記録を加えるときも、記録を指定して --write）。--golden-config は要約に保存された設定で流す
+  （コードの変更だけの影響を見る）。--set も使える。--write で要約を書き直す（作者が変化を意図したものと確かめてから）。
 """
 from __future__ import annotations
 
@@ -27,6 +32,44 @@ def key(e: dict) -> str:
     return f"{e['kind']}:{sub}" if sub else e["kind"]
 
 
+def main_current(paths: list[Path], use_golden: bool, sets: dict, write: bool) -> None:
+    import dataclasses
+
+    from tests import golden_current as gc
+
+    items = [(gc.expected_path(p), p) for p in paths] if paths else \
+        [(e, ROOT / json.loads(e.read_text())["recording"]) for e in gc.expected_files()]
+    current = gc.current_config()
+    changed = 0
+    for exp, rec in items:
+        name = f"{exp.parent.name}/{exp.stem}"
+        if not rec.exists():
+            print(f"{name}: 記録がないので飛ばした")
+            continue
+        old = json.loads(exp.read_text()) if exp.exists() else None
+        known = GestureConfig.__dataclass_fields__
+        cfg = GestureConfig(**{k: v for k, v in old["config"].items() if k in known}) if use_golden and old \
+            else dataclasses.replace(current)
+        for k, v in sets.items():
+            setattr(cfg, k, v)
+        new = gc.compute(rec, cfg)
+        if write:
+            gc.write(exp, new)
+        if old is None:
+            print(f"{name}: 期待値なし（新規、{sum(new['counts'].values())} イベント）")
+            changed += 1
+            continue
+        cfg_diff = sorted(k for k in set(old["config"]) | set(new["config"]) if old["config"].get(k) != new["config"].get(k))
+        lines = gc.describe(old, new)
+        if lines:
+            changed += 1
+        print(f"{name}: " + ("差なし" if not lines else "差あり")
+              + (f"（設定の違い: {', '.join(cfg_diff)}）" if cfg_diff else ""))
+        for line in lines:
+            print("    " + line)
+    print(f"{len(items)} 本中 {changed} 本で差あり" + ("（書き直した）" if write else ""))
+
+
 def main(argv: list[str]) -> None:
     use_golden = "--golden-config" in argv
     write = "--write" in argv
@@ -39,6 +82,9 @@ def main(argv: list[str]) -> None:
             sets[k] = json.loads(v)
         elif not a.startswith("--"):
             rest.append(a)
+    if "--current" in argv:
+        main_current([Path(a) for a in rest], use_golden, sets, write)
+        return
     paths = [Path(a) for a in rest] or sorted((ROOT / "tests/fixtures").glob("*.jsonl"))
     known = GestureConfig.__dataclass_fields__
     for p in paths:

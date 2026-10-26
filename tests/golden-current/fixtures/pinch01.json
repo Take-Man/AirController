@@ -1,0 +1,627 @@
+{
+ "recording": "tests/fixtures/pinch01.jsonl",
+ "config": {
+  "min_score": 0.5,
+  "hand": "right",
+  "hand_switch_frames": 5,
+  "hand_switch_jump": 0.15,
+  "hand_settle_frames": 30,
+  "acquire_hold_ms": 120.0,
+  "lose_hold_ms": 150.0,
+  "posture_hold_ms": 120.0,
+  "posture_release_ms": 150.0,
+  "index_up_enter": 0.85,
+  "index_up_exit": 0.7,
+  "base_length_m": 0.1862,
+  "pinch_metric": "image",
+  "pinch_on": 0.205,
+  "pinch_off": 0.2448,
+  "click_min_ms": 40.0,
+  "right_on": 0.15,
+  "right_off": 0.22,
+  "right_arm": 0.35,
+  "right_arm_window_ms": 600.0,
+  "drag_ms": 500.0,
+  "drag_lost_release_ms": 500.0,
+  "drag_off": 0.257,
+  "drag_release_ms": 100.0,
+  "right_hold_ms": 400.0,
+  "zoom_enabled": true,
+  "zoom_back_min": 0.5,
+  "zoom_stay_back_min": 0.2,
+  "zoom_stay_open_min": 0.66,
+  "zoom_open_min": 0.8,
+  "zoom_enter_hold_ms": 300.0,
+  "zoom_thumb_max": -0.3,
+  "zoom_stay_thumb_max": -0.1,
+  "zoom_signal": "depth",
+  "zoom_sign": 1.0,
+  "zoom_dead": 0.0485,
+  "zoom_max": 0.1384,
+  "zoom_fire_level": 0.5,
+  "zoom_fire_hold_ms": 300.0,
+  "zoom_rearm_frac": 1.0,
+  "zoom_min_cutoff": 1.0,
+  "zoom_beta": 0.5,
+  "fist_enabled": true,
+  "fist_enter": 0.6,
+  "fist_exit": 0.75,
+  "thumbsup_enabled": true,
+  "thumbsup_index_max": 0.8,
+  "thumbsup_up_min": 0.6,
+  "thumbsup_fold_max": -0.3,
+  "thumbsup_thumb_far_min": 1.271,
+  "thumbsup_stay_thumb_far_min": 1.017,
+  "thumbsup_stay_up_min": 0.5,
+  "thumbsup_stay_index_max": 0.9,
+  "thumbsup_dead_disp": 0.4,
+  "thumbsup_max_disp": 1.926,
+  "thumbsup_fire_left": 1.204,
+  "thumbsup_fire_right": 1.045,
+  "thumbsup_fire_up": 0.6,
+  "thumbsup_rearm_disp": 0.28,
+  "thumbsup_x_w_thumb": 0.0,
+  "thumbsup_x_w_knuckle": 0.0,
+  "thumbsup_y_w_thumb": 0.0,
+  "thumbsup_y_w_knuckle": 0.0,
+  "thumbsup_dwell_ms": 400.0,
+  "thumbsup_cooldown_ms": 600.0,
+  "thumbsup_still_speed": 1.5,
+  "thumbsup_still_ms": 250.0,
+  "thumbsup_center_follow_s": 2.0,
+  "peace_enabled": true,
+  "peace_exit_straight": 0.55,
+  "ring_down_max": 0.88,
+  "thumb_fold_on": 0.3405,
+  "thumb_fold_off": 0.2564,
+  "peace_method": "displacement",
+  "nav_dwell_ms": 400.0,
+  "peace_neutral_yaw_deg": -37.6,
+  "peace_neutral_pitch_deg": 6.7,
+  "peace_dead_deg": 12.0,
+  "peace_max_deg": 40.0,
+  "peace_fire_deg": 25.0,
+  "peace_rearm_deg": 10.0,
+  "peace_dead_disp": 0.3,
+  "peace_max_disp": 1.2,
+  "peace_fire_disp": 0.5,
+  "peace_rearm_disp": 0.25,
+  "peace_min_cutoff": 1.0,
+  "peace_beta": 0.02,
+  "scroll_max_speed": 2000.0,
+  "scroll_exponent": 1.8,
+  "scroll_invert": false,
+  "nav_cooldown_ms": 500.0,
+  "nav_swap": true,
+  "screen_w": 1440.0,
+  "screen_h": 900.0,
+  "roi_cx": 0.505,
+  "roi_cy": 0.54,
+  "roi_width": 0.5513,
+  "cursor_min_cutoff": 1.0,
+  "cursor_beta": 0.02,
+  "cursor_d_cutoff": 1.0,
+  "roi_adapt": true,
+  "roi_adapt_tau_s": 0.5,
+  "roi_adapt_shift": 0.3,
+  "roi_adapt_grow": 0.05,
+  "roi_width_min": 0.15,
+  "roi_width_max": 0.6,
+  "position_scale": null
+ },
+ "sha256": "2d764dd6a7d2229914912af4bb6e5e0d3cb946cef9bb5b6dd1a1338c2a80404d",
+ "counts": {
+  "drag_end:deactivated": 8,
+  "drag_start": 8,
+  "hand_acquired": 1,
+  "hand_lost": 1,
+  "move": 404,
+  "pinch_cancel:deactivated": 9,
+  "pinch_start:left": 17,
+  "release_all": 37
+ },
+ "move": 404,
+ "scroll": {
+  "count": 0,
+  "dy": 0
+ },
+ "events": [
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5637617423807958,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637621021757083,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637621422613583,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637621422613583,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637622123392708,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637622656242458,
+   "data": {
+    "x": 1220.3,
+    "y": 372.35
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637622822400583,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637622822400583,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637623455689208,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637623988782250,
+   "data": {
+    "x": 1234.86,
+    "y": 370.8
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637624089411500,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637624089411500,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637624822174583,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637625353587166,
+   "data": {
+    "x": 1233.76,
+    "y": 375.45
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637625488191750,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637625488191750,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637626754868541,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637627920453000,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637628586424250,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637629120017250,
+   "data": {
+    "x": 1196.04,
+    "y": 395.89
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637629319155666,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637629319155666,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637630485282000,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637632018261916,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637633750714625,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637634550465958,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637635083607333,
+   "data": {
+    "x": 1204.66,
+    "y": 413.04
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637635282049958,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637635282049958,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637635849446791,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637636351447583,
+   "data": {
+    "x": 1198.28,
+    "y": 419.02
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637636450832125,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637636450832125,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637638116132958,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637638648349750,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637638648349750,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637639280755791,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637639714816083,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637639714816083,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637640280415125,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637640747725333,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637640747725333,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637641314242666,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637641812874916,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637641812874916,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637642513987458,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637642980645291,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637642980645291,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637644581335416,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637646479131375,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637647313113000,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637647845946708,
+   "data": {
+    "x": 765.3,
+    "y": 648.65
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637648312237041,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637648312237041,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637649076638875,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637649578640041,
+   "data": {
+    "x": 749.59,
+    "y": 648.95
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637649645346916,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637649645346916,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637650211786375,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637650744991125,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637651677885000,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637652676155500,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637653608962666,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637654743269791,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637655274769708,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637655742856250,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637656240986708,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637656507499416,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637656940496750,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637656940496750,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637658172839166,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637659472430708,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637660406320041,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637660773840250,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637661204882208,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637661204882208,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637661540266666,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637661906813250,
+   "data": {
+    "reason": "deactivated"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637661906813250,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637662572879291,
+   "data": {}
+  },
+  {
+   "kind": "hand_lost",
+   "t_ns": 5637663271906125,
+   "data": {}
+  }
+ ]
+}

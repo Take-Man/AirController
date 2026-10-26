@@ -1,0 +1,507 @@
+{
+ "recording": "tests/fixtures/peace04.jsonl",
+ "config": {
+  "min_score": 0.5,
+  "hand": "right",
+  "hand_switch_frames": 5,
+  "hand_switch_jump": 0.15,
+  "hand_settle_frames": 30,
+  "acquire_hold_ms": 120.0,
+  "lose_hold_ms": 150.0,
+  "posture_hold_ms": 120.0,
+  "posture_release_ms": 150.0,
+  "index_up_enter": 0.85,
+  "index_up_exit": 0.7,
+  "base_length_m": 0.1862,
+  "pinch_metric": "image",
+  "pinch_on": 0.205,
+  "pinch_off": 0.2448,
+  "click_min_ms": 40.0,
+  "right_on": 0.15,
+  "right_off": 0.22,
+  "right_arm": 0.35,
+  "right_arm_window_ms": 600.0,
+  "drag_ms": 500.0,
+  "drag_lost_release_ms": 500.0,
+  "drag_off": 0.257,
+  "drag_release_ms": 100.0,
+  "right_hold_ms": 400.0,
+  "zoom_enabled": true,
+  "zoom_back_min": 0.5,
+  "zoom_stay_back_min": 0.2,
+  "zoom_stay_open_min": 0.66,
+  "zoom_open_min": 0.8,
+  "zoom_enter_hold_ms": 300.0,
+  "zoom_thumb_max": -0.3,
+  "zoom_stay_thumb_max": -0.1,
+  "zoom_signal": "depth",
+  "zoom_sign": 1.0,
+  "zoom_dead": 0.0485,
+  "zoom_max": 0.1384,
+  "zoom_fire_level": 0.5,
+  "zoom_fire_hold_ms": 300.0,
+  "zoom_rearm_frac": 1.0,
+  "zoom_min_cutoff": 1.0,
+  "zoom_beta": 0.5,
+  "fist_enabled": true,
+  "fist_enter": 0.6,
+  "fist_exit": 0.75,
+  "thumbsup_enabled": true,
+  "thumbsup_index_max": 0.8,
+  "thumbsup_up_min": 0.6,
+  "thumbsup_fold_max": -0.3,
+  "thumbsup_thumb_far_min": 1.271,
+  "thumbsup_stay_thumb_far_min": 1.017,
+  "thumbsup_stay_up_min": 0.5,
+  "thumbsup_stay_index_max": 0.9,
+  "thumbsup_dead_disp": 0.4,
+  "thumbsup_max_disp": 1.926,
+  "thumbsup_fire_left": 1.204,
+  "thumbsup_fire_right": 1.045,
+  "thumbsup_fire_up": 0.6,
+  "thumbsup_rearm_disp": 0.28,
+  "thumbsup_x_w_thumb": 0.0,
+  "thumbsup_x_w_knuckle": 0.0,
+  "thumbsup_y_w_thumb": 0.0,
+  "thumbsup_y_w_knuckle": 0.0,
+  "thumbsup_dwell_ms": 400.0,
+  "thumbsup_cooldown_ms": 600.0,
+  "thumbsup_still_speed": 1.5,
+  "thumbsup_still_ms": 250.0,
+  "thumbsup_center_follow_s": 2.0,
+  "peace_enabled": true,
+  "peace_exit_straight": 0.55,
+  "ring_down_max": 0.88,
+  "thumb_fold_on": 0.3405,
+  "thumb_fold_off": 0.2564,
+  "peace_method": "displacement",
+  "nav_dwell_ms": 400.0,
+  "peace_neutral_yaw_deg": -37.6,
+  "peace_neutral_pitch_deg": 6.7,
+  "peace_dead_deg": 12.0,
+  "peace_max_deg": 40.0,
+  "peace_fire_deg": 25.0,
+  "peace_rearm_deg": 10.0,
+  "peace_dead_disp": 0.3,
+  "peace_max_disp": 1.2,
+  "peace_fire_disp": 0.5,
+  "peace_rearm_disp": 0.25,
+  "peace_min_cutoff": 1.0,
+  "peace_beta": 0.02,
+  "scroll_max_speed": 2000.0,
+  "scroll_exponent": 1.8,
+  "scroll_invert": false,
+  "nav_cooldown_ms": 500.0,
+  "nav_swap": true,
+  "screen_w": 1440.0,
+  "screen_h": 900.0,
+  "roi_cx": 0.505,
+  "roi_cy": 0.54,
+  "roi_width": 0.5513,
+  "cursor_min_cutoff": 1.0,
+  "cursor_beta": 0.02,
+  "cursor_d_cutoff": 1.0,
+  "roi_adapt": true,
+  "roi_adapt_tau_s": 0.5,
+  "roi_adapt_shift": 0.3,
+  "roi_adapt_grow": 0.05,
+  "roi_width_min": 0.15,
+  "roi_width_max": 0.6,
+  "position_scale": null
+ },
+ "sha256": "69e7177c0a31caeea516fdf4287690d8fa0583f8c992b54b1e82dfb0615d3d3c",
+ "counts": {
+  "click:left": 13,
+  "drag_end:released": 1,
+  "drag_start": 1,
+  "hand_acquired": 2,
+  "hand_lost": 1,
+  "move": 1132,
+  "nav:back": 1,
+  "nav:forward": 2,
+  "pinch_cancel:left": 1,
+  "pinch_cancel:right": 6,
+  "pinch_start:left": 15,
+  "pinch_start:right": 6,
+  "release_all": 1,
+  "scroll": 560
+ },
+ "move": 1132,
+ "scroll": {
+  "count": 560,
+  "dy": 2895
+ },
+ "events": [
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5646799064500625,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646801064279916,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5646801595379291,
+   "data": {
+    "x": 969.32,
+    "y": 572.44
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5646801897080750,
+   "data": {
+    "reason": "released",
+    "duration_ms": 832.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646801930225625,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5646802062365208,
+   "data": {
+    "button": "right",
+    "reason": "released_early",
+    "duration_ms": 132.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646804095575458,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646804262398000,
+   "data": {
+    "button": "left",
+    "duration_ms": 166.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646809126520166,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5646809192515583,
+   "data": {
+    "button": "right",
+    "reason": "released_early",
+    "duration_ms": 66.0
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5646811163428208,
+   "data": {
+    "dir": "forward"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5646812958405208,
+   "data": {
+    "dir": "back"
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646845610437958,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646845812432291,
+   "data": {
+    "button": "left",
+    "duration_ms": 202.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646846645533666,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646846878456458,
+   "data": {
+    "button": "left",
+    "duration_ms": 232.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646847976064208,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646848142401833,
+   "data": {
+    "button": "left",
+    "duration_ms": 166.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646848510428291,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646848642556541,
+   "data": {
+    "button": "left",
+    "duration_ms": 132.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646854340811833,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646854575515250,
+   "data": {
+    "button": "left",
+    "duration_ms": 234.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646855774303083,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5646855841235833,
+   "data": {
+    "button": "right",
+    "reason": "released_early",
+    "duration_ms": 66.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646861772812250,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646861872471458,
+   "data": {
+    "button": "left",
+    "duration_ms": 99.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646862136502083,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646862205312708,
+   "data": {
+    "button": "left",
+    "duration_ms": 68.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646863570053958,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5646863703198500,
+   "data": {
+    "button": "right",
+    "reason": "released_early",
+    "duration_ms": 133.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646872467456375,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646872835251166,
+   "data": {
+    "button": "left",
+    "duration_ms": 367.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646881130058750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646881363641250,
+   "data": {
+    "button": "left",
+    "duration_ms": 233.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646881462827291,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5646881495839166,
+   "data": {
+    "button": "left",
+    "duration_ms": 33.0,
+    "reason": "too_short"
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646882295442916,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5646882362217166,
+   "data": {
+    "button": "right",
+    "reason": "released_early",
+    "duration_ms": 66.8
+   }
+  },
+  {
+   "kind": "hand_lost",
+   "t_ns": 5646885462573000,
+   "data": {}
+  },
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5646886859352250,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646892857413500,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646893092064458,
+   "data": {
+    "button": "left",
+    "duration_ms": 234.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646893225546333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646893356612083,
+   "data": {
+    "button": "left",
+    "duration_ms": 131.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646895123993083,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5646895156911500,
+   "data": {
+    "button": "right",
+    "reason": "released_early",
+    "duration_ms": 32.9
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5646906018702916,
+   "data": {
+    "dir": "forward"
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5646913116147625,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5646913216308416,
+   "data": {
+    "button": "left",
+    "duration_ms": 100.2
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5646917581757708,
+   "data": {}
+  }
+ ]
+}

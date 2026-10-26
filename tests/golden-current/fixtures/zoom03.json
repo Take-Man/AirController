@@ -1,0 +1,326 @@
+{
+ "recording": "tests/fixtures/zoom03.jsonl",
+ "config": {
+  "min_score": 0.5,
+  "hand": "right",
+  "hand_switch_frames": 5,
+  "hand_switch_jump": 0.15,
+  "hand_settle_frames": 30,
+  "acquire_hold_ms": 120.0,
+  "lose_hold_ms": 150.0,
+  "posture_hold_ms": 120.0,
+  "posture_release_ms": 150.0,
+  "index_up_enter": 0.85,
+  "index_up_exit": 0.7,
+  "base_length_m": 0.1862,
+  "pinch_metric": "image",
+  "pinch_on": 0.205,
+  "pinch_off": 0.2448,
+  "click_min_ms": 40.0,
+  "right_on": 0.15,
+  "right_off": 0.22,
+  "right_arm": 0.35,
+  "right_arm_window_ms": 600.0,
+  "drag_ms": 500.0,
+  "drag_lost_release_ms": 500.0,
+  "drag_off": 0.257,
+  "drag_release_ms": 100.0,
+  "right_hold_ms": 400.0,
+  "zoom_enabled": true,
+  "zoom_back_min": 0.5,
+  "zoom_stay_back_min": 0.2,
+  "zoom_stay_open_min": 0.66,
+  "zoom_open_min": 0.8,
+  "zoom_enter_hold_ms": 300.0,
+  "zoom_thumb_max": -0.3,
+  "zoom_stay_thumb_max": -0.1,
+  "zoom_signal": "depth",
+  "zoom_sign": 1.0,
+  "zoom_dead": 0.0485,
+  "zoom_max": 0.1384,
+  "zoom_fire_level": 0.5,
+  "zoom_fire_hold_ms": 300.0,
+  "zoom_rearm_frac": 1.0,
+  "zoom_min_cutoff": 1.0,
+  "zoom_beta": 0.5,
+  "fist_enabled": true,
+  "fist_enter": 0.6,
+  "fist_exit": 0.75,
+  "thumbsup_enabled": true,
+  "thumbsup_index_max": 0.8,
+  "thumbsup_up_min": 0.6,
+  "thumbsup_fold_max": -0.3,
+  "thumbsup_thumb_far_min": 1.271,
+  "thumbsup_stay_thumb_far_min": 1.017,
+  "thumbsup_stay_up_min": 0.5,
+  "thumbsup_stay_index_max": 0.9,
+  "thumbsup_dead_disp": 0.4,
+  "thumbsup_max_disp": 1.926,
+  "thumbsup_fire_left": 1.204,
+  "thumbsup_fire_right": 1.045,
+  "thumbsup_fire_up": 0.6,
+  "thumbsup_rearm_disp": 0.28,
+  "thumbsup_x_w_thumb": 0.0,
+  "thumbsup_x_w_knuckle": 0.0,
+  "thumbsup_y_w_thumb": 0.0,
+  "thumbsup_y_w_knuckle": 0.0,
+  "thumbsup_dwell_ms": 400.0,
+  "thumbsup_cooldown_ms": 600.0,
+  "thumbsup_still_speed": 1.5,
+  "thumbsup_still_ms": 250.0,
+  "thumbsup_center_follow_s": 2.0,
+  "peace_enabled": true,
+  "peace_exit_straight": 0.55,
+  "ring_down_max": 0.88,
+  "thumb_fold_on": 0.3405,
+  "thumb_fold_off": 0.2564,
+  "peace_method": "displacement",
+  "nav_dwell_ms": 400.0,
+  "peace_neutral_yaw_deg": -37.6,
+  "peace_neutral_pitch_deg": 6.7,
+  "peace_dead_deg": 12.0,
+  "peace_max_deg": 40.0,
+  "peace_fire_deg": 25.0,
+  "peace_rearm_deg": 10.0,
+  "peace_dead_disp": 0.3,
+  "peace_max_disp": 1.2,
+  "peace_fire_disp": 0.5,
+  "peace_rearm_disp": 0.25,
+  "peace_min_cutoff": 1.0,
+  "peace_beta": 0.02,
+  "scroll_max_speed": 2000.0,
+  "scroll_exponent": 1.8,
+  "scroll_invert": false,
+  "nav_cooldown_ms": 500.0,
+  "nav_swap": true,
+  "screen_w": 1440.0,
+  "screen_h": 900.0,
+  "roi_cx": 0.505,
+  "roi_cy": 0.54,
+  "roi_width": 0.5513,
+  "cursor_min_cutoff": 1.0,
+  "cursor_beta": 0.02,
+  "cursor_d_cutoff": 1.0,
+  "roi_adapt": true,
+  "roi_adapt_tau_s": 0.5,
+  "roi_adapt_shift": 0.3,
+  "roi_adapt_grow": 0.05,
+  "roi_width_min": 0.15,
+  "roi_width_max": 0.6,
+  "position_scale": null
+ },
+ "sha256": "34524e169d01c5ef3e824742e7bdffadbe662a3030e386c7be6996da4fa284d9",
+ "counts": {
+  "click:left": 1,
+  "hand_acquired": 3,
+  "hand_lost": 2,
+  "move": 229,
+  "nav:back": 5,
+  "nav:forward": 6,
+  "pinch_cancel:left": 1,
+  "pinch_cancel:right": 1,
+  "pinch_start:left": 2,
+  "pinch_start:right": 1,
+  "release_all": 1,
+  "scroll": 348,
+  "thumbsup:right": 1,
+  "zoom:in": 2,
+  "zoom:out": 2
+ },
+ "move": 229,
+ "scroll": {
+  "count": 348,
+  "dy": 683
+ },
+ "events": [
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5653684320562541,
+   "data": {}
+  },
+  {
+   "kind": "hand_lost",
+   "t_ns": 5653704911960625,
+   "data": {}
+  },
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5653705445859583,
+   "data": {}
+  },
+  {
+   "kind": "hand_lost",
+   "t_ns": 5653708145442166,
+   "data": {}
+  },
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5653709077399708,
+   "data": {}
+  },
+  {
+   "kind": "thumbsup",
+   "t_ns": 5653711642532250,
+   "data": {
+    "dir": "right"
+   }
+  },
+  {
+   "kind": "zoom",
+   "t_ns": 5653717206731166,
+   "data": {
+    "dir": "in"
+   }
+  },
+  {
+   "kind": "zoom",
+   "t_ns": 5653719237039916,
+   "data": {
+    "dir": "out"
+   }
+  },
+  {
+   "kind": "zoom",
+   "t_ns": 5653720372342416,
+   "data": {
+    "dir": "in"
+   }
+  },
+  {
+   "kind": "zoom",
+   "t_ns": 5653721871368250,
+   "data": {
+    "dir": "out"
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5653723169096875,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5653723669862500,
+   "data": {
+    "button": "left",
+    "duration_ms": 500.8,
+    "reason": "too_short"
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5653727902104458,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5653727934972833,
+   "data": {
+    "button": "right",
+    "reason": "posture",
+    "duration_ms": 32.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5653742061118916,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5653742128616583,
+   "data": {
+    "button": "left",
+    "duration_ms": 67.5
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653768050007541,
+   "data": {
+    "dir": "forward"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653770617854666,
+   "data": {
+    "dir": "back"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653773882058875,
+   "data": {
+    "dir": "back"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653776148401125,
+   "data": {
+    "dir": "forward"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653780579870208,
+   "data": {
+    "dir": "back"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653783078145250,
+   "data": {
+    "dir": "forward"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653788674596666,
+   "data": {
+    "dir": "forward"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653790375532041,
+   "data": {
+    "dir": "forward"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653792407126833,
+   "data": {
+    "dir": "forward"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653794406398541,
+   "data": {
+    "dir": "back"
+   }
+  },
+  {
+   "kind": "nav",
+   "t_ns": 5653800771125166,
+   "data": {
+    "dir": "back"
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5653802802740750,
+   "data": {}
+  }
+ ]
+}

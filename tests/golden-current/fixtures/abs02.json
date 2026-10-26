@@ -1,0 +1,1104 @@
+{
+ "recording": "tests/fixtures/abs02.jsonl",
+ "config": {
+  "min_score": 0.5,
+  "hand": "right",
+  "hand_switch_frames": 5,
+  "hand_switch_jump": 0.15,
+  "hand_settle_frames": 30,
+  "acquire_hold_ms": 120.0,
+  "lose_hold_ms": 150.0,
+  "posture_hold_ms": 120.0,
+  "posture_release_ms": 150.0,
+  "index_up_enter": 0.85,
+  "index_up_exit": 0.7,
+  "base_length_m": 0.1862,
+  "pinch_metric": "image",
+  "pinch_on": 0.205,
+  "pinch_off": 0.2448,
+  "click_min_ms": 40.0,
+  "right_on": 0.15,
+  "right_off": 0.22,
+  "right_arm": 0.35,
+  "right_arm_window_ms": 600.0,
+  "drag_ms": 500.0,
+  "drag_lost_release_ms": 500.0,
+  "drag_off": 0.257,
+  "drag_release_ms": 100.0,
+  "right_hold_ms": 400.0,
+  "zoom_enabled": true,
+  "zoom_back_min": 0.5,
+  "zoom_stay_back_min": 0.2,
+  "zoom_stay_open_min": 0.66,
+  "zoom_open_min": 0.8,
+  "zoom_enter_hold_ms": 300.0,
+  "zoom_thumb_max": -0.3,
+  "zoom_stay_thumb_max": -0.1,
+  "zoom_signal": "depth",
+  "zoom_sign": 1.0,
+  "zoom_dead": 0.0485,
+  "zoom_max": 0.1384,
+  "zoom_fire_level": 0.5,
+  "zoom_fire_hold_ms": 300.0,
+  "zoom_rearm_frac": 1.0,
+  "zoom_min_cutoff": 1.0,
+  "zoom_beta": 0.5,
+  "fist_enabled": true,
+  "fist_enter": 0.6,
+  "fist_exit": 0.75,
+  "thumbsup_enabled": true,
+  "thumbsup_index_max": 0.8,
+  "thumbsup_up_min": 0.6,
+  "thumbsup_fold_max": -0.3,
+  "thumbsup_thumb_far_min": 1.271,
+  "thumbsup_stay_thumb_far_min": 1.017,
+  "thumbsup_stay_up_min": 0.5,
+  "thumbsup_stay_index_max": 0.9,
+  "thumbsup_dead_disp": 0.4,
+  "thumbsup_max_disp": 1.926,
+  "thumbsup_fire_left": 1.204,
+  "thumbsup_fire_right": 1.045,
+  "thumbsup_fire_up": 0.6,
+  "thumbsup_rearm_disp": 0.28,
+  "thumbsup_x_w_thumb": 0.0,
+  "thumbsup_x_w_knuckle": 0.0,
+  "thumbsup_y_w_thumb": 0.0,
+  "thumbsup_y_w_knuckle": 0.0,
+  "thumbsup_dwell_ms": 400.0,
+  "thumbsup_cooldown_ms": 600.0,
+  "thumbsup_still_speed": 1.5,
+  "thumbsup_still_ms": 250.0,
+  "thumbsup_center_follow_s": 2.0,
+  "peace_enabled": true,
+  "peace_exit_straight": 0.55,
+  "ring_down_max": 0.88,
+  "thumb_fold_on": 0.3405,
+  "thumb_fold_off": 0.2564,
+  "peace_method": "displacement",
+  "nav_dwell_ms": 400.0,
+  "peace_neutral_yaw_deg": -37.6,
+  "peace_neutral_pitch_deg": 6.7,
+  "peace_dead_deg": 12.0,
+  "peace_max_deg": 40.0,
+  "peace_fire_deg": 25.0,
+  "peace_rearm_deg": 10.0,
+  "peace_dead_disp": 0.3,
+  "peace_max_disp": 1.2,
+  "peace_fire_disp": 0.5,
+  "peace_rearm_disp": 0.25,
+  "peace_min_cutoff": 1.0,
+  "peace_beta": 0.02,
+  "scroll_max_speed": 2000.0,
+  "scroll_exponent": 1.8,
+  "scroll_invert": false,
+  "nav_cooldown_ms": 500.0,
+  "nav_swap": true,
+  "screen_w": 1440.0,
+  "screen_h": 900.0,
+  "roi_cx": 0.505,
+  "roi_cy": 0.54,
+  "roi_width": 0.5513,
+  "cursor_min_cutoff": 1.0,
+  "cursor_beta": 0.02,
+  "cursor_d_cutoff": 1.0,
+  "roi_adapt": true,
+  "roi_adapt_tau_s": 0.5,
+  "roi_adapt_shift": 0.3,
+  "roi_adapt_grow": 0.05,
+  "roi_width_min": 0.15,
+  "roi_width_max": 0.6,
+  "position_scale": null
+ },
+ "sha256": "cb73cd417333df959d04377a2056c83b0ba0327facfe8544cde24f6e0996a5c1",
+ "counts": {
+  "click:left": 57,
+  "drag_end:released": 1,
+  "drag_start": 1,
+  "hand_acquired": 4,
+  "hand_lost": 4,
+  "move": 2694,
+  "pinch_cancel:left": 2,
+  "pinch_cancel:right": 1,
+  "pinch_start:left": 60,
+  "pinch_start:right": 1,
+  "release_all": 1
+ },
+ "move": 2694,
+ "scroll": {
+  "count": 0,
+  "dy": 0
+ },
+ "events": [
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5644039318952083,
+   "data": {}
+  },
+  {
+   "kind": "hand_lost",
+   "t_ns": 5644043816062166,
+   "data": {}
+  },
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5644068804793166,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644072837983083,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644073035505541,
+   "data": {
+    "button": "left",
+    "duration_ms": 197.5
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644074336881583,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644074537229125,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644074935196375,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644075370219291,
+   "data": {
+    "button": "left",
+    "duration_ms": 435.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644076068208708,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644076235041041,
+   "data": {
+    "button": "left",
+    "duration_ms": 166.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644077335341541,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644077702824916,
+   "data": {
+    "button": "left",
+    "duration_ms": 367.5
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644078735869125,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644079102253833,
+   "data": {
+    "button": "left",
+    "duration_ms": 366.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644080368933875,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644080766221458,
+   "data": {
+    "button": "left",
+    "duration_ms": 397.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644083631811750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644083831136041,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644085664315791,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644085865687833,
+   "data": {
+    "button": "left",
+    "duration_ms": 201.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644088296061083,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644088629276791,
+   "data": {
+    "button": "left",
+    "duration_ms": 333.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644092896161250,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644092961297833,
+   "data": {
+    "button": "left",
+    "duration_ms": 65.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644099558543750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644099925427333,
+   "data": {
+    "button": "left",
+    "duration_ms": 366.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644101723382208,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644102024008833,
+   "data": {
+    "button": "left",
+    "duration_ms": 300.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644103623913000,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5644104123946208,
+   "data": {
+    "x": 1131.99,
+    "y": 627.86
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5644104556750666,
+   "data": {
+    "reason": "released",
+    "duration_ms": 932.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644105656387916,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5644105689673875,
+   "data": {
+    "button": "left",
+    "duration_ms": 33.3,
+    "reason": "too_short"
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644105855951791,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644106089759708,
+   "data": {
+    "button": "left",
+    "duration_ms": 233.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644106655489750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644106755857708,
+   "data": {
+    "button": "left",
+    "duration_ms": 100.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644107522326708,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644107822005166,
+   "data": {
+    "button": "left",
+    "duration_ms": 299.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644108987794791,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644109387542125,
+   "data": {
+    "button": "left",
+    "duration_ms": 399.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644111520330333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644111720767000,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644112420345500,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644112753605083,
+   "data": {
+    "button": "left",
+    "duration_ms": 333.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644115018642500,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644115186528333,
+   "data": {
+    "button": "left",
+    "duration_ms": 167.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644116452040000,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644116752956625,
+   "data": {
+    "button": "left",
+    "duration_ms": 300.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644118684907291,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644119117107916,
+   "data": {
+    "button": "left",
+    "duration_ms": 432.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644120249915125,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644120584062041,
+   "data": {
+    "button": "left",
+    "duration_ms": 334.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644122182323333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644122449371541,
+   "data": {
+    "button": "left",
+    "duration_ms": 267.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644124181098875,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644124348276291,
+   "data": {
+    "button": "left",
+    "duration_ms": 167.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644125981113791,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644126180691708,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644126647429541,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644126846042416,
+   "data": {
+    "button": "left",
+    "duration_ms": 198.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644128278753916,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644128413442291,
+   "data": {
+    "button": "left",
+    "duration_ms": 134.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644129179654250,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644129345071000,
+   "data": {
+    "button": "left",
+    "duration_ms": 165.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644130611926375,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644130745964541,
+   "data": {
+    "button": "left",
+    "duration_ms": 134.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644131711663208,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644131812463625,
+   "data": {
+    "button": "left",
+    "duration_ms": 100.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644132512029541,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644132578677875,
+   "data": {
+    "button": "left",
+    "duration_ms": 66.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644133044200208,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644133245132041,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644134077876875,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644134245116666,
+   "data": {
+    "button": "left",
+    "duration_ms": 167.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644135776492541,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644135878157791,
+   "data": {
+    "button": "left",
+    "duration_ms": 101.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644136377642708,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644136478055208,
+   "data": {
+    "button": "left",
+    "duration_ms": 100.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644138210136208,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644138477037208,
+   "data": {
+    "button": "left",
+    "duration_ms": 266.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644139874723500,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644140052524416,
+   "data": {
+    "button": "left",
+    "duration_ms": 177.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644140507944500,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644140646358208,
+   "data": {
+    "button": "left",
+    "duration_ms": 138.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644142308837708,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644142474265750,
+   "data": {
+    "button": "left",
+    "duration_ms": 165.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644143608839458,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644143874535916,
+   "data": {
+    "button": "left",
+    "duration_ms": 265.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644143974405125,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644144240131541,
+   "data": {
+    "button": "left",
+    "duration_ms": 265.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644144374338458,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644144607772833,
+   "data": {
+    "button": "left",
+    "duration_ms": 233.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644146273443041,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644146506560291,
+   "data": {
+    "button": "left",
+    "duration_ms": 233.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644147237628208,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644147473069958,
+   "data": {
+    "button": "left",
+    "duration_ms": 235.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644148706189833,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644148838214125,
+   "data": {
+    "button": "left",
+    "duration_ms": 132.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644151337973583,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644151471543291,
+   "data": {
+    "button": "left",
+    "duration_ms": 133.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644155401664916,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644155568039208,
+   "data": {
+    "button": "left",
+    "duration_ms": 166.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644156935672333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644157136067333,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644158135195541,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644158268528250,
+   "data": {
+    "button": "left",
+    "duration_ms": 133.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644159466158750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644159567839166,
+   "data": {
+    "button": "left",
+    "duration_ms": 101.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644161498173791,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644161831387541,
+   "data": {
+    "button": "left",
+    "duration_ms": 333.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644162297933083,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644162631083833,
+   "data": {
+    "button": "left",
+    "duration_ms": 333.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644163031758958,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644163364133541,
+   "data": {
+    "button": "left",
+    "duration_ms": 332.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644163730545958,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644164063864041,
+   "data": {
+    "button": "left",
+    "duration_ms": 333.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644165431453458,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644165498515250,
+   "data": {
+    "button": "left",
+    "duration_ms": 67.1
+   }
+  },
+  {
+   "kind": "hand_lost",
+   "t_ns": 5644165730250041,
+   "data": {}
+  },
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5644243698456375,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644246463051083,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5644246495992458,
+   "data": {
+    "button": "right",
+    "reason": "released_early",
+    "duration_ms": 32.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644249160773250,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5644249195642083,
+   "data": {
+    "button": "left",
+    "duration_ms": 34.9,
+    "reason": "too_short"
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5644252793829625,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5644253061246208,
+   "data": {
+    "button": "left",
+    "duration_ms": 267.4
+   }
+  },
+  {
+   "kind": "hand_lost",
+   "t_ns": 5644254025972541,
+   "data": {}
+  },
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5644254658669958,
+   "data": {}
+  },
+  {
+   "kind": "hand_lost",
+   "t_ns": 5644254926447041,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5644255214717916,
+   "data": {}
+  }
+ ]
+}

@@ -1,0 +1,950 @@
+{
+ "recording": "tests/fixtures/use01.jsonl",
+ "config": {
+  "min_score": 0.5,
+  "hand": "right",
+  "hand_switch_frames": 5,
+  "hand_switch_jump": 0.15,
+  "hand_settle_frames": 30,
+  "acquire_hold_ms": 120.0,
+  "lose_hold_ms": 150.0,
+  "posture_hold_ms": 120.0,
+  "posture_release_ms": 150.0,
+  "index_up_enter": 0.85,
+  "index_up_exit": 0.7,
+  "base_length_m": 0.1862,
+  "pinch_metric": "image",
+  "pinch_on": 0.205,
+  "pinch_off": 0.2448,
+  "click_min_ms": 40.0,
+  "right_on": 0.15,
+  "right_off": 0.22,
+  "right_arm": 0.35,
+  "right_arm_window_ms": 600.0,
+  "drag_ms": 500.0,
+  "drag_lost_release_ms": 500.0,
+  "drag_off": 0.257,
+  "drag_release_ms": 100.0,
+  "right_hold_ms": 400.0,
+  "zoom_enabled": true,
+  "zoom_back_min": 0.5,
+  "zoom_stay_back_min": 0.2,
+  "zoom_stay_open_min": 0.66,
+  "zoom_open_min": 0.8,
+  "zoom_enter_hold_ms": 300.0,
+  "zoom_thumb_max": -0.3,
+  "zoom_stay_thumb_max": -0.1,
+  "zoom_signal": "depth",
+  "zoom_sign": 1.0,
+  "zoom_dead": 0.0485,
+  "zoom_max": 0.1384,
+  "zoom_fire_level": 0.5,
+  "zoom_fire_hold_ms": 300.0,
+  "zoom_rearm_frac": 1.0,
+  "zoom_min_cutoff": 1.0,
+  "zoom_beta": 0.5,
+  "fist_enabled": true,
+  "fist_enter": 0.6,
+  "fist_exit": 0.75,
+  "thumbsup_enabled": true,
+  "thumbsup_index_max": 0.8,
+  "thumbsup_up_min": 0.6,
+  "thumbsup_fold_max": -0.3,
+  "thumbsup_thumb_far_min": 1.271,
+  "thumbsup_stay_thumb_far_min": 1.017,
+  "thumbsup_stay_up_min": 0.5,
+  "thumbsup_stay_index_max": 0.9,
+  "thumbsup_dead_disp": 0.4,
+  "thumbsup_max_disp": 1.926,
+  "thumbsup_fire_left": 1.204,
+  "thumbsup_fire_right": 1.045,
+  "thumbsup_fire_up": 0.6,
+  "thumbsup_rearm_disp": 0.28,
+  "thumbsup_x_w_thumb": 0.0,
+  "thumbsup_x_w_knuckle": 0.0,
+  "thumbsup_y_w_thumb": 0.0,
+  "thumbsup_y_w_knuckle": 0.0,
+  "thumbsup_dwell_ms": 400.0,
+  "thumbsup_cooldown_ms": 600.0,
+  "thumbsup_still_speed": 1.5,
+  "thumbsup_still_ms": 250.0,
+  "thumbsup_center_follow_s": 2.0,
+  "peace_enabled": true,
+  "peace_exit_straight": 0.55,
+  "ring_down_max": 0.88,
+  "thumb_fold_on": 0.3405,
+  "thumb_fold_off": 0.2564,
+  "peace_method": "displacement",
+  "nav_dwell_ms": 400.0,
+  "peace_neutral_yaw_deg": -37.6,
+  "peace_neutral_pitch_deg": 6.7,
+  "peace_dead_deg": 12.0,
+  "peace_max_deg": 40.0,
+  "peace_fire_deg": 25.0,
+  "peace_rearm_deg": 10.0,
+  "peace_dead_disp": 0.3,
+  "peace_max_disp": 1.2,
+  "peace_fire_disp": 0.5,
+  "peace_rearm_disp": 0.25,
+  "peace_min_cutoff": 1.0,
+  "peace_beta": 0.02,
+  "scroll_max_speed": 2000.0,
+  "scroll_exponent": 1.8,
+  "scroll_invert": false,
+  "nav_cooldown_ms": 500.0,
+  "nav_swap": true,
+  "screen_w": 1440.0,
+  "screen_h": 900.0,
+  "roi_cx": 0.505,
+  "roi_cy": 0.54,
+  "roi_width": 0.5513,
+  "cursor_min_cutoff": 1.0,
+  "cursor_beta": 0.02,
+  "cursor_d_cutoff": 1.0,
+  "roi_adapt": true,
+  "roi_adapt_tau_s": 0.5,
+  "roi_adapt_shift": 0.3,
+  "roi_adapt_grow": 0.05,
+  "roi_width_min": 0.15,
+  "roi_width_max": 0.6,
+  "position_scale": null
+ },
+ "sha256": "379e2429ee8de48a4f2b1fb1553cc026cf8c39034b04243c7e95c26419bf62d0",
+ "counts": {
+  "click:left": 43,
+  "drag_end:released": 6,
+  "drag_start": 6,
+  "hand_acquired": 1,
+  "move": 2858,
+  "pinch_cancel:right": 1,
+  "pinch_start:left": 49,
+  "pinch_start:right": 1,
+  "release_all": 3
+ },
+ "move": 2858,
+ "scroll": {
+  "count": 0,
+  "dy": 0
+ },
+ "events": [
+  {
+   "kind": "hand_acquired",
+   "t_ns": 5637701472048166,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637708470979916,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637708670925916,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637708703808166,
+   "data": {
+    "button": "right"
+   }
+  },
+  {
+   "kind": "pinch_cancel",
+   "t_ns": 5637708737743625,
+   "data": {
+    "button": "right",
+    "reason": "released_early",
+    "duration_ms": 33.9
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637720673406833,
+   "data": {}
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637725663517333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637725863385875,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637726329269250,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637726663267375,
+   "data": {
+    "button": "left",
+    "duration_ms": 334.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637728028311375,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637728229189000,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637731194860083,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637731361138166,
+   "data": {
+    "button": "left",
+    "duration_ms": 166.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637732261534375,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637732459951333,
+   "data": {
+    "button": "left",
+    "duration_ms": 198.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637733058463666,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637733561283291,
+   "data": {
+    "x": 57.31,
+    "y": 119.67
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637733760616208,
+   "data": {
+    "reason": "released",
+    "duration_ms": 702.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637734226855375,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637734560424291,
+   "data": {
+    "button": "left",
+    "duration_ms": 333.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637734960050000,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637735293321875,
+   "data": {
+    "button": "left",
+    "duration_ms": 333.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637735459629875,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637735660126833,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.5
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637735792867000,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637735926828541,
+   "data": {
+    "button": "left",
+    "duration_ms": 134.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637736126864083,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637736191716041,
+   "data": {
+    "button": "left",
+    "duration_ms": 64.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637740490288375,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637740657508916,
+   "data": {
+    "button": "left",
+    "duration_ms": 167.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637742357059875,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637742556862791,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637747953949458,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637748120507625,
+   "data": {
+    "button": "left",
+    "duration_ms": 166.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637749519349958,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637749687067166,
+   "data": {
+    "button": "left",
+    "duration_ms": 167.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637751052063416,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637751518897083,
+   "data": {
+    "button": "left",
+    "duration_ms": 466.8
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637752285400166,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637752685877458,
+   "data": {
+    "button": "left",
+    "duration_ms": 400.5
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637756750186833,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637757283469375,
+   "data": {
+    "x": 740.29,
+    "y": 229.23
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637757982190541,
+   "data": {
+    "reason": "released",
+    "duration_ms": 1232.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637762648118750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637762848581750,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.5
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637763214987958,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637763414197291,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637763714937875,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637764080544833,
+   "data": {
+    "button": "left",
+    "duration_ms": 365.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637764413993416,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637764681086166,
+   "data": {
+    "button": "left",
+    "duration_ms": 267.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637767345355750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637767444510333,
+   "data": {
+    "button": "left",
+    "duration_ms": 99.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637768178001750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637768680067791,
+   "data": {
+    "x": 1028.56,
+    "y": 330.14
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637769446327083,
+   "data": {
+    "reason": "released",
+    "duration_ms": 1268.3
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637769511569333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637769778680625,
+   "data": {
+    "button": "left",
+    "duration_ms": 267.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637770010654041,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637770245588791,
+   "data": {
+    "button": "left",
+    "duration_ms": 234.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637770378707833,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637770578854375,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.1
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637771178168416,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637771511381458,
+   "data": {
+    "button": "left",
+    "duration_ms": 333.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637772478528625,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637773009900000,
+   "data": {
+    "x": 1146.84,
+    "y": 415.62
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637779309980541,
+   "data": {
+    "reason": "released",
+    "duration_ms": 6831.5
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637780275975166,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637780440905833,
+   "data": {
+    "button": "left",
+    "duration_ms": 164.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637781272595083,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637781472241625,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637782673788333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637782838490083,
+   "data": {
+    "button": "left",
+    "duration_ms": 164.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637785472470708,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637785570635000,
+   "data": {
+    "button": "left",
+    "duration_ms": 98.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637789070900750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637789270344125,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637793269777958,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637793435200500,
+   "data": {
+    "button": "left",
+    "duration_ms": 165.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637796566868750,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637796733342333,
+   "data": {
+    "button": "left",
+    "duration_ms": 166.5
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637797766034500,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637797965257333,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637798465660333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637798632514208,
+   "data": {
+    "button": "left",
+    "duration_ms": 166.9
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637798865804375,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637799065802291,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637799165418541,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637799365427500,
+   "data": {
+    "button": "left",
+    "duration_ms": 200.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637799731922333,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637800265191333,
+   "data": {
+    "x": 977.39,
+    "y": 512.78
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637801697969791,
+   "data": {
+    "reason": "released",
+    "duration_ms": 1966.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637801864528500,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637802097753625,
+   "data": {
+    "button": "left",
+    "duration_ms": 233.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637802530922625,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "drag_start",
+   "t_ns": 5637803030961041,
+   "data": {
+    "x": 993.89,
+    "y": 498.96
+   }
+  },
+  {
+   "kind": "drag_end",
+   "t_ns": 5637803863960208,
+   "data": {
+    "reason": "released",
+    "duration_ms": 1333.0
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637805063473541,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637805262909125,
+   "data": {
+    "button": "left",
+    "duration_ms": 199.4
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637807694653291,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637807928809625,
+   "data": {
+    "button": "left",
+    "duration_ms": 234.2
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637808727749500,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637808829360916,
+   "data": {
+    "button": "left",
+    "duration_ms": 101.6
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637809227516583,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637809429252500,
+   "data": {
+    "button": "left",
+    "duration_ms": 201.7
+   }
+  },
+  {
+   "kind": "pinch_start",
+   "t_ns": 5637814693366916,
+   "data": {
+    "button": "left"
+   }
+  },
+  {
+   "kind": "click",
+   "t_ns": 5637814932233083,
+   "data": {
+    "button": "left",
+    "duration_ms": 238.9
+   }
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637816625492375,
+   "data": {}
+  },
+  {
+   "kind": "release_all",
+   "t_ns": 5637820857441000,
+   "data": {}
+  }
+ ]
+}
