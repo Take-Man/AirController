@@ -115,13 +115,18 @@ class SettingsStore:
         cfg = _read(self.config)
         if not calibration:
             return cfg
-        _merge(cfg, self.layer("calibration"))
-        _merge(cfg, self.valid_auto(cfg))
+        return self.load_state(self.state())
+
+    def load_state(self, state: dict) -> dict:
+        """config.toml に、利用者の層の状態（{"calibration": ..., "auto": ...}。スナップショットの中身）を重ねた設定。"""
+        cfg = _read(self.config)
+        _merge(cfg, state.get("calibration", {}))
+        _merge(cfg, self.valid_auto(cfg, state.get("auto", {})))
         return cfg
 
-    def valid_auto(self, below: dict) -> dict[str, dict]:
+    def valid_auto(self, below: dict, auto: dict | None = None) -> dict[str, dict]:
         """auto.toml のうち、書いたときの下の層の値（base）が今の下の層の値と同じ項目だけ。"""
-        auto = self.layer("auto")
+        auto = self.layer("auto") if auto is None else auto
         base = _sections(auto.get("base", {}))
         out: dict[str, dict] = {}
         for section, values in _sections({k: v for k, v in auto.items() if k != "base"}).items():

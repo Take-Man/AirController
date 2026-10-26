@@ -1471,6 +1471,69 @@ def cmd_settings_history(args, cfg: dict) -> int:
     return 0
 
 
+def cmd_settings_eval(args, cfg: dict) -> int:
+    """効果の見積もり（SPEC 13.45）: 基準記録（eval-manifest.toml）を、保存済みの設定と候補で流して差を出す。
+    操作中の run に影響しないよう、優先度を下げて動く（別プロセス）。"""
+    import json
+
+    from .settings_eval import changed_params, evaluate, format_result, load_manifest, overlay, parse_set, read_candidate
+    from .settings import _read
+
+    os.nice(10)
+    store = settings_store(args.config)
+
+    def as_state(p: Path) -> dict | None:  # スナップショット（calibration・auto の表を持つ TOML）なら、その状態
+        if p.suffix == ".toml":
+            d = _read(p)
+            if "calibration" in d or "auto" in d or "meta" in d:
+                return d
+        return None
+
+    if args.base == "current":
+        base = store.load()
+    elif args.base in store.named_states():
+        base = store.load_state(_read(store.named / f"{args.base}.toml"))
+    else:
+        st = as_state(Path(args.base))
+        if st is None:
+            print(f"--base は current、名前を付けた状態、スナップショット（settings-history/*.toml）のどれか: {args.base}")
+            return 2
+        base = store.load_state(st)
+    if not args.candidate and not args.set:
+        print("--candidate か --set が要ります")
+        return 2
+    cand = base
+    if args.candidate:
+        cp = Path(args.candidate)
+        if cp.exists():
+            st = as_state(cp)
+            cand = store.load_state(st) if st is not None else overlay(base, read_candidate(cp))
+        elif args.candidate in store.named_states():
+            cand = store.load_state(_read(store.named / f"{args.candidate}.toml"))
+        else:
+            print(f"候補が見つかりません: {cp}")
+            return 2
+    cand = overlay(cand, parse_set(args.set))
+    params = changed_params(base, cand, args.threshold)
+    if not params:
+        print("保存済みと候補で、値が変わる項目がありません")
+    entries = load_manifest(Path(args.manifest) if args.manifest else ROOT / "eval-manifest.toml", ROOT)
+    if args.only:
+        entries = [e for e in entries if (e.kind == "unlabeled") == (args.only == "unlabeled")]
+    print(f"基準記録 {len(entries)} 本を流します（保存済みと候補の 2 回ずつ）")
+    t0 = time.monotonic()
+    res = evaluate(entries, base, cand, _screen_size())
+    res["params"] = params
+    print(f"（{time.monotonic() - t0:.0f} 秒）\n")
+    print(format_result(res, params, args.threshold))
+    if args.json:
+        from .settings import write_atomic
+
+        write_atomic(Path(args.json), json.dumps(res, ensure_ascii=False, indent=1, default=str) + "\n")
+        print(f"\n結果: {args.json}")
+    return 0
+
+
 def cmd_report(args, cfg: dict) -> int:
     """イベントログの集計（TASKS-20261025 1.3）。--from-recording では、ランドマークの記録をジェスチャー層に流して
     イベントログを作ってから集計する（有効化の状態は記録のものを使う。手の不在の自動オフなどは含まない）。"""
@@ -1577,6 +1640,14 @@ def main(argv=None) -> int:
     sh = sub.add_parser("settings-history", help="設定の履歴: 一覧、前の保存に戻す、名前を付ける・その状態に戻す")
     sh.add_argument("action", nargs="?", choices=["list", "undo", "name", "restore"], default="list")
     sh.add_argument("name", nargs="?", help="name / restore の名前")
+    se = sub.add_parser("settings-eval", help="効果の見積もり: 基準記録を保存済みの設定と候補で流し、差を出す")
+    se.add_argument("--base", default="current", help="保存済み: current（今の設定、既定）、名前を付けた状態、スナップショットのファイル")
+    se.add_argument("--candidate", help="候補: calibration-history/*.json、{節: {キー: 値}} の JSON/TOML、スナップショット、名前を付けた状態")
+    se.add_argument("--set", action="append", help="候補の値を上書きする: 節.キー=値（例: click.pinch_on=0.21。くり返せる）")
+    se.add_argument("--threshold", type=float, default=0.15, help="変化量の警告の閾値（既定 0.15 = 15%%）")
+    se.add_argument("--manifest", help="基準記録の一覧（既定 eval-manifest.toml）")
+    se.add_argument("--only", choices=["labeled", "unlabeled"], help="ラベル付き / ラベルのない記録だけを流す")
+    se.add_argument("--json", help="結果を JSON で書く")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     global HAND
@@ -1584,7 +1655,7 @@ def main(argv=None) -> int:
     return {"run": cmd_run, "calibrate": cmd_calibrate, "lab": cmd_lab, "lab-report": cmd_lab_report,
             "learn-thumbsup": cmd_learn_thumbsup, "learn-zoom": cmd_learn_zoom, "modkeys": cmd_modkeys, "view": cmd_view, "keytest": cmd_keytest, "camlatency": cmd_camlatency,
             "replay": cmd_replay, "stats": cmd_stats, "analyze": cmd_analyze, "report": cmd_report, "lab-position": cmd_lab_position,
-            "settings-history": cmd_settings_history}[args.cmd](args, cfg)
+            "settings-history": cmd_settings_history, "settings-eval": cmd_settings_eval}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

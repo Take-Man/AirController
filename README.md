@@ -19,6 +19,7 @@
 - `aircontroller/latency.py` フレーム時刻ログ（CSV）と集計
 - `aircontroller/params.py` パラメータ台帳（config.toml の全項目の日本語名・区分 A/B/C/D・範囲・刻み・書く経路）
 - `aircontroller/settings.py` 設定の層・原子的な保存・履歴（`settings-history/`）
+- `aircontroller/settings_eval.py` 効果の見積もり（基準記録を 2 つの設定で流して差を出す）。基準記録の一覧は `eval-manifest.toml`
 - 設定の層: `config.toml`（既定値と説明）< `calibration.toml`（利用者と測定が書く）< `auto.toml`（run の操作範囲の自動補正。calibrate で測り直すと使われなくなる）。オーバーレイを畳んだかは `ui_state.json`
 - `tools/` 計測・分析の道具（各ファイルの先頭に使い方）
 
@@ -42,6 +43,8 @@ uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
 .venv/bin/python -m aircontroller calibrate --pinch-only         # ピンチ・右クリック・ピースだけ（--unit pinch,right,peace と同じ）
 .venv/bin/python -m aircontroller learn-thumbsup                 # いいねモードを上下左右 1回分の記録から学習 → calibration.toml
 .venv/bin/python -m aircontroller learn-zoom                     # ズームモードを手招きの記録から学習 → calibration.toml
+.venv/bin/python -m aircontroller settings-eval --candidate calibration-history/....json  # 効果の見積もり（基準記録は eval-manifest.toml）
+.venv/bin/python -m aircontroller settings-eval --set click.pinch_off=0.26                 # 値を 1 つ変えたときの差
 .venv/bin/python -m aircontroller settings-history               # 設定の履歴の一覧（undo: 前の保存に戻す、name 快適 / restore 快適）
 .venv/bin/python -m aircontroller lab --name lab01                # ジェスチャーの候補を試してラベル付きで記録
 .venv/bin/python -m aircontroller lab-position                   # 位置ごとに カーソル・クリック・ピース を記録（集計は tools/position_report.py）

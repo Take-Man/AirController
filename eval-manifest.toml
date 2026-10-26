@@ -1,0 +1,170 @@
+# 効果の見積もり（settings-eval）の基準記録の一覧（SPEC 13.45）。記録の実体（recordings/）は git の管理外。
+# kind: lab / labpos / labpos-edge / learn-thumbsup / learn-zoom はラベル付き（.labels.json）、unlabeled はラベルなし。
+# frames は記録のフレーム数（別の記録に置き換わっていたら使わない）。¥ の印の記録（mark-*）は評価の根拠にしない方針なので入れない。
+# hand01・dark01 は有効化していない記録なので入れない（イベントが出ない）。calib-* は校正の記録なので入れない。
+
+[[recording]]
+path = "recordings/lab01.jsonl"
+kind = "lab"
+frames = 4572
+note = "候補のジェスチャー（cursor, pinch, peace, fist, thumbsup・palm・backtwo の 5 方向、relaxed）"
+
+[[recording]]
+path = "recordings/labpos-20261026-042216.jsonl"
+kind = "labpos"
+frames = 3348
+note = "5 か所 × カーソル・クリック・ピース（SPEC 13.41）"
+
+[[recording]]
+path = "recordings/labpos-20261026-043902.jsonl"
+kind = "labpos-edge"
+frames = 3127
+note = "右端・右下・下端・中央の往復・静止・ピース（意図しないピンチ、SPEC 13.41）"
+
+[[recording]]
+path = "recordings/learn-thumbsup-20261024-052411.jsonl"
+kind = "learn-thumbsup"
+frames = 1895
+note = "いいね 4 方向と、間違えやすい形"
+
+[[recording]]
+path = "recordings/learn-zoom-20261024-055224.jsonl"
+kind = "learn-zoom"
+frames = 1115
+note = "ズーム（neutral / in / out）"
+
+[[recording]]
+path = "recordings/learn-zoom-20261024-061107.jsonl"
+kind = "learn-zoom"
+frames = 1133
+
+[[recording]]
+path = "recordings/learn-zoom-20261024-061204.jsonl"
+kind = "learn-zoom"
+frames = 1131
+
+[[recording]]
+path = "tests/fixtures/use01.jsonl"
+kind = "unlabeled"
+frames = 3596
+note = "実際の操作"
+
+[[recording]]
+path = "tests/fixtures/use02.jsonl"
+kind = "unlabeled"
+frames = 3588
+note = "実際の操作"
+
+[[recording]]
+path = "tests/fixtures/use03.jsonl"
+kind = "unlabeled"
+frames = 5380
+note = "実際の操作"
+
+[[recording]]
+path = "tests/fixtures/use04.jsonl"
+kind = "unlabeled"
+frames = 3593
+note = "実際の操作"
+
+[[recording]]
+path = "tests/fixtures/use05.jsonl"
+kind = "unlabeled"
+frames = 3575
+note = "実際の操作"
+
+[[recording]]
+path = "tests/fixtures/abs02.jsonl"
+kind = "unlabeled"
+frames = 6559
+note = "精度テスト（校正後）"
+
+[[recording]]
+path = "recordings/abs01.jsonl"
+kind = "unlabeled"
+frames = 6565
+note = "精度テスト（校正前）"
+
+[[recording]]
+path = "recordings/rel01.jsonl"
+kind = "unlabeled"
+frames = 8922
+note = "相対マッピングの試行のときの操作"
+
+[[recording]]
+path = "recordings/fix01.jsonl"
+kind = "unlabeled"
+frames = 4196
+note = "操作"
+
+[[recording]]
+path = "tests/fixtures/pinch01.jsonl"
+kind = "unlabeled"
+frames = 1558
+note = "横向きのピンチ"
+
+[[recording]]
+path = "tests/fixtures/right01.jsonl"
+kind = "unlabeled"
+frames = 2311
+note = "右クリック"
+
+[[recording]]
+path = "recordings/peace01.jsonl"
+kind = "unlabeled"
+frames = 2699
+note = "ピース"
+
+[[recording]]
+path = "recordings/peace02.jsonl"
+kind = "unlabeled"
+frames = 4886
+note = "ピース"
+
+[[recording]]
+path = "tests/fixtures/peace03.jsonl"
+kind = "unlabeled"
+frames = 5374
+note = "ピース"
+
+[[recording]]
+path = "tests/fixtures/peace04.jsonl"
+kind = "unlabeled"
+frames = 3585
+note = "ピース"
+
+[[recording]]
+path = "tests/fixtures/thumbsup01.jsonl"
+kind = "unlabeled"
+frames = 3526
+note = "いいね"
+
+[[recording]]
+path = "recordings/thumbsup02.jsonl"
+kind = "unlabeled"
+frames = 3545
+note = "いいね"
+
+[[recording]]
+path = "recordings/thumbsup03.jsonl"
+kind = "unlabeled"
+frames = 3545
+note = "いいね"
+
+[[recording]]
+path = "tests/fixtures/zoom01.jsonl"
+kind = "unlabeled"
+frames = 3578
+note = "ズーム"
+
+[[recording]]
+path = "tests/fixtures/zoom02.jsonl"
+kind = "unlabeled"
+frames = 3565
+note = "ズーム"
+
+[[recording]]
+path = "tests/fixtures/zoom03.jsonl"
+kind = "unlabeled"
+frames = 3591
+note = "ズーム"
