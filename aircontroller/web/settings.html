@@ -17,7 +17,7 @@
 </header>
 
 <main>
-  <p class="note">確定した値は、run を起動し直すと使われます（動いている run には反映されません）。確定のたびに履歴（settings-history/）が残ります。</p>
+  <p class="note">確定した値は、動いている run にもすぐ反映されます（使う手とオン・オフと省電力の項目は、run を起動し直すと反映）。確定のたびに履歴（settings-history/）が残ります。</p>
 
   <section class="panel" id="panel-measure">
     <h2>測定</h2>
@@ -26,6 +26,7 @@
     <div id="measure-job" class="job hidden"></div>
   </section>
 
+  <div class="panel-row">
   <section class="panel" id="panel-candidates">
     <h2>測定の候補</h2>
     <div id="candidates"></div>
@@ -41,6 +42,7 @@
     <div id="eval-job" class="job hidden"></div>
     <div id="eval-result"></div>
   </section>
+  </div>
 
   <div id="sections"></div>
 
@@ -68,6 +70,21 @@
     </div>
   </form>
 </dialog>
+<button id="live-handle" class="live-handle" aria-controls="live-drawer" aria-expanded="false" title="ライブを開く">
+  <span class="chev" aria-hidden="true">‹</span><span class="dot" title="run とのつながり"></span>
+  <span class="out-icon" title="操作に反映する（オフ）" aria-hidden="true">✋</span><span class="lbl-text">ライブ</span></button>
+<aside id="live-drawer" class="live-drawer" aria-label="ライブ">
+  <div class="phead"><h2>ライブ</h2><span class="spacer"></span><button id="live-close" class="small ghost" aria-label="閉じる">閉じる ›</button></div>
+  <div class="row wrap"><span id="live-chip" class="chip">run に接続していません</span></div>
+  <label class="check" id="live-output-wrap"><input type="checkbox" id="live-output"> 操作に反映する</label>
+  <p class="muted small" id="live-note">run の起動中に、手の形と今の値を出します。この画面を開いている間、run は「設定モード」になり、出力を止めます。
+    変更中の値は run で試せます（確定するまで保存しません。画面を閉じると、run は確定済みの値に戻ります）。</p>
+  <div class="live-body hidden" id="live-body">
+    <div id="live-mode" class="live-mode"></div>
+    <div id="live-hand"></div>
+    <div id="live-meters" class="live-meters"></div>
+  </div>
+</aside>
 <div id="toast" class="toast hidden"></div>
 <script src="/app.js"></script>
 </body>

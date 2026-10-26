@@ -107,7 +107,7 @@
 - 設定: `config.toml`（既定値と説明）< `calibration.toml`（校正・学習が書く、作者固有の値）< `auto.toml`（run の操作範囲の自動補正）。項目の定義は `aircontroller/params.py`、履歴は `settings-history/`（SPEC 13.43）。オーバーレイを畳んだかは `ui_state.json`。
 - 道具（`tools/`）: `latency_summary.py`（遅延ログの要約）、`bench_eventlog.py`・`latency_ab.py`（記録の負荷）、`golden_diff.py`（期待値の差を種類ごとに）、`cursor_smoothing.py`（平滑化の比較）、`handedness_report.py`（左右ラベルの反転率）、`cpu_states.py`・`monitor.py`・`load_report.py`（負荷の計測）。
 - 記録: `recordings/*.jsonl`（ランドマーク列＋有効化の状態。148MB。`mark-*.jsonl` は ¥ の印の前後）、`*.labels.json`（lab / learn の区間ラベル）。`logs/latency-*.csv`（フレームごとの時刻。古いものは `logs/archive/` に gzip）、`logs/events-*.jsonl`（イベントログ）、`logs/monitor-*.csv`（負荷の計測）。
-- テスト: `tests/`（164本）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。
+- テスト: `tests/`（178本）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。
 - 環境: Python 3.12 の `.venv`。依存は [requirements.txt](requirements.txt)。権限は実行元のターミナルにカメラ・入力監視・アクセシビリティの 3つ。
 
 ## 7.5 設定画面の作業（2026-10-26〜、作業中）
@@ -123,6 +123,8 @@
 - 第5節（設定画面、ライブなし）: `python -m aircontroller settings`。台帳から項目を作り、分布のヒストグラム、測定（calibrate を別プロセスで）、
   見積もり、一括採用、保存・元に戻す・履歴。保存した値は run を起動し直すと使われる。作者の FB で、A・B だけを出し、B と発火の位置は
   図（分布図、ピース・いいねの円、ズームの棒、操作範囲の四角）の上でドラッグして調整する形に見直した。
+- 第6節（ライブのプレビュー）: run に内蔵したサーバー（live.py）。設定画面を開いている間は設定モード（出力を止める）で、手の骨格・モード・メーターと、
+  各図の今の値を出す。変更中の値は、安全な瞬間に run で差し替えて試せる（保存はしない。画面を閉じると確定済みに戻る。確定すると run も読み直す）。
 
 ## 8. 段階7の結果と次の一手
 

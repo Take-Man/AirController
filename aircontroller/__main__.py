@@ -130,6 +130,12 @@ def cmd_run(args, cfg: dict) -> int:
     gcfg = GestureConfig.from_toml(cfg, screen)
     engine = GestureEngine(gcfg)
     print(f"メインディスプレイ: {screen[0]:.0f}x{screen[1]:.0f}pt")
+    # 設定画面のライブのプレビュー（SPEC 13.47）: 画面がつながっている間は設定モード（出力を止め、変更中の値を試せる）
+    hub = None
+    if not args.no_live:
+        from .live import LiveHub
+
+        hub = LiveHub(ROOT, lambda: load_config(args.config), screen)
 
     # カメラと推論（SPEC 13.22、TASKS-20261025 第3節）: オフの間は推論を power.off_detect_hz（1Hz）に間引き、手が見えたら
     # 確認の窓だけ毎フレームに上げて、パーでオンにする。操作中に手が auto_off_after_s 見えなければ自動でオフ。
@@ -147,6 +153,8 @@ def cmd_run(args, cfg: dict) -> int:
     two_hands_hz = float(cfg.get("tracker", {}).get("two_hands_hz", 10.0))
 
     def min_interval() -> float:
+        if hub is not None and hub.settings_mode:
+            return 0.0  # 設定画面に今の値を出す間は、オフでも毎フレーム推論する
         a = act_ref[0]
         if a is not None and a.active:
             # 設定と違う手だけが見えている間（2 手で探している間）は操作できないので、間引く（2 手の推論は約 2 倍重い）
@@ -289,9 +297,21 @@ def cmd_run(args, cfg: dict) -> int:
     def on_frame(frame: LandmarkFrame) -> None:
         # 推論スレッド上のホットパス: ジェスチャー層 → 出力層
         frame = dataclasses.replace(frame, active=activation.active)
+        live_events = []
+        if hub is not None:
+            was = hub._mode_was
+            live_events = hub.before_update(engine, frame.t_capture_ns)  # 設定モードの出入り（打ち切り）と、設定の差し替え
+            if hub._mode_was != was:
+                slog.record(frame.t_capture_ns, "settings_mode", on=hub._mode_was)
+            if live_events and output_enabled.is_set():
+                for ev in live_events:  # 打ち切り: 押下中のボタンを離す
+                    if ev.kind == "drag_end" and mouse.is_left_down:
+                        mouse.left_up()
+                    elif ev.kind == "release_all":
+                        release_all()
         events = engine.update(frame)
         posted = 0
-        if output_enabled.is_set():
+        if output_enabled.is_set() and not (hub is not None and hub.suppress_output()):
             for ev in events:
                 if ev.kind == "move":
                     mouse.move(ev.data["x"], ev.data["y"])
@@ -353,6 +373,9 @@ def cmd_run(args, cfg: dict) -> int:
             hb["dropped"] += frame.seq - hb["last_seq"] - 1
         hb["last_seq"] = frame.seq
         hb["lat"].append((t_out - frame.t_capture_ns) / 1e6)
+        if hub is not None:
+            hub.note_latency((t_out - frame.t_capture_ns) / 1e6)
+            hub.publish(engine, frame, frame.active)
         with lock:
             shared["frame"] = frame
             shared["lat"].append((t_out - frame.t_capture_ns) / 1e6)
@@ -386,6 +409,13 @@ def cmd_run(args, cfg: dict) -> int:
         print(f"エラー: {e}", file=sys.stderr)
         pipe.stop()
         return 2
+    if hub is not None:
+        def live_connected():
+            if pipe.state in ("stopped", "error"):  # カメラを止めていたら起動する（設定画面に今の値を出すため）
+                print("[camera] 設定画面がつながったので、カメラを起動します")
+                pipe.start_async()
+        hub.on_connect = live_connected
+        hub.start()
 
     t_start = time.monotonic()
     err: list[BaseException] = []
@@ -405,6 +435,8 @@ def cmd_run(args, cfg: dict) -> int:
         if hb["interval_s"] > 0 and now_m - hb["last"] >= hb["interval_s"]:
             status_record(now_m)
         # 有効化がオフのまま idle_stop_s 経ったら、カメラを止める
+        if hub is not None and hub.settings_mode:
+            power["last_active"] = time.monotonic()  # 設定画面がつながっている間は、カメラを止めない
         if (idle_stop_s > 0 and pipe.state == "running" and not activation.active
                 and time.monotonic() - power["last_active"] > idle_stop_s):
             pipe.stop()
@@ -511,6 +543,8 @@ def cmd_run(args, cfg: dict) -> int:
                     collapsed=bool(ui.get("overlay_collapsed", False)), on_collapse_change=collapse_changed).run()
     finally:
         cleanup()
+        if hub is not None:
+            hub.close()
         activation.stop()
         pipe.stop()
         cleanup()
@@ -524,7 +558,9 @@ def cmd_run(args, cfg: dict) -> int:
 
     if err:
         raise err[0]
-    if gcfg.roi_adapt and (engine.roi_cx, engine.roi_cy, engine.roi_width) != (gcfg.roi_cx, gcfg.roi_cy, gcfg.roi_width):
+    if hub is not None and hub.has_overrides():
+        print("[live] 設定画面の確定していない値が残っているので、操作範囲を auto.toml に書きません")
+    elif gcfg.roi_adapt and (engine.roi_cx, engine.roi_cy, engine.roi_width) != (gcfg.roi_cx, gcfg.roi_cy, gcfg.roi_width):
         # calibration.toml（測った値）ではなく auto.toml に書く。calibrate で測り直すと、こちらは使われなくなる
         settings_store(args.config).save_auto({"cursor": {"roi_cx": round(engine.roi_cx, 4), "roi_cy": round(engine.roi_cy, 4),
                                                           "roi_width": round(engine.roi_width, 4)}}, "run の操作範囲の自動補正")
@@ -1605,6 +1641,7 @@ def main(argv=None) -> int:
     r.add_argument("--activation", choices=["toggle", "hold"], help="有効化の方式を上書きする（ラベル付き記録は hold）")
     r.add_argument("--no-eventlog", action="store_true", help="イベントログ（logs/events-*.jsonl）を書かない")
     r.add_argument("--no-auto-off", action="store_true", help="手の不在による自動オフを使わない（負荷の計測用）")
+    r.add_argument("--no-live", action="store_true", help="設定画面のライブのプレビュー用のサーバーを起動しない")
     cb = sub.add_parser("calibrate", help="測定ユニットごとに校正し、候補を calibration-history/ に出す（--write で書く）")
     cb.add_argument("--seconds", type=float, default=10.0, help="操作範囲を測る時間")
     cb.add_argument("--pinch-only", action="store_true", help="ピンチ・右クリック・ピースだけを測る（--unit pinch,right,peace と同じ）")

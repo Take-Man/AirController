@@ -137,3 +137,18 @@ def test_auto_save_makes_no_snapshot(store):
     store.save_auto({"cursor": {"roi_cx": 0.47}})
     assert store.snapshots() == []
     assert json.loads(store.changes.read_text())["layer"] == "auto"
+
+
+def test_same_setting_same_name(store):
+    """同じ中身の設定には同じ名前: 名前を付けた状態があればその名前、無ければ最初に現れた版の名前。"""
+    store.save({"click": {"pinch_on": 0.2}}, "calibrate")  # 初期状態 + A
+    store.save({"click": {"pinch_on": 0.3}}, "settings")  # B
+    store.save({"click": {"pinch_on": 0.2}}, "settings")  # A と同じ
+    snaps = store.snapshots()
+    names = store.names()
+    first_a = snaps[1]["id"]
+    assert snaps[3]["key"] == snaps[1]["key"] and names[snaps[3]["key"]] == first_a
+    assert names[snaps[2]["key"]] == snaps[2]["id"]
+    store.name("快適")  # 今（A）に名前を付ける
+    assert store.names()[snaps[1]["key"]] == "快適"
+    assert store.current_key() == snaps[1]["key"]

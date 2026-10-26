@@ -19,6 +19,7 @@
 - `aircontroller/latency.py` フレーム時刻ログ（CSV）と集計
 - `aircontroller/params.py` パラメータ台帳（config.toml の全項目の日本語名・区分 A/B/C/D・範囲・刻み・書く経路）
 - `aircontroller/settings.py` 設定の層・原子的な保存・履歴（`settings-history/`）
+- `aircontroller/live.py` run に内蔵する、設定画面のライブのプレビュー用のサーバー（設定モード、今の値、変更中の値の差し替え）
 - `aircontroller/settings_server.py` 設定画面のサーバー（標準ライブラリ）。画面は `aircontroller/web/`（素の HTML/CSS/JS）
 - `aircontroller/settings_eval.py` 効果の見積もり（基準記録を 2 つの設定で流して差を出す）。基準記録の一覧は `eval-manifest.toml`
 - 設定の層: `config.toml`（既定値と説明）< `calibration.toml`（利用者と測定が書く）< `auto.toml`（run の操作範囲の自動補正。calibrate で測り直すと使われなくなる）。オーバーレイを畳んだかは `ui_state.json`
@@ -73,6 +74,7 @@ open tools/targets.html                                          # クリック�
 .venv/bin/python tools/cursor_smoothing.py                       # カーソルの平滑化の係数の比較
 .venv/bin/python tools/handedness_report.py                      # 左右ラベルの反転率
 .venv/bin/python tools/position_report.py recordings/labpos-....jsonl  # 位置ごとの判定と指の特徴量（lab-position の記録）
+.venv/bin/python tools/live_load.py                            # 設定画面をつないだ間とつながない間の run の CPU・遅延（run の起動中に）
 .venv/bin/python tools/pinch_gate_eval.py                        # ピンチを止める案の効果測定（SPEC 13.42、実装はしていない）
 ```
 

@@ -24,7 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .params import BY_ID, CHOICES, FEATURE_TOGGLES, OFF_AT_ZERO, PARAMS, SECTION_JA
-from .settings import SettingsStore
+from .settings import SettingsStore, _read, state_key
 
 WEB = Path(__file__).parent / "web"
 STATIC = {"/app.js": "application/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8"}
@@ -143,11 +143,14 @@ class App:
                            "default": default[p.section][p.key], "saved": saved[p.section][p.key], "source": src,
                            "measured": measured.get(p.id)})
         cam = default.get("camera", {})
+        names = self.store.names()
         return {"params": params, "sections": SECTION_JA, "units": self.units(), "off_at_zero": list(OFF_AT_ZERO),
                 "image_size": [cam.get("width", 1280), cam.get("height", 720)], "screen_size": list(screen_size()),
                 "toggles": {k: list(v) for k, v in FEATURE_TOGGLES.items()},
-                "history": [{"id": s["id"], "route": s["route"], "t": s["t"]} for s in reversed(self.store.snapshots())],
-                "named": self.store.named_states(), "run": run_pids(),
+                "history": [{"id": s["id"], "route": s["route"], "t": s["t"], "key": s["key"], "name": names.get(s["key"], s["id"])}
+                            for s in reversed(self.store.snapshots())],
+                "named": [{"name": n, "key": state_key(_read(self.store.named / f"{n}.toml"))} for n in self.store.named_states()],
+                "current": self.store.current_key(), "run": run_pids(),
                 "jobs": [j.info() | {"log": ""} for j in self.jobs.values()]}
 
     def _source(self, unit: str) -> tuple[Path, dict] | None:
@@ -253,18 +256,65 @@ class App:
         upd = self.changed(values)
         if not upd:
             return {"changes": []}
-        return {"changes": self.store.save(upd, "settings", note or "設定画面で保存した値")}
+        out = {"changes": self.store.save(upd, "settings", note or "設定画面で保存した値")}
+        self._live_reload()
+        return out
+
+    # ------------------------------------------------------------ ライブ（run に内蔵したサーバー、aircontroller/live.py）
+    def live_info(self) -> dict | None:
+        """動いている run のライブのサーバー（live.json）。run が終わっていれば None。"""
+        try:
+            info = json.loads((self.root / "live.json").read_text())
+            os.kill(int(info["pid"]), 0)
+            return info
+        except (OSError, ValueError, KeyError):
+            return None
+
+    def live_request(self, method: str, path: str, body: dict | None = None) -> dict:
+        import http.client
+
+        info = self.live_info()
+        if info is None:
+            raise ValueError("run が動いていません（ライブのプレビューは run の起動中だけ）")
+        c = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=5)
+        c.request(method, path, body=json.dumps(body).encode() if body is not None else None,
+                  headers={"Host": f"127.0.0.1:{info['port']}", "X-Token": info["token"], "Content-Type": "application/json"})
+        r = c.getresponse()
+        data = json.loads(r.read() or b"{}")
+        c.close()
+        if r.status != 200:
+            raise ValueError(data.get("error", f"run が断りました（{r.status}）"))
+        return data
+
+    def live_config(self, values: dict) -> dict:
+        """変更中の値を run に送る（型・範囲を確かめてから。保存はしない）。"""
+        upd = self.coerce(values)
+        flat = {f"{s}.{k}": v for s, vals in upd.items() for k, v in vals.items() if f"{s}.{k}" != "gesture.hand"}
+        return self.live_request("POST", "/config", {"values": flat})
+
+    def _live_reload(self) -> None:
+        if self.live_info() is not None:
+            try:
+                self.live_request("POST", "/reload", {})
+            except (OSError, ValueError) as e:
+                print(f"[live] run に保存済みの設定を読み直させられませんでした: {e}")
 
     def undo(self) -> dict:
-        return {"changes": self.store.undo()}
+        out = {"changes": self.store.undo()}
+        self._live_reload()
+        return out
 
     def restore(self, ident: str) -> dict:
         if ident in self.store.named_states():
-            return {"changes": self.store.restore_named(ident)}
-        p = self.store.history / f"{ident}.toml"
-        if not re.fullmatch(r"\d{8}-\d{6}(-\d+)?", ident) or not p.exists():
-            raise ValueError(f"履歴がありません: {ident}")
-        return {"changes": self.store.restore(p, f"履歴から戻す（{ident}）")}
+            p = self.store.named / f"{ident}.toml"
+        else:
+            p = self.store.history / f"{ident}.toml"
+            if not re.fullmatch(r"\d{8}-\d{6}(-\d+)?", ident) or not p.exists():
+                raise ValueError(f"履歴がありません: {ident}")
+        name = self.store.names().get(state_key(_read(p)), ident)
+        out = {"changes": self.store.restore(p, f"設定を適用（{name}）")}
+        self._live_reload()
+        return out
 
     def name(self, name: str) -> dict:
         self.store.name(name)
@@ -291,7 +341,10 @@ class App:
             time.sleep(0.2)
         if run_pids():
             raise ValueError("run が止まりません")
+        from .calibration import unit_steps
+
         job = Job("measure", self._cli("calibrate", "--unit", ",".join(units)), self.root)
+        job.plan = [[lab, dur, msg] for lab, dur, msg in unit_steps(units)]  # 画面に指示と進み具合を出す（calibrate は段階ごとに指示を出力する）
         with self.lock:
             self.jobs[job.id] = job
         return {"job": job.id}
@@ -359,6 +412,38 @@ def make_handler(app: App, port_ref: list[int]):
             self.end_headers()
             self.wfile.write(data)
 
+        def _relay_stream(self):
+            """run の SSE を、そのままブラウザへ流す（画面を閉じると切れ、run は設定モードを抜ける）。"""
+            import http.client
+
+            info = app.live_info()
+            if info is None:
+                self._send(503, {"error": "run が動いていません"})
+                return
+            up = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=10)
+            try:
+                up.request("GET", "/stream", headers={"Host": f"127.0.0.1:{info['port']}", "X-Token": info["token"]})
+                r = up.getresponse()
+                if r.status != 200:
+                    self._send(502, {"error": f"run が断りました（{r.status}）"})
+                    return
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                while True:
+                    line = r.fp.readline()
+                    if not line:
+                        break
+                    self.wfile.write(line)
+                    if line == b"\n":
+                        self.wfile.flush()
+            except (OSError, http.client.HTTPException):
+                pass
+            finally:
+                up.close()
+
         def do_GET(self):
             u = urlparse(self.path)
             if u.path in STATIC:
@@ -374,6 +459,15 @@ def make_handler(app: App, port_ref: list[int]):
                     return
                 self._send(200, (WEB / "settings.html").read_bytes(), "text/html; charset=utf-8")
                 return
+            if u.path == "/api/live/stream":  # EventSource はヘッダーを付けられないので、トークンは URL で受ける
+                if not self._check(False):
+                    return
+                tok = parse_qs(u.query).get("t", [""])[0]
+                if not hmac.compare_digest(tok.encode(), app.token.encode()):
+                    self._send(403, {"error": "トークンが違います"})
+                    return
+                self._relay_stream()
+                return
             if not self._check(True):
                 return
             q = {k: v[0] for k, v in parse_qs(u.query).items()}
@@ -381,7 +475,8 @@ def make_handler(app: App, port_ref: list[int]):
                 if u.path == "/api/state":
                     self._send(200, app.state())
                 elif u.path == "/api/run":
-                    self._send(200, {"run": run_pids()})
+                    info = app.live_info()
+                    self._send(200, {"run": run_pids(), "live": bool(info)})
                 elif u.path == "/api/dist":
                     self._send(200, app.dist(q.get("unit", "")))
                 elif u.path == "/api/job":
@@ -411,13 +506,17 @@ def make_handler(app: App, port_ref: list[int]):
                     out = app.name(str(body.get("name", "")))
                 elif path == "/api/measure":
                     out = app.measure(list(body.get("units", [])), bool(body.get("stop_run")))
+                elif path == "/api/live/config":
+                    out = app.live_config(body.get("values", {}))
+                elif path == "/api/live/mode":
+                    out = app.live_request("POST", "/mode", {"output": bool(body.get("output"))})
                 elif path == "/api/eval":
                     out = app.evaluate(body.get("values", {}), str(body.get("label", "")))
                 else:
                     self._send(404, {"error": "ありません"})
                     return
                 self._send(200, out)
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError, OSError) as e:
                 self._send(400, {"error": str(e)})
     return Handler
 
@@ -425,5 +524,6 @@ def make_handler(app: App, port_ref: list[int]):
 def serve(app: App, port: int = 0) -> tuple[ThreadingHTTPServer, str]:
     port_ref = [port]
     httpd = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app, port_ref))
+    httpd.daemon_threads = True  # ライブの中継が残っていても、Ctrl+C で終われるように
     port_ref[0] = httpd.server_address[1]
     return httpd, f"http://127.0.0.1:{port_ref[0]}/?t={app.token}"

@@ -12,17 +12,20 @@ const MJA = { click: "クリック", right_click: "右クリック", drag: "ド�
 const HAND_SEG = [["left", "左手"], ["both", "両手"], ["right", "右手"]];
 
 // 画面の並び。文字列は項目、{w: ...} は図（ウィジェット）
+// { pair: [節, 節] } は節を横に並べる。項目の { row: [...] } は横並び、{ col: [...] } は縦並び
 const LAYOUT = [
-  { title: "使う手とモード", items: ["gesture.hand", "mode.posture_hold_ms"] },
-  { title: "オン・オフと省電力", items: ["power.wake_enabled", "power.wake_hold_s", "power.auto_off_after_s", "power.idle_stop_s"] },
+  { pair: [{ title: "使う手とモード", items: ["gesture.hand", "mode.posture_hold_ms"], flex: 1 },
+    { title: "オン・オフと省電力", items: ["power.wake_enabled", "power.wake_hold_s", "power.auto_off_after_s", "power.idle_stop_s"], flex: 3 }] },
   { title: "カーソルと操作範囲", units: ["range"], items: [{ w: "roi" }, { g: "cursorSens" }, { g: "roiAdapt" }] },
-  { title: "クリック・ピンチ・右クリック", units: ["pinch", "right"], items: [{ w: "pinch" }, { w: "right" }, "click.drag_ms",
-    "click.right_hold_ms"] },
-  { title: "ピース（スクロール、戻る・進む）", toggle: "peace.peace_enabled", units: ["peace"], items: [{ w: "peaceDial" },
-    { w: "thumbfold" }, { w: "neutral" }, { w: "scrollCurve" }, "peace.scroll_invert", "peace.nav_swap", "peace.nav_dwell_ms"] },
+  { title: "クリック・ピンチ・右クリック", units: ["pinch", "right"], items: [
+    { row: [{ w: "pinch", stack: true }, "click.drag_ms"], cls: "with-dial" },
+    { row: [{ w: "right", stack: true }, "click.right_hold_ms"], cls: "with-dial" }] },
+  { title: "ピース（スクロール、戻る・進む）", toggle: "peace.peace_enabled", units: ["peace"], items: [{ w: "peaceRow" },
+    { w: "thumbfold" }, { w: "scrollCurve", stack: false, belowLayout: { row: [{ col: ["peace.scroll_invert", "peace.nav_swap"] },
+      "peace.nav_dwell_ms"], cls: "scroll-extra" } }] },
   { title: "いいね（デスクトップ移動、Mission Control）", toggle: "thumbsup.thumbsup_enabled", units: ["thumbsup"],
     items: [{ w: "radar" }, { w: "far" }, "thumbsup.thumbsup_dwell_ms"] },
-  { title: "ズーム", toggle: "zoom.zoom_enabled", units: ["zoom"], items: [{ w: "zoom" }, "zoom.zoom_fire_hold_ms"] },
+  { title: "ズーム", toggle: "zoom.zoom_enabled", units: ["zoom"], items: [{ w: "zoom", belowDial: "zoom.zoom_fire_hold_ms" }] },
   { title: "グー（何もしない）", toggle: "fist.fist_enabled", items: [] },
 ];
 const UNIT_SHORT = { range: "U1 測定", pinch: "U2 測定", right: "U3 測定", peace: "U4 測定", thumbsup: "U5 測定", zoom: "U6 測定" };
@@ -74,6 +77,14 @@ function newSvg(w, h, sq = false) {
   s.classList.add("fig");
   if (sq) s.classList.add("sq"); // 円や棒の図は、広げすぎない
   return s;
+}
+// 図が横に伸びても文字が大きくならないように、伸びの逆数を --k に入れる（CSS で文字の大きさに掛ける）
+const textScaler = typeof ResizeObserver !== "undefined" ? new ResizeObserver((entries) => {
+  for (const e of entries) if (e.contentRect.width > 0) e.target.style.setProperty("--k", String(e.target._vbw / e.contentRect.width));
+}) : null;
+function keepTextSize(svg, viewBoxWidth) {
+  svg._vbw = viewBoxWidth;
+  if (textScaler) textScaler.observe(svg);
 }
 function svgPoint(svg, ev) {
   const p = svg.createSVGPoint();
@@ -151,6 +162,7 @@ function setEdit(id, v, { exact = false } = {}) {
   if (num(v) && !(isOffZero(id) && v === 0)) v = exact ? Math.min(p.hi ?? v, Math.max(p.lo ?? v, v)) : snap(p, v);
   if (v === p.saved) delete edits[id]; else edits[id] = v;
   refreshAll(id);
+  sendLiveConfig();
 }
 
 function refreshAll(changedId) {
@@ -379,10 +391,14 @@ function keyTable(ids) {
   return el("div", { class: "keys-wrap" }, t);
 }
 
-function widgetBox(title, sub, fig, ids, note) {
-  return el("div", { class: "widget" },
-    el("div", { class: "wtitle" }, el("strong", {}, title), sub ? el("span", { class: "muted small" }, sub) : null),
-    el("div", { class: "wbody" }, el("div", { class: "figbox" }, fig), keyTable(ids)), note ? el("p", { class: "muted small" }, note) : null);
+// o.parts: 部品（見出し・図・値の表・注記）を返す（ほかの図と組み合わせて並べるとき）。o.stack: 図の下に値の表。o.below: 値の表の下に置くもの
+function widgetBox(title, sub, fig, ids, note, o = {}) {
+  const head = el("div", { class: "wtitle" }, el("strong", {}, title), sub ? el("span", { class: "muted small" }, sub) : null);
+  const table = keyTable(ids);
+  const noteEl = note ? el("p", { class: "muted small" }, note) : null;
+  if (o.parts) return { head, fig, table, note: noteEl };
+  return el("div", { class: `widget ${o.stack ? "stack" : ""}` }, head,
+    el("div", { class: "wbody" }, el("div", { class: "figbox" }, fig), el("div", { class: "tablecol" }, table, o.below || null)), noteEl);
 }
 
 function needMeasure(unit, what) {
@@ -392,21 +408,23 @@ function needMeasure(unit, what) {
 // ---------------------------------------------------------------- 図: 分布（U2・U3・U4・U5）
 const DIST_W = {
   pinch: { unit: "pinch", title: "親指-人差し指の距離（U2）", keys: ["click.pinch_on", "click.pinch_off", "click.drag_off"],
-    rest: "普段の姿勢", op: "摘まんだ状態", short: ["成立", "解除", "ドラッグ中の解除"] },
+    rest: "普段の姿勢", op: "摘まんだ状態", short: ["成立", "解除", "ドラッグ中の解除"], metric: "ti" },
   right: { unit: "right", title: "親指-中指の距離（U3）", keys: ["click.right_on", "click.right_off", "click.right_arm"],
-    rest: "普段の姿勢", op: "中指で摘まんだ状態", short: ["成立", "解除", "直前に離れている"] },
+    rest: "普段の姿勢", op: "中指で摘まんだ状態", short: ["成立", "解除", "直前に離れている"], metric: "tm" },
   thumbfold: { unit: "peace", title: "親指の畳み（U4）", keys: ["peace.thumb_fold_on", "peace.thumb_fold_off"],
-    rest: "普段の姿勢", op: "ピース", short: ["入る", "抜ける"] },
-  far: { unit: "thumbsup", title: "親指の離れ（U5）", keys: ["thumbsup.thumbsup_thumb_far_min", "thumbsup.thumbsup_stay_thumb_far_min"],
-    rest: "間違えやすいグー", op: "いいね", short: ["入る", "保つ"] },
+    rest: "普段の姿勢", op: "ピース", short: ["入る", "抜ける"], metric: "thumb_fold" },
+  far: { unit: "thumbsup", title: "親指-手の平の中心（U5）", keys: ["thumbsup.thumbsup_thumb_far_min", "thumbsup.thumbsup_stay_thumb_far_min"],
+    rest: "間違えやすいグー", op: "いいね", short: ["入る", "保つ"], metric: "thumb_far" },
 };
 
-function distWidget(kind) {
+function distWidget(kind, o = {}) {
   const cfg = DIST_W[kind];
   const d = dists[cfg.unit];
   if (!d || !d.available || !d.op || !d.op.length) return needMeasure(cfg.unit, `${cfg.title}の分布と閾値`);
   const W = 560, H = 172, P = 16, B = 142;
   const svg = newSvg(W, H);
+  svg.classList.add("dist");
+  keepTextSize(svg, W);
   let lo, hi;
   const all = d.rest.concat(d.op).slice().sort((a, b) => a - b);
   const q = (f) => all[Math.min(all.length - 1, Math.max(0, Math.floor(f * (all.length - 1))))];
@@ -450,10 +468,18 @@ function distWidget(kind) {
   }, (o, pt) => setEdit(o.id, V(pt.x)));
   full();
   widgets.push({ keys: cfg.keys, update: () => update(false) });
+  const liveG = svgEl(svg, "g");
+  live.hooks.push((snap) => {
+    liveG.replaceChildren();
+    const v = snap && snap.hand ? snap[cfg.metric] : null;
+    if (!num(v) || v < lo || v > hi) return;
+    svgEl(liveG, "line", { class: "live-line", x1: X(v), x2: X(v), y1: 2, y2: B });
+    svgEl(liveG, "text", { class: "live-lbl", x: X(v) - 4, y: B - 4, "text-anchor": "end" }, "今");
+  });
   const legend = el("div", { class: "legend" }, el("span", {}, el("span", { class: "sw h-rest" }), `${cfg.rest}（${d.rest.length}）`),
     el("span", {}, el("span", { class: "sw h-op" }), `${cfg.op}（${d.op.length}）`), el("span", { class: "c-saved" }, "▲ 保存済み（上）"),
     el("span", { class: "c-measured" }, "▲ 測定（下）"), el("span", { class: "muted" }, "線をドラッグして変更"));
-  return widgetBox(cfg.title, `${d.recording}、${(d.t || "").replace("T", " ")}`, el("div", {}, svg, legend), cfg.keys);
+  return widgetBox(cfg.title, `${d.recording}、${(d.t || "").replace("T", " ")}`, el("div", {}, svg, legend), cfg.keys, null, o);
 }
 
 // ---------------------------------------------------------------- 図: 操作範囲（U1）
@@ -492,6 +518,11 @@ function roiWidget() {
   });
   update();
   widgets.push({ keys, update });
+  const liveG = svgEl(svg, "g");
+  live.hooks.push((snap) => {
+    liveG.replaceChildren();
+    if (snap && snap.hand && snap.palm && num(snap.palm[0])) svgEl(liveG, "circle", { class: "live-dot", cx: (1 - snap.palm[0]) * W, cy: snap.palm[1] * H, r: 6 });
+  });
   const legend = el("div", { class: "legend" }, d ? el("span", {}, el("span", { class: "sw pt" }), `手のひら中心（${d.points.length}）`)
     : el("span", { class: "muted" }, "U1 を測ると、届いた手のひら中心の点が出ます"),
     el("span", { class: "c-saved" }, "‐‐ 保存済み"), el("span", { class: "c-measured" }, "‐‐ 測定"), el("span", { class: "c-edit" }, "― 変更中"),
@@ -511,7 +542,7 @@ function diagonals(g, C, r) {
   for (const deg of [45, 135]) { const [x0, y0] = polar(C, C, r, deg), [x1, y1] = polar(C, C, r, deg + 180); svgEl(g, "line", { class: "diag", x1: x0, y1: y0, x2: x1, y2: y1 }); }
 }
 
-function peaceDialWidget() {
+function peaceDialWidget(o = {}) {
   const keys = ["peace.peace_dead_disp", "peace.peace_fire_disp", "peace.peace_max_disp"];
   const W = 300, C = W / 2, R = 136;
   let SCALE = 1;
@@ -555,9 +586,14 @@ function peaceDialWidget() {
   });
   update();
   widgets.push({ keys: [...keys, "peace.nav_swap"], update });
+  const liveG = svgEl(svg, "g");
+  live.hooks.push((snap) => {
+    liveG.replaceChildren();
+    if (snap && snap.peace) svgEl(liveG, "circle", { class: "live-dot", cx: C + Math.max(-C, Math.min(C, snap.peace[0] * SCALE)), cy: C - Math.max(-C, Math.min(C, snap.peace[1] * SCALE)), r: 6 });
+  });
   return widgetBox("ピースの領域", "run のピースモードの円と同じ。上下 = スクロール、左右 = 戻る・進む", svg, keys,
     "単位は手の大きさ（画像上の手首→中指付け根）。弧をドラッグして変更。上下: 不感帯の端から外周までで、スクロールが最大速度まで速くなる。"
-    + "左右: 弧を越えて止まると戻る・進む。不感帯は 4 方向に共通の「何もしない」範囲なので、戻る・進むの弧より内側にしかできない。");
+    + "左右: 弧を越えて止まると戻る・進む。不感帯は 4 方向に共通の「何もしない」範囲なので、戻る・進むの弧より内側にしかできない。", o);
 }
 
 function radarWidget() {
@@ -602,6 +638,13 @@ function radarWidget() {
   }, (o, pt) => setEdit(o.id, Math.hypot(pt.x - C, pt.y - C) / SCALE));
   update();
   widgets.push({ keys, update });
+  const liveG = svgEl(svg, "g");
+  live.hooks.push((snap) => {
+    liveG.replaceChildren();
+    if (!snap || !snap.thumbsup) return;
+    const [x, y] = snap.thumbsup, r = Math.hypot(x, y), k = r > LIM ? LIM / r : 1;
+    svgEl(liveG, "circle", { class: "live-dot", cx: C + x * k * SCALE, cy: C - y * k * SCALE, r: 6 });
+  });
   const legend = el("div", { class: "legend" },
     d && d.available ? el("span", { class: "muted" }, `点: ${d.recording} の各方向（`, el("span", { class: "c-up" }, "上"), "・", el("span", { class: "c-left" }, "左"), "・",
       el("span", { class: "c-right" }, "右"), "・", el("span", { class: "c-down" }, "下"), "・正面）") : el("span", { class: "muted" }, "点: U5 を測ると、各方向の位置が出ます"),
@@ -611,7 +654,7 @@ function radarWidget() {
 }
 
 // ---------------------------------------------------------------- 図: ズームの棒
-function zoomWidget() {
+function zoomWidget(o = {}) {
   const keys = ["zoom.zoom_dead", "zoom.zoom_fire_level", "zoom.zoom_max"];
   const W = 300, H = 300, C = H / 2, BX = 90, BW = 36;
   const svg = newSvg(W, H, true);
@@ -665,13 +708,12 @@ function zoomWidget() {
   });
   full();
   widgets.push({ keys, update: () => update(false) });
-  const sel = (p) => {
-    const s = el("select", { onchange: (e) => setEdit(p.id, p.choices.find((c) => String(c) === e.target.value)) },
-      p.choices.map((c) => el("option", { value: String(c) }, String(c))));
-    widgets.push({ keys: [p.id], update: () => (s.value = String(cur(p.id))) });
-    s.value = String(cur(p.id));
-    return s;
-  };
+  const liveG = svgEl(svg, "g");
+  live.hooks.push((snap) => {
+    liveG.replaceChildren();
+    if (snap && num(snap.zoom)) svgEl(liveG, "line", { class: "live-line", x1: BX - 4, x2: BX + BW + 4, y1: Y(Math.max(-vmax, Math.min(vmax, snap.zoom))), y2: Y(Math.max(-vmax, Math.min(vmax, snap.zoom))) });
+  });
+
   const legend = el("div", { class: "legend" },
     d && d.available ? el("span", { class: "muted" }, `点: ${d.recording}（`, el("span", { class: "c-in" }, "イン"), "・", el("span", { class: "c-out" }, "アウト"), "・正面）") : null,
     el("span", { class: "muted" }, "線をドラッグして変更"));
@@ -680,17 +722,20 @@ function zoomWidget() {
   widgets.push({ keys: ["zoom.zoom_sign"], update: () => dir._refresh() });
   const signNote = el("span", { class: "muted" });
   widgets.push({ keys: ["zoom.zoom_signal"], update: () => { signNote.textContent = cur("zoom.zoom_signal") === "length" ? "（length では向きを区別できない）" : ""; } });
-  const extra = el("div", { class: "row wrap small" }, "ズームインの方向", dir, signNote, el("span", { class: "spacer" }), "測り方", sel(byId["zoom.zoom_signal"]),
-    el("span", { class: "muted" }, "（変えたら、不感帯と外端も測り直す）"));
+  const sig = segmented("zoom.zoom_signal", [["depth", "奥行き（depth）"], ["curl", "指の曲がり（curl）"], ["length", "指の長さ（length）"]]);
+  widgets.push({ keys: ["zoom.zoom_signal"], update: () => sig._refresh() });
+  const extra = el("div", { class: "zoom-opts small" },
+    el("div", { class: "row wrap" }, "ズームインの方向", dir, signNote),
+    el("div", { class: "row wrap" }, "測り方", sig, el("span", { class: "muted" }, "（変えたら、不感帯と外端も測り直す）")));
   return widgetBox("ズームの範囲", "run のズームの棒と同じ。上がイン、下がアウト", el("div", {}, svg, legend, extra), keys,
-    "発火は、不感帯の端（0）から外端（1）までの割合。そこを越えて止まると 1 段送る。");
+    "発火は、不感帯の端（0）から外端（1）までの割合。そこを越えて止まると 1 段送る。", o);
 }
 
 // ---------------------------------------------------------------- 図: ピースの中立方向（U4）
-function neutralWidget() {
+function neutralWidget(o = {}) {
   const keys = ["peace.peace_neutral_yaw_deg", "peace.peace_neutral_pitch_deg"];
   const d = dists.peace;
-  if (!d || !d.available || !d.neutral || !d.neutral.length) return needMeasure("peace", "ピースの中立方向");
+  if (!d || !d.available || !d.neutral || !d.neutral.length) return o.parts ? { hint: needMeasure("peace", "ピースの中立方向") } : needMeasure("peace", "ピースの中立方向");
   const W = 300, C = W / 2, R = 136, SCALE = R / 90;
   const svg = newSvg(W, W, true);
   for (const r of [15, 30, 45, 60, 75, 90]) svgEl(svg, "circle", { class: r % 45 ? "grid" : "grid strong", cx: C, cy: C, r: r * SCALE });
@@ -718,108 +763,155 @@ function neutralWidget() {
   return widgetBox("ピースの中立方向（U4）", `${d.recording}。方位角（右が正）・仰角（上が正）`, el("div", {}, svg,
     el("div", { class: "legend" }, el("span", {}, el("span", { class: "sw pt" }), `ピースの指の向き（${d.neutral.length}）`),
       el("span", { class: "c-saved" }, "● 保存済み"), el("span", { class: "c-measured" }, "▲ 測定"), el("span", { class: "muted" }, "青い点をドラッグ"))), keys,
-    "今の方式（指先の変位）では使われません。角度の方式に戻すときのための値です。");
+    "今の方式（指先の変位）では使われません。角度の方式に戻すときのための値です。", o);
 }
 
 // ---------------------------------------------------------------- 図: スクロールの速さの曲線
 // 速さ = 最大速度 × u^指数（u = 不感帯の端 0 → 外周 1 の位置。peace.py）。右端の点で最大速度、中ほどの点で曲がり具合
-function scrollCurveWidget() {
+function scrollCurveWidget(o = {}) {
+  // 縦軸がピースの変位（下: 不感帯の端 0 → 上: 外周 1）、横軸が速さ（px/秒）
   const keys = ["peace.scroll_max_speed", "peace.scroll_exponent"];
-  const W = 420, H = 230, L = 52, R = 16, T = 14, B = 34;
-  const svg = newSvg(W, H);
-  const pe = byId[keys[1]];
-  let ymax = 1;
-  const X = (u) => L + u * (W - L - R);
-  const Y = (v) => H - B - (v / ymax) * (H - T - B);
+  const W = 300, H = 340, L = 30, R = 20, T = 22, B = 40;
+  const svg = newSvg(W, H, true);
+  let vmax = 1;
+  const X = (v) => L + (v / vmax) * (W - L - R);
+  const Y = (u) => H - B - u * (H - T - B);
   const dyn = svgEl(svg, "g");
-  const curve = (mx, e) => Array.from({ length: 41 }, (_, i) => { const u = i / 40; return `${i ? "L" : "M"}${X(u)},${Y(mx * u ** e)}`; }).join(" ");
+  const curve = (mx, e) => Array.from({ length: 41 }, (_, i) => { const u = i / 40; return `${i ? "L" : "M"}${X(mx * u ** e)},${Y(u)}`; }).join(" ");
   function update() {
     const [mx, e] = keys.map(cur);
-    if (!svg.classList.contains("dragging")) ymax = Math.max(1000, 1.25 * Math.max(mx, byId[keys[0]].saved));
+    if (!svg.classList.contains("dragging")) vmax = Math.max(1000, 1.25 * Math.max(mx, byId[keys[0]].saved));
     dyn.replaceChildren();
     for (let i = 0; i <= 4; i++) {
-      const v = (ymax * i) / 4;
-      svgEl(dyn, "line", { class: "grid", x1: L, x2: W - R, y1: Y(v), y2: Y(v) });
-      svgEl(dyn, "text", { class: "tick", x: L - 6, y: Y(v) + 3, "text-anchor": "end" }, Math.round(v));
+      const v = (vmax * i) / 4;
+      svgEl(dyn, "line", { class: "grid", x1: X(v), x2: X(v), y1: Y(0), y2: Y(1) });
+      svgEl(dyn, "text", { class: "tick", x: X(v), y: H - B + 13, "text-anchor": "middle" }, Math.round(v));
     }
-    svgEl(dyn, "line", { class: "axis", x1: L, x2: W - R, y1: Y(0), y2: Y(0) });
-    svgEl(dyn, "text", { class: "tick", x: L, y: H - 18 }, "不感帯の端");
-    svgEl(dyn, "text", { class: "tick", x: W - R, y: H - 18, "text-anchor": "end" }, "外周（最大）");
-    svgEl(dyn, "text", { class: "tick", x: (L + W - R) / 2, y: H - 4, "text-anchor": "middle" }, "ピースの変位");
-    svgEl(dyn, "text", { class: "tick", x: 4, y: 10 }, "px/秒");
+    svgEl(dyn, "line", { class: "axis", x1: X(0), x2: X(0), y1: Y(0), y2: Y(1) });
+    svgEl(dyn, "text", { class: "tick", x: X(0) + 4, y: Y(1) - 8 }, "外周（最大）");
+    svgEl(dyn, "text", { class: "tick", x: X(0) + 4, y: Y(0) - 4 }, "不感帯の端");
+    svgEl(dyn, "text", { class: "tick", x: (L + W - R) / 2, y: H - 6, "text-anchor": "middle" }, "スクロールの速さ（px/秒）");
+    svgEl(dyn, "text", { class: "tick", x: 14, y: (T + H - B) / 2, transform: `rotate(-90 14 ${(T + H - B) / 2})`, "text-anchor": "middle" }, "ピースの変位");
     svgEl(dyn, "path", { class: "curve-saved", d: curve(byId[keys[0]].saved, byId[keys[1]].saved) });
     svgEl(dyn, "path", { class: "curve k-0", d: curve(mx, e) });
-    svgEl(dyn, "circle", { class: "handle k-0", cx: X(1), cy: Y(mx), r: 6 });
-    svgEl(dyn, "circle", { class: "handle k-1", cx: X(0.5), cy: Y(mx * 0.5 ** e), r: 6 });
-    svgEl(dyn, "text", { class: "lbl", x: X(1) - 8, y: Y(mx) - 9, "text-anchor": "end" }, "最大速度");
-    svgEl(dyn, "text", { class: "lbl", x: X(0.5) + 9, y: Y(mx * 0.5 ** e) + 14 }, "曲がり具合");
+    svgEl(dyn, "circle", { class: "handle k-0", cx: X(mx), cy: Y(1), r: 6 });
+    svgEl(dyn, "circle", { class: "handle k-1", cx: X(mx * 0.5 ** e), cy: Y(0.5), r: 6 });
+    svgEl(dyn, "text", { class: "lbl", x: X(mx) - 8, y: Y(1) - 8, "text-anchor": "end" }, "最大速度");
+    svgEl(dyn, "text", { class: "lbl", x: X(mx * 0.5 ** e) + 9, y: Y(0.5) + 4 }, "曲がり具合");
   }
   draggable(svg, (pt) => {
     const [mx, e] = keys.map(cur);
-    if (Math.hypot(pt.x - X(1), pt.y - Y(mx)) < 12) return { id: keys[0] };
-    if (Math.hypot(pt.x - X(0.5), pt.y - Y(mx * 0.5 ** e)) < 12) return { id: keys[1] };
+    if (Math.hypot(pt.x - X(mx), pt.y - Y(1)) < 12) return { id: keys[0] };
+    if (Math.hypot(pt.x - X(mx * 0.5 ** e), pt.y - Y(0.5)) < 12) return { id: keys[1] };
     return null;
-  }, (o, pt) => {
-    const v = ((H - B - pt.y) / (H - T - B)) * ymax;
-    if (o.id === keys[0]) setEdit(o.id, v);
-    else { const r = Math.min(0.99, Math.max(1e-3, v / cur(keys[0]))); setEdit(o.id, Math.log(r) / Math.log(0.5)); } // 0.5^指数 = r
+  }, (h, pt) => {
+    const v = ((pt.x - L) / (W - L - R)) * vmax;
+    if (h.id === keys[0]) setEdit(h.id, v);
+    else { const r = Math.min(0.99, Math.max(1e-3, v / cur(keys[0]))); setEdit(h.id, Math.log(r) / Math.log(0.5)); } // 0.5^指数 = r
   });
   update();
   widgets.push({ keys, update });
-  return widgetBox("スクロールの速さ", "上下の変位に対するスクロールの速さ（run と同じ式）", el("div", {}, svg,
+  const liveG = svgEl(svg, "g");
+  live.hooks.push((snap) => {
+    liveG.replaceChildren();
+    if (!snap || !snap.peace) return;
+    const [sx, sy] = snap.peace, ax = Math.abs(sx), ay = Math.abs(sy);
+    const dead = cur("peace.peace_dead_disp"), max = cur("peace.peace_max_disp");
+    // peace.py と同じ: 上下の領域（|y| ≥ |x| かつ不感帯の外）のときだけスクロールする
+    const u = ay >= ax && Math.max(ax, ay) >= dead ? Math.min(1, (ay - dead) / Math.max(max - dead, 1e-9)) : 0;
+    const v = cur(keys[0]) * u ** cur(keys[1]);
+    svgEl(liveG, "line", { class: "live-line", x1: X(0), x2: X(v), y1: Y(u), y2: Y(u) });
+    svgEl(liveG, "circle", { class: "live-dot", cx: X(v), cy: Y(u), r: 6 });
+    svgEl(liveG, "text", { class: "live-lbl", x: X(v) + 8, y: Y(u) - 8 }, `${Math.round(v)} px/秒 ${sy >= 0 ? "↑" : "↓"}`);
+  });
+  return widgetBox("スクロールの速さ", "上下の変位に対する速さ（run と同じ式）", el("div", {}, svg,
     el("div", { class: "legend" }, el("span", { class: "c-saved" }, "‐‐ 保存済み"), el("span", { class: "c-edit" }, "― 変更中"),
-      el("span", { class: "muted" }, "右端の点で最大速度、中ほどの点で曲がり具合（下げるほど中央付近が遅い）"))), keys);
+      el("span", { class: "muted" }, "上の点で最大速度、中ほどの点で曲がり具合（左へ寄せるほど中央付近が遅い）"))), keys, null, { stack: true, ...o });
 }
 
-const WIDGETS = { scrollCurve: scrollCurveWidget, roi: roiWidget, pinch: () => distWidget("pinch"), right: () => distWidget("right"), thumbfold: () => distWidget("thumbfold"),
-  far: () => distWidget("far"), peaceDial: peaceDialWidget, radar: radarWidget, zoom: zoomWidget, neutral: neutralWidget };
+// ピースの領域（左の円）と中立方向（右の円）を横に並べ、真ん中の上に領域の値、下に中立方向の値
+function peaceRowWidget() {
+  const a = peaceDialWidget({ parts: true });
+  const n = neutralWidget({ parts: true });
+  const center = el("div", { class: "pr-center" }, el("div", { class: "pr-cap" }, "ピースの領域"), a.table,
+    n.hint ? null : el("div", { class: "pr-cap" }, "ピースの中立方向（U4）"), n.hint ? null : n.table);
+  const right = n.hint ? el("div", { class: "pr-side" }, n.hint) : el("div", { class: "pr-side" }, n.head, n.fig);
+  return el("div", { class: "widget peace-row" },
+    el("div", { class: "pr-grid" }, el("div", { class: "pr-side" }, a.head, a.fig), center, right),
+    a.note, n.hint ? null : n.note);
+}
+
+const WIDGETS = { peaceRow: peaceRowWidget, scrollCurve: scrollCurveWidget, roi: roiWidget, pinch: (o) => distWidget("pinch", o),
+  right: (o) => distWidget("right", o), thumbfold: (o) => distWidget("thumbfold", o), far: (o) => distWidget("far", o),
+  peaceDial: peaceDialWidget, radar: radarWidget, zoom: zoomWidget, neutral: neutralWidget };
 // 図の中で変更する項目（測定するまで図が出ないものも含む）
 const IN_WIDGETS = ["cursor.roi_cx", "cursor.roi_cy", "cursor.roi_width", "peace.peace_neutral_yaw_deg", "peace.peace_neutral_pitch_deg",
   "zoom.zoom_signal", "zoom.zoom_sign", ...Object.values(DIST_W).flatMap((c) => c.keys)];
 
 // ---------------------------------------------------------------- 画面を組む
+// 項目（文字列）・小見出しのグループ・図・横並び・縦並びを描く
+function renderItem(it, placed) {
+  if (typeof it === "string") { placed.add(it); return isTime(byId[it]) ? dialCard(it) : itemRow(it); }
+  if (it.row) return el("div", { class: `lrow ${it.cls || ""}` }, it.row.map((x) => renderItem(x, placed)));
+  if (it.col) return el("div", { class: "lcol" }, it.col.map((x) => renderItem(x, placed)));
+  if (it.g) {
+    GROUPS[it.g].items.forEach(([id]) => placed.add(id));
+    if (GROUPS[it.g].toggle) placed.add(GROUPS[it.g].toggle);
+    return groupBox(it.g);
+  }
+  const o = { ...it };
+  if (it.belowDial) { placed.add(it.belowDial); o.below = dialCard(it.belowDial); }
+  if (it.belowLayout) o.below = renderItem(it.belowLayout, placed); // 値の表の下に置くもの
+  return WIDGETS[it.w](o);
+}
+
 function renderSections() {
   widgets.length = 0;
+  live.hooks.length = 0;
   toggleOf = {};
   for (const [t, members] of Object.entries(S.toggles)) for (const m of members) toggleOf[m] = t;
   const root = document.getElementById("sections");
   root.replaceChildren();
   const placed = new Set(IN_WIDGETS);
-  for (const sec of LAYOUT) {
-    const head = el("div", { class: "phead" }, el("h2", {}, sec.title));
-    const panel = el("section", { class: "panel" }, head);
-    if (sec.toggle) {
-      placed.add(sec.toggle);
-      const sw = toggleSwitch(!!cur(sec.toggle), (on) => setEdit(sec.toggle, on), `${sec.title}を有効にする`);
-      head.append(el("span", { class: "spacer" }), sw);
-      widgets.push({ keys: [sec.toggle], update: () => sw._set(!!cur(sec.toggle)) });
-    }
-    if (sec.units) {
-      const ub = el("span", { class: "unit-btns" }, sec.units.map((u) => el("button", { class: "unit-btn", title: `${UNITS.find((x) => x[0] === u)[1]}を測る`,
-        onclick: () => measure([u]) }, UNIT_SHORT[u])));
-      head.querySelector("h2").after(ub);
-    }
-    const body = el("div", { class: "pbody", "data-group": sec.toggle || "" });
-    let dials = null;
-    for (const it of sec.items) {
-      if (typeof it === "string" && isTime(byId[it])) {
-        placed.add(it);
-        if (!dials) { dials = el("div", { class: "dials" }); body.append(dials); }
-        dials.append(dialCard(it));
-        continue;
-      }
-      dials = null;
-      if (typeof it === "string") { placed.add(it); body.append(itemRow(it)); }
-      else if (it.g) { GROUPS[it.g].items.forEach(([id]) => placed.add(id)); if (GROUPS[it.g].toggle) placed.add(GROUPS[it.g].toggle); body.append(groupBox(it.g)); }
-      else body.append(WIDGETS[it.w]());
-    }
-    panel.append(body);
-    root.append(panel);
+  for (const entry of LAYOUT) {
+    if (entry.pair) root.append(el("div", { class: "panel-row" }, entry.pair.map((sec) => renderSection(sec, placed))));
+    else root.append(renderSection(entry, placed));
   }
   for (const w of widgets) w.keys.forEach((k) => placed.add(k));
   const missing = S.params.map((p) => p.id).filter((id) => !placed.has(id));
   if (missing.length) console.warn("画面に置いていない項目", missing);
   refreshAll();
+}
+
+function renderSection(sec, placed) {
+  const head = el("div", { class: "phead" }, el("h2", {}, sec.title));
+  const panel = el("section", { class: "panel" }, head);
+  if (sec.toggle) {
+    placed.add(sec.toggle);
+    const sw = toggleSwitch(!!cur(sec.toggle), (on) => setEdit(sec.toggle, on), `${sec.title}を有効にする`);
+    head.append(el("span", { class: "spacer" }), sw);
+    widgets.push({ keys: [sec.toggle], update: () => sw._set(!!cur(sec.toggle)) });
+  }
+  if (sec.units) {
+    const ub = el("span", { class: "unit-btns" }, sec.units.map((u) => el("button", { class: "unit-btn", title: `${UNITS.find((x) => x[0] === u)[1]}を測る`,
+      onclick: () => measure([u]) }, UNIT_SHORT[u])));
+    head.querySelector("h2").after(ub);
+  }
+  const body = el("div", { class: "pbody", "data-group": sec.toggle || "" });
+  let dials = null;
+  for (const it of sec.items) {
+    if (typeof it === "string" && isTime(byId[it])) { // 続く時間の項目は、ダイヤルを横に並べる
+      placed.add(it);
+      if (!dials) { dials = el("div", { class: "dials" }); body.append(dials); }
+      dials.append(dialCard(it));
+      continue;
+    }
+    dials = null;
+    body.append(renderItem(it, placed));
+  }
+  panel.append(body);
+  if (sec.flex) panel.classList.add(`flex-${sec.flex}`);
+  return panel;
 }
 
 // ---------------------------------------------------------------- 上のバー、候補、履歴
@@ -865,22 +957,27 @@ function renderCandidates() {
   box.replaceChildren(...kids);
 }
 
+// 同じ中身の設定には同じ名前を出す（名前を付けた状態があればその名前、無ければその中身が最初に現れた版の名前。サーバーが付ける）
 function renderHistory() {
-  document.getElementById("named").replaceChildren(...(S.named.length ? S.named.map((name) => el("div", { class: "list-row" }, el("span", { class: "grow" }, name),
-    el("button", { class: "small", onclick: () => restore(name, `名前を付けた状態「${name}」`) }, "この状態に戻す"))) : [el("p", { class: "muted" }, "なし")]));
-  document.getElementById("history").replaceChildren(...(S.history.length ? S.history.map((s, i) => el("div", { class: "list-row" },
-    el("span", { class: "key" }, s.id), el("span", { class: "grow" }, s.route, i === 0 ? "（今）" : ""),
-    i ? el("button", { class: "small", onclick: () => restore(s.id, `履歴 ${s.id}`) }, "この状態に戻す") : null)) : [el("p", { class: "muted" }, "まだ保存していません。")]));
+  const applied = (key) => key === S.current;
+  const row = (name, sub, key, ident) => el("div", { class: `list-row ${applied(key) ? "applied" : ""}` },
+    el("span", { class: "hname" }, name), el("span", { class: "muted small grow" }, sub),
+    applied(key) ? el("span", { class: "chip on" }, "適用中")
+      : el("button", { class: "small", onclick: () => restore(ident, `「${name}」`) }, "この設定を適用"));
+  document.getElementById("named").replaceChildren(...(S.named.length ? S.named.map((n) => row(n.name, "", n.key, n.name))
+    : [el("p", { class: "muted" }, "なし")]));
+  document.getElementById("history").replaceChildren(...(S.history.length ? S.history.map((h) => row(h.name, `${h.id}  ${h.route}`, h.key, h.id))
+    : [el("p", { class: "muted" }, "まだ保存していません。")]));
   document.getElementById("btn-undo").disabled = S.history.length < 2;
 }
 
-function clearEdits() { for (const k of Object.keys(edits)) delete edits[k]; }
+function clearEdits() { for (const k of Object.keys(edits)) delete edits[k]; sendLiveConfig(); }
 
 async function restore(id, label) {
   if (changedIds().length && !(await confirmBox("変更中の値があります", el("p", {}, "戻すと、変更中の値は捨てます。"), "捨てて続ける"))) return;
-  if (!(await confirmBox(`${label}に戻す`, el("p", {}, "calibration.toml と auto.toml をその時点の状態にします。戻したことも履歴に残ります。"), "戻す"))) return;
-  try { const r = await api("/api/restore", { id }); clearEdits(); toast(`戻しました（${r.changes.length} 項目）`); await reload(); }
-  catch (e) { toast(`戻せませんでした: ${e.message}`); }
+  if (!(await confirmBox(`${label}の設定を適用する`, el("p", {}, "calibration.toml と auto.toml をその設定にします。動いている run にも反映します。適用したことも履歴に残ります。"), "適用する"))) return;
+  try { const r = await api("/api/restore", { id }); clearEdits(); toast(`適用しました（${r.changes.length} 項目）`); await reload(); }
+  catch (e) { toast(`適用できませんでした: ${e.message}`); }
 }
 
 async function save() {
@@ -960,6 +1057,40 @@ function evalProgress() {
   };
 }
 
+// 測定の指示と進み具合: calibrate は段階に入るたびに指示を出力する。段階の長さは決まっているので、その間は時間で進める
+function measureProgress() {
+  const now = el("div", { class: "measure-now" }, "準備中…");
+  const step = el("span", { class: "muted small" });
+  const bar = el("div", { class: "pbar-fill" });
+  const node = el("div", { class: "measure-progress" }, now, el("div", { class: "pbar-wrap" }, el("div", { class: "pbar" }, bar), step));
+  let plan = null, total = 1, idx = -1, since = 0, shown = 0, target = 0, done = false;
+  const timer = setInterval(() => {
+    if (!done && plan && idx >= 0) {
+      const before = plan.slice(0, idx).reduce((a, [, d]) => a + d, 0);
+      target = Math.min(0.99, (before + Math.min(plan[idx][1], (performance.now() - since) / 1000)) / total);
+    }
+    shown += (target - shown) * 0.15;
+    bar.style.width = `${(shown * 100).toFixed(1)}%`;
+    if (done && Math.abs(target - shown) < 0.002) clearInterval(timer);
+  }, 50);
+  return {
+    node,
+    feed(j) {
+      if (!plan && j.plan) { plan = j.plan; total = plan.reduce((a, [, d]) => a + d, 0) || 1; }
+      if (!plan) return;
+      let i = -1, pos = 0;
+      for (let k = 0; k < plan.length; k++) { const at = j.log.indexOf(plan[k][2], pos); if (at < 0) break; i = k; pos = at + plan[k][2].length; }
+      if (i !== idx && i >= 0) { idx = i; since = performance.now(); }
+      if (idx < 0) return;
+      const [label, , msg] = plan[idx];
+      const nData = plan.filter(([l]) => l).length, kData = plan.slice(0, idx + 1).filter(([l]) => l).length;
+      now.replaceChildren(label ? el("span", { class: "measure-tag" }, `記録 ${kData} / ${nData}`) : el("span", { class: "measure-tag wait" }, "次の準備"), msg);
+      step.textContent = `段階 ${idx + 1} / ${plan.length}（カメラのウィンドウにも同じ指示が出ます）`;
+    },
+    finish(ok) { done = true; if (ok) target = 1; now.textContent = ok ? "測定が終わりました。結果は「測定の候補」と各図に出ます。" : "測定が中断されたか、失敗しました。"; },
+  };
+}
+
 async function measure(units) {
   try {
     let r = await api("/api/measure", { units, stop_run: false });
@@ -974,7 +1105,7 @@ async function measure(units) {
       document.querySelectorAll("#measure-buttons button, .unit-btn").forEach((b) => (b.disabled = false));
       for (const u of units) delete dists[u];
       await reload();
-    });
+    }, measureProgress());
   } catch (e) { toast(`測定できませんでした: ${e.message}`); }
 }
 
@@ -995,29 +1126,158 @@ function diffCell(a, b, higherIsBad) {
   return el("td", { class: `num ${d === 0 ? "" : (d > 0) === higherIsBad ? "up" : "down"}` }, `${a ?? 0} → ${b ?? 0}`);
 }
 
+// 見積もりの結果を、節ごとのツリーにまとめる（同じ 1 回の見積もりの結果を、変わる項目・ラベル付きの形・ラベルなしの数で節に振り分ける）
+const EVAL_SECTIONS = [
+  { title: "カーソルと操作範囲", params: ["cursor"], gest: ["cursor"], metrics: [] },
+  { title: "クリック・ピンチ・右クリック", params: ["click"], gest: ["pinch", "right"], metrics: ["click", "right_click", "drag", "drag_suspect"] },
+  { title: "ピース（スクロール、戻る・進む）", params: ["peace"], gest: ["peace"], metrics: ["nav", "scroll_px"] },
+  { title: "いいね", params: ["thumbsup"], gest: ["thumbsup"], metrics: ["thumbsup"] },
+  { title: "ズーム", params: ["zoom"], gest: ["zoom"], metrics: ["zoom"] },
+  { title: "使う手・モード・オン・オフ・グー、全体", params: ["gesture", "mode", "power", "fist"], gest: ["fist"], metrics: ["canceled"] },
+];
 function renderEval(res, label, log) {
-  const kids = [el("h3", {}, `${label}の見積もり`)];
-  const pt = el("table", {}, el("tr", {}, el("th", {}, "変わる項目"), el("th", { class: "num" }, "保存済み → 比べる値"), el("th", { class: "num" }, "変化")));
-  for (const p of res.params) pt.append(el("tr", {}, el("td", {}, p.name || p.key), el("td", { class: "num" }, `${fmt(p.base)} → ${fmt(p.candidate)}`),
-    el("td", { class: "num" }, p.rel === null ? "" : pct(p.rel), p.warn ? el("span", { class: "warn" }, "⚠") : null)));
-  kids.push(pt);
-  const lt = res.labeled_total;
-  if (res.labeled.length) {
-    const t = el("table", {}, el("tr", {}, el("th", {}, "ラベル付き（狙った形）"), el("th", { class: "num" }, "成立した区間"), el("th", { class: "num" }, "区間")));
-    for (const [g, n] of Object.entries(lt.base.segments)) t.append(el("tr", {}, el("td", {}, GJA[g] || g), diffCell(lt.base.reached[g], lt.candidate.reached[g], false), el("td", { class: "num" }, n)));
-    const f = el("table", {}, el("tr", {}, el("th", {}, "誤成立（狙っていない形に入った回数）"), el("th", { class: "num" }, "保存済み → 比べる値")));
-    for (const g of Object.keys(lt.base.false)) f.append(el("tr", {}, el("td", {}, GJA[g] || g), diffCell(lt.base.false[g], lt.candidate.false[g], true)));
-    kids.push(t, f);
+  const lt = res.labeled_total, ut = res.unlabeled_total;
+  const nodes = [];
+  for (const sec of EVAL_SECTIONS) {
+    const params = res.params.filter((p) => sec.params.includes(p.key.split(".")[0]));
+    const gest = res.labeled.length ? sec.gest.filter((g) => lt.base.segments[g] !== undefined || lt.base.false[g] !== undefined) : [];
+    const metrics = res.unlabeled.length ? sec.metrics : [];
+    const changedG = gest.filter((g) => (lt.base.reached[g] ?? 0) !== (lt.candidate.reached[g] ?? 0) || (lt.base.false[g] ?? 0) !== (lt.candidate.false[g] ?? 0));
+    const changedM = metrics.filter((k) => (ut.base[k] ?? 0) !== (ut.candidate[k] ?? 0));
+    if (!params.length && !changedG.length && !changedM.length) continue;
+    const kids = [];
+    if (params.length) {
+      const t = el("table", {}, el("tr", {}, el("th", {}, "変わる項目"), el("th", { class: "num" }, "保存済み → 比べる値"), el("th", { class: "num" }, "変化")));
+      for (const p of params) t.append(el("tr", {}, el("td", {}, p.name || p.key), el("td", { class: "num" }, `${fmt(p.base)} → ${fmt(p.candidate)}`),
+        el("td", { class: "num" }, p.rel === null ? "" : pct(p.rel), p.warn ? el("span", { class: "warn" }, "⚠") : null)));
+      kids.push(t);
+    }
+    if (gest.length) {
+      const t = el("table", {}, el("tr", {}, el("th", {}, "ラベル付きの記録"), el("th", { class: "num" }, "成立した区間"), el("th", { class: "num" }, "誤成立")));
+      for (const g of gest) t.append(el("tr", {}, el("td", {}, GJA[g] || g),
+        lt.base.segments[g] !== undefined ? diffCell(lt.base.reached[g], lt.candidate.reached[g], false) : el("td", { class: "num muted" }, "—"),
+        lt.base.false[g] !== undefined ? diffCell(lt.base.false[g], lt.candidate.false[g], true) : el("td", { class: "num muted" }, "—")));
+      kids.push(t);
+    }
+    if (metrics.length) {
+      const t = el("table", {}, el("tr", {}, el("th", {}, `ラベルのない記録（${res.unlabeled.length} 本）`), el("th", { class: "num" }, "保存済み → 比べる値")));
+      for (const k of metrics) t.append(el("tr", {}, el("td", {}, MJA[k]), diffCell(ut.base[k], ut.candidate[k], k === "drag_suspect" || k === "canceled")));
+      kids.push(t);
+    }
+    const tags = [params.length ? `変わる項目 ${params.length}` : null, ...changedG.map((g) => `${GJA[g]} 成立 ${lt.base.reached[g] ?? 0}→${lt.candidate.reached[g] ?? 0}・誤 ${lt.base.false[g] ?? 0}→${lt.candidate.false[g] ?? 0}`),
+      ...changedM.map((k) => `${MJA[k]} ${ut.base[k] ?? 0}→${ut.candidate[k] ?? 0}`)].filter(Boolean);
+    nodes.push(el("details", { class: "tree", open: params.length > 0 }, el("summary", {}, el("strong", {}, sec.title), el("span", { class: "muted small" }, tags.join("、"))), ...kids));
   }
-  if (res.unlabeled.length) {
-    const ut = res.unlabeled_total;
-    const t = el("table", {}, el("tr", {}, el("th", {}, `ラベルのない記録（${res.unlabeled.length} 本）`), el("th", { class: "num" }, "保存済み → 比べる値")));
-    for (const [k, name] of Object.entries(MJA)) t.append(el("tr", {}, el("td", {}, name), diffCell(ut.base[k], ut.candidate[k], k === "drag_suspect" || k === "canceled")));
-    kids.push(t, el("p", { class: "muted" }, "ラベルのない記録の数の増減は、良し悪しを表しません（例: 解除が遠いと、続けたクリックが 1 回のドラッグにまとまって数が減る）。詳細の時刻で確かめてください。"));
+  const extra = [];
+  if (res.unlabeled.length) extra.push(el("p", { class: "muted small" }, "ラベルのない記録の数の増減は、良し悪しを表しません（例: 解除が遠いと、続けたクリックが 1 回のドラッグにまとまって数が減る）。詳細の時刻で確かめてください。"));
+  if (res.skipped.length) extra.push(el("p", { class: "muted small" }, `使わなかった記録: ${res.skipped.map((x) => x.path.split("/").pop()).join(", ")}`));
+  const root = el("details", { class: "tree tree-root", open: true }, el("summary", {}, el("strong", {}, `${label}の見積もり`),
+    el("span", { class: "muted small" }, `変わる項目 ${res.params.length}、警告 ${res.params.filter((p) => p.warn).length}`)),
+    ...(nodes.length ? nodes : [el("p", { class: "muted" }, "差はありませんでした。")]), ...extra,
+    el("details", { class: "tree" }, el("summary", {}, "詳細（記録ごと、変わったイベントの時刻）"), el("pre", { class: "out" }, log)));
+  document.getElementById("eval-result").replaceChildren(root);
+}
+
+// ---------------------------------------------------------------- ライブ（run の今の値。SPEC 13.47）
+const MODE_JA = { idle: "なし", cursor: "カーソル", pinch: "ピンチ（左）", drag: "ドラッグ", right: "右クリック待ち", peace: "ピース",
+  thumbsup: "いいね", zoom: "ズーム", fist: "グー" };
+const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12], [9, 13], [13, 14],
+  [14, 15], [15, 16], [13, 17], [17, 18], [18, 19], [19, 20], [0, 17]];
+// メーター: [名前, 今の値の取り出し, 範囲, 閾値（項目の id か、run の設定の名前）, 小さいほど成立か]
+const METERS = [
+  ["親指-人差し指", (s) => s.ti, [0, 0.8], ["click.pinch_on", "click.pinch_off", "click.drag_off"]],
+  ["親指-中指", (s) => s.tm, [0, 0.8], ["click.right_on", "click.right_off", "click.right_arm"]],
+  ["親指-手の平の中心", (s) => s.thumb_far, [0, 3], ["thumbsup.thumbsup_thumb_far_min", "thumbsup.thumbsup_stay_thumb_far_min"]],
+  ["親指の畳み", (s) => s.thumb_fold, [-1, 1], ["peace.thumb_fold_on", "peace.thumb_fold_off"]],
+  ["人差し指の真っすぐさ", (s) => s.straight?.[0], [0.3, 1], ["cfg:index_up_enter", "cfg:index_up_exit", "cfg:peace_exit_straight"]],
+  ["中指の真っすぐさ", (s) => s.straight?.[1], [0.3, 1], ["cfg:index_up_enter", "cfg:index_up_exit", "cfg:peace_exit_straight"]],
+  ["薬指の真っすぐさ", (s) => s.straight?.[2], [0.3, 1], ["cfg:ring_down_max"]],
+  ["手の甲の向き", (s) => s.palm_facing, [-1, 1], ["cfg:zoom_back_min"]],
+];
+const live = { es: null, snap: null, hooks: [], sendTimer: null, available: false };
+
+function thrValue(key, snap) {
+  if (key.startsWith("cfg:")) return snap.cfg?.[key.slice(4)];
+  return byId[key] ? cur(key) : undefined;
+}
+
+function renderLive(snap) {
+  const body = document.getElementById("live-body");
+  body.classList.remove("hidden");
+  const m = document.getElementById("live-mode");
+  m.replaceChildren(...[el("span", { class: "live-mode-name" }, snap.hand ? MODE_JA[snap.mode] || snap.mode : "手が見えません"),
+    el("span", { class: `chip ${snap.active ? "on" : ""}` }, snap.active ? "有効化中" : "有効化していない（右 Command でオン）"),
+    snap.pending ? el("span", { class: "muted small" }, "差し替え待ち（操作の途中）") : null].filter(Boolean));
+  // 手の骨格（利用者から見た向き）と操作範囲
+  const [iw, ih] = snap.image_size;
+  const W = 320, H = (W * ih) / iw;
+  const svg = newSvg(W, H);
+  svgEl(svg, "rect", { class: "frame", x: 0, y: 0, width: W, height: H });
+  if (snap.roi) {
+    const [cx, cy, w] = snap.roi;
+    const [sw, sh] = S.screen_size;
+    const h = (w * iw * (sh / sw)) / ih;
+    svgEl(svg, "rect", { class: "roi-edit", x: (1 - (cx + w / 2)) * W, y: (cy - h / 2) * H, width: w * W, height: h * H });
   }
-  if (res.skipped.length) kids.push(el("p", { class: "muted" }, `使わなかった記録: ${res.skipped.map((s) => s.path.split("/").pop()).join(", ")}`));
-  kids.push(el("details", { class: "detail" }, el("summary", {}, "詳細（記録ごと、変わったイベントの時刻）"), el("pre", { class: "out" }, log)));
-  document.getElementById("eval-result").replaceChildren(...kids);
+  if (snap.hand && snap.landmarks) {
+    const P = snap.landmarks.map(([x, y]) => [(1 - x) * W, y * H]);
+    for (const [a, b] of BONES) svgEl(svg, "line", { class: "bone", x1: P[a][0], y1: P[a][1], x2: P[b][0], y2: P[b][1] });
+    P.forEach(([x, y], i) => svgEl(svg, "circle", { class: [4, 8, 12].includes(i) ? "joint tip" : "joint", cx: x, cy: y, r: [4, 8, 12].includes(i) ? 3.5 : 2.2 }));
+  }
+  document.getElementById("live-hand").replaceChildren(svg);
+  // メーター
+  const box = document.getElementById("live-meters");
+  box.replaceChildren(...METERS.map(([name, get, [lo, hi], thr]) => {
+    const v = snap.hand ? get(snap) : null;
+    const MW = 260, MH = 16, X = (x) => ((Math.min(hi, Math.max(lo, x)) - lo) / (hi - lo)) * MW;
+    const sv = newSvg(MW, MH);
+    sv.classList.add("meter");
+    sv.setAttribute("preserveAspectRatio", "none");
+    svgEl(sv, "rect", { class: "bar-bg", x: 0, y: 2, width: MW, height: MH - 4, rx: 3 });
+    if (num(v)) svgEl(sv, "rect", { class: "meter-val", x: 0, y: 2, width: X(v), height: MH - 4, rx: 3 });
+    thr.forEach((k, i) => {
+      const t = thrValue(k, snap);
+      if (!num(t)) return;
+      svgEl(sv, "line", { class: `thr k-${i}`, x1: X(t), x2: X(t), y1: 0, y2: MH });
+    });
+    return el("div", { class: "meter-row" }, el("span", { class: "meter-name" }, name), sv, el("span", { class: "meter-num" }, num(v) ? v.toFixed(2) : "—"));
+  }));
+  const out = document.getElementById("live-output");
+  if (document.activeElement !== out) out.checked = !!snap.output;
+  setOutputIcon(!!snap.output);
+  for (const h of live.hooks) h(snap);
+}
+
+function connectLive() {
+  if (live.es) return;
+  const es = new EventSource(`/api/live/stream?t=${encodeURIComponent(TOKEN)}`);
+  live.es = es;
+  const chip = document.getElementById("live-chip");
+  chip.textContent = "接続中…";
+  es.onopen = () => { chip.textContent = "設定モード（run とつながっています）"; chip.classList.add("on"); document.body.classList.add("live-on"); sendLiveConfig(); };
+  es.onmessage = (e) => { live.snap = JSON.parse(e.data); renderLive(live.snap); };
+  es.onerror = () => { // run が終わった・つながらない: 閉じて、次の確認でつなぎ直す
+    es.close(); live.es = null; live.snap = null;
+    chip.textContent = "run に接続していません"; chip.classList.remove("on"); document.body.classList.remove("live-on"); setOutputIcon(false);
+    document.getElementById("live-body").classList.add("hidden");
+    for (const h of live.hooks) h(null);
+  };
+}
+
+// 閉じているときのつまみの手のアイコン: 操作に反映しているか
+function setOutputIcon(on) {
+  document.body.classList.toggle("output-on", on);
+  document.querySelector("#live-handle .out-icon").title = on ? "操作に反映する（オン）" : "操作に反映する（オフ）";
+}
+
+// 変更中の値を run に送る（少し待ってまとめて。保存はしない）
+function sendLiveConfig() {
+  if (!live.es) return;
+  clearTimeout(live.sendTimer);
+  live.sendTimer = setTimeout(async () => {
+    const values = Object.fromEntries(changedIds().filter((id) => id !== "gesture.hand").map((id) => [id, edits[id]]));
+    try { await api("/api/live/config", { values }); } catch (e) { toast(`run に送れませんでした: ${e.message}`); }
+  }, 150);
 }
 
 // ---------------------------------------------------------------- 起動
@@ -1064,7 +1324,26 @@ function setup() {
   };
   document.getElementById("btn-eval-edit").onclick = () => evaluate(Object.fromEntries(changedIds().map((id) => [id, edits[id]])), "変更中の値");
   window.addEventListener("beforeunload", (e) => { if (changedIds().length) { e.preventDefault(); e.returnValue = ""; } });
-  setInterval(async () => { try { S.run = (await api("/api/run")).run; refreshTop(); } catch (e) { /* サーバーが止まった */ } }, 5000);
-  reload().catch((e) => toast(`読み込めませんでした: ${e.message}`));
+  setInterval(async () => {
+    try { const r = await api("/api/run"); S.run = r.run; live.available = r.live; refreshTop(); if (r.live) connectLive(); }
+    catch (e) { /* サーバーが止まった */ }
+  }, 3000);
+  // ライブの引き出し（右）。開いているかは、このブラウザに覚える（使えなければ覚えない）
+  const setDrawer = (open) => {
+    document.body.classList.toggle("drawer-open", open);
+    document.getElementById("live-handle").setAttribute("aria-expanded", String(open));
+    try { localStorage.setItem("airctl-live-open", open ? "1" : "0"); } catch (e) { /* 覚えない */ }
+  };
+  let wasOpen = true;
+  try { wasOpen = localStorage.getItem("airctl-live-open") !== "0"; } catch (e) { /* 既定は開く */ }
+  setDrawer(wasOpen);
+  document.getElementById("live-handle").onclick = () => setDrawer(true);
+  document.getElementById("live-close").onclick = () => setDrawer(false);
+  document.getElementById("live-output").onchange = async (e) => {
+    try { await api("/api/live/mode", { output: e.target.checked }); setOutputIcon(e.target.checked); }
+    catch (err) { e.target.checked = false; toast(`切り替えられませんでした: ${err.message}`); }
+  };
+  reload().then(async () => { try { if ((await api("/api/run")).live) connectLive(); } catch (e) { /* なし */ } })
+    .catch((e) => toast(`読み込めませんでした: ${e.message}`));
 }
 setup();

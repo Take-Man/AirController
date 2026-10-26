@@ -215,12 +215,26 @@ class SettingsStore:
         return [p for m, p in sorted(snaps, key=lambda x: (x[0][1], int(x[0][2] or 1)))]
 
     def snapshots(self) -> list[dict]:
-        """スナップショットの一覧（古い順）。"""
+        """スナップショットの一覧（古い順）。key は中身（利用者の層）の識別子で、同じ設定なら同じ値。"""
         out = []
         for p in self._snapshots():
-            meta = _read(p).get("meta", {})
-            out.append({"path": p, "id": p.stem, "route": meta.get("route", ""), "t": meta.get("t", "")})
+            d = _read(p)
+            meta = d.get("meta", {})
+            out.append({"path": p, "id": p.stem, "route": meta.get("route", ""), "t": meta.get("t", ""), "key": state_key(d)})
         return out
+
+    def names(self) -> dict[str, str]:
+        """設定の中身（key）→ 表示する名前。名前を付けた状態があればその名前、無ければ、その中身が最初に現れたスナップショットの名前
+        （同じ設定には、いつも同じ名前を出す）。"""
+        out: dict[str, str] = {}
+        for s in self.snapshots():
+            out.setdefault(s["key"], s["id"])
+        for n in self.named_states():
+            out[state_key(_read(self.named / f"{n}.toml"))] = n
+        return out
+
+    def current_key(self) -> str:
+        return state_key(self.state())
 
     def _snapshot(self, route: str, path: Path | None = None) -> Path:
         if path is None:
@@ -274,6 +288,14 @@ class SettingsStore:
         if not p.exists():
             raise ValueError(f"名前を付けた状態がありません: {name}")
         return self.restore(p, f"名前を付けた状態に戻す（{name}）")
+
+
+def state_key(d: dict) -> str:
+    """利用者の層（calibration と auto）の中身の識別子。スナップショットの見出しや時刻は含めない。"""
+    import hashlib
+
+    body = {"calibration": d.get("calibration", {}), "auto": d.get("auto", {})}
+    return hashlib.sha1(json.dumps(body, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]
 
 
 def _flatten(d: dict, prefix: str = "") -> dict:

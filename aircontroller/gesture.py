@@ -356,6 +356,7 @@ class GestureEngine:
         self._drag_anchor: tuple[float, float] | None = None  # ドラッグ開始時の、手から求めたカーソル位置
         self._last_hand_t = 0
         self._last_active = False
+        self.adapt_paused = False  # 設定画面で操作範囲を変えている間は、自動補正を止める（SPEC 13.47）
         self.state = GestureState()
         # 幅は上限・下限に収める（calibration.toml に、上限を下げる前の広い幅が残っていても使わない）
         self.roi_cx, self.roi_cy = self.cfg.roi_cx, self.cfg.roi_cy
@@ -370,6 +371,59 @@ class GestureEngine:
         self._flip_other = False  # 今続いている別のラベルが、跳びとともに始まった（別の手に乗り換えた）
         self._label_palm_t: int | None = None  # _label_palm を見た時刻
         self._label_age = 0  # 今のラベルになってからのフレーム数
+
+    # --- 実行中の設定の差し替え（設定画面のライブのプレビュー、SPEC 13.47）---
+    LIVE_FIXED = ("hand", "screen_w", "screen_h")  # 差し替えない項目（使う手は 2 手の探索の方針と一緒に、起動時に決める）
+
+    def safe_to_reconfigure(self) -> bool:
+        """ドラッグ・ピンチ・右クリック待ち・ピース・いいね・ズームの途中でない（設定を差し替えてよい瞬間）。"""
+        return self._pinch_start is None and self.state.mode in ("idle", "cursor", "fist")
+
+    def apply_config(self, new: GestureConfig) -> list[str]:
+        """設定を、状態を消さずに差し替える。同じ GestureConfig を項目ごとに書き換える（各コントローラーも同じものを見ている）。
+        保持時間・平滑化の係数・コントローラーが写した値も作り直す。操作範囲は、設定の値が変わったときだけ置き換える
+        （変わっていなければ、自動補正した今の範囲を保つ）。変わった項目の名前を返す。"""
+        c = self.cfg
+        changed = [f.name for f in fields(c) if f.name not in self.LIVE_FIXED and getattr(c, f.name) != getattr(new, f.name)]
+        if not changed:
+            return []
+        roi_changed = any(k in changed for k in ("roi_cx", "roi_cy", "roi_width", "roi_width_min", "roi_width_max"))
+        for k in changed:
+            setattr(c, k, getattr(new, k))
+        for deb, on, off in ((self._presence, c.acquire_hold_ms, c.lose_hold_ms),
+                             (self._cursor_posture, c.posture_hold_ms, c.posture_release_ms),
+                             (self._peace_posture, c.posture_hold_ms, c.posture_release_ms),
+                             (self._fist_posture, c.posture_hold_ms, c.posture_release_ms),
+                             (self._thumbsup_posture, c.posture_hold_ms, c.posture_release_ms),
+                             (self._zoom_posture, c.zoom_enter_hold_ms, c.posture_release_ms)):
+            deb.hold_on_ns, deb.hold_off_ns = on * 1e6, off * 1e6
+        for f in (self._filter.fx, self._filter.fy):
+            f.min_cutoff, f.beta, f.d_cutoff = c.cursor_min_cutoff, c.cursor_beta, c.cursor_d_cutoff
+        self._zoom._filter.min_cutoff, self._zoom._filter.beta = c.zoom_min_cutoff, c.zoom_beta
+        self._peace.derive()
+        self._thumbsup.derive()
+        if roi_changed:
+            self.roi_cx, self.roi_cy = c.roi_cx, c.roi_cy
+            self.roi_width = min(max(c.roi_width, c.roi_width_min), c.roi_width_max)
+        return changed
+
+    def interrupt(self, t_ns: int) -> list[Event]:
+        """進行中のピンチ・ドラッグ・モードを打ち切る（設定モードに入る・抜けるとき）。ドラッグ中ならボタンを離すイベントを返す。
+        有効化の状態は変えない。"""
+        events: list[Event] = []
+        if self._dragging:
+            events.append(Event("drag_end", t_ns, {"reason": "interrupted"}))
+        elif self._pinch_start is not None:
+            events.append(Event("pinch_cancel", t_ns, {"reason": "interrupted"}))
+        self._end_pinch()
+        for deb in (self._cursor_posture, self._peace_posture, self._fist_posture, self._thumbsup_posture, self._zoom_posture):
+            deb.reset()
+        self._peace.reset()
+        self._thumbsup.reset()
+        self._zoom.reset()
+        self._far_t = {"left": None, "right": None}  # 打ち切った後は、指を離してから摘まみ直す
+        events.append(Event("release_all", t_ns))
+        return events
 
     @property
     def hand_present(self) -> bool:
@@ -736,7 +790,7 @@ class GestureEngine:
         # 操作範囲の自動補正（有効化中のカーソル操作のときだけ）
         dt_s = (t - self._last_t) / 1e9 if self._last_t is not None else 0.0
         self._last_t = t
-        if c.roi_adapt and frame.active and st.mode == "cursor" and hand is not None and st.palm is not None:
+        if c.roi_adapt and not self.adapt_paused and frame.active and st.mode == "cursor" and hand is not None and st.palm is not None:
             self._adapt_roi(st.palm, frame.image_size, dt_s)
 
         # カーソル移動（ピンチ・右クリック中は固定。離しかけている間は、落とす位置を動かさない）

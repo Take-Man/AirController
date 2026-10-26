@@ -88,7 +88,13 @@ class PeaceController:
 
     def __init__(self, cfg):
         self.cfg = cfg
-        c = cfg
+        self._filter = OneEuroFilter2D(cfg.peace_min_cutoff, cfg.peace_beta, 1.0)
+        self.derive()
+        self.reset()
+
+    def derive(self) -> None:
+        """設定から写す値を作る（初期化時と、実行中に設定を差し替えたとき。状態は消さない）。"""
+        c = self.cfg
         self.dwell_ms, self.cooldown_ms = c.nav_dwell_ms, c.nav_cooldown_ms
         self.angle = c.peace_method == "angle"
         if self.angle:
@@ -97,8 +103,10 @@ class PeaceController:
         else:
             self.dead, self.max, self.fire, self.rearm = (c.peace_dead_disp, c.peace_max_disp,
                                                           c.peace_fire_disp, c.peace_rearm_disp)
-        self._filter = OneEuroFilter2D(c.peace_min_cutoff, c.peace_beta, 1.0)
-        self.reset()
+        for f in (self._filter.fx, self._filter.fy):
+            f.min_cutoff, f.beta = c.peace_min_cutoff, c.peace_beta
+        if hasattr(self, "view"):  # オーバーレイの円の大きさ
+            self.view.dead, self.view.fire, self.view.rearm = self._n(self.dead), self._n(self.fire), self._n(self.rearm)
 
     def reset(self) -> None:
         self._filter.reset()
@@ -207,15 +215,22 @@ class ThumbsUpController(PeaceController):
 
     def __init__(self, cfg):
         self.cfg = cfg
-        c = cfg
+        self._filter = OneEuroFilter2D(cfg.peace_min_cutoff, cfg.peace_beta, 1.0)
+        self.derive()
+        self.reset()
+
+    def derive(self) -> None:
+        c = self.cfg
         self.dwell_ms, self.cooldown_ms = c.thumbsup_dwell_ms, c.thumbsup_cooldown_ms
         self.angle = False
         self.dead, self.max, self.fire, self.rearm = (c.thumbsup_dead_disp, c.thumbsup_max_disp,
                                                       c.thumbsup_fire_left, c.thumbsup_rearm_disp)
         # 方向ごとに閾値を持つ（下へは動かしにくい: lab01 で上 +2.0 に対し下 -1.3）
         self.fire_by_dir = {"left": c.thumbsup_fire_left, "right": c.thumbsup_fire_right, "up": c.thumbsup_fire_up}
-        self._filter = OneEuroFilter2D(c.peace_min_cutoff, c.peace_beta, 1.0)
-        self.reset()
+        for f in (self._filter.fx, self._filter.fy):
+            f.min_cutoff, f.beta = c.peace_min_cutoff, c.peace_beta
+        if hasattr(self, "view"):  # オーバーレイの円の大きさ
+            self.view.dead, self.view.fire, self.view.rearm = self._n(self.dead), self._n(self.fire), self._n(self.rearm)
 
     def reset(self) -> None:
         super().reset()
