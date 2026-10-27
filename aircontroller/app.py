@@ -149,6 +149,17 @@ def run_app(root: Path, config: str | None = None, tab: str = "launch") -> int:
     home, home_web = make_window("AirController", *HOME_SIZE, False, "")
     pages: dict[str, tuple] = {}
 
+    class PageWindowDelegate(AppKit.NSObject):
+        """設定などのウィンドウを閉じたら（赤いボタン・⌘W）、中の画面を空にする。画面が run のライブにつながったままだと、
+        run が設定モード（出力を止める）のままになり、「開始」してもカーソルが動かなかった（作者の実機、2026-10-28）。"""
+
+        def windowWillClose_(self, note):
+            for win, web in pages.values():
+                if win is note.object():
+                    web.loadHTMLString_baseURL_("", None)
+
+    page_delegate = PageWindowDelegate.alloc().init()
+
     def show(name: str) -> None:
         """その画面を前に出す（メインスレッドで呼ぶ）。設定・チュートリアルは別のウィンドウ（一度作ったら使い回す）。"""
         if name in SEPARATE:
@@ -156,6 +167,7 @@ def run_app(root: Path, config: str | None = None, tab: str = "launch") -> int:
                 vis = AppKit.NSScreen.mainScreen().visibleFrame()
                 w, h = min(PAGE_SIZE[0], vis.size.width), min(PAGE_SIZE[1], vis.size.height)
                 pages[name] = make_window(SEPARATE[name], w, h, True, f"AirController-{name}")
+                pages[name][0].setDelegate_(page_delegate)
             win, web = pages[name]
             if not win.isVisible():  # 閉じていたウィンドウは読み直す（「終了」の後の表示や、古い値を残さない）
                 web.loadRequest_(Foundation.NSURLRequest.requestWithURL_(page(name, True)))
@@ -213,7 +225,7 @@ def run_app(root: Path, config: str | None = None, tab: str = "launch") -> int:
         """設定画面の「終了」: そのウィンドウを閉じる（アプリと run は動き続ける）。"""
         def do():
             if name in pages:
-                pages[name][0].orderOut_(None)
+                pages[name][0].performClose_(None)  # 赤いボタンと同じ（中の画面を空にして、run とのつながりを切る）
         AppHelper.callAfter(do)
 
     app.close_window = close_window

@@ -106,6 +106,16 @@ open tools/targets.html                                          # クリック�
 .venv/bin/python tools/golden_diff.py --current recordings/xxx.jsonl --write   # 新しい記録を加える
 ```
 
+## アプリ（.app）にする
+`.venv-pkg`（requirements.txt + PyInstaller）で作る（SPEC 13.59）。データは `~/Library/Application Support/AirController`。
+```bash
+uv venv --python 3.12 .venv-pkg && uv pip install --python .venv-pkg -r requirements.txt pyinstaller
+pkg/build.sh app    # pkg/dist/AirController.app
+pkg/build.sh dmg    # pkg/dist/AirController.dmg
+```
+署名は ad hoc（Apple のアカウントなし）。ダウンロードした .dmg から入れたアプリは、初回に「開いていません」の警告が出るので、システム設定 →
+プライバシーとセキュリティ の「このまま開く」で開く。作り直したアプリは、権限を付け直す（SPEC 13.55）。
+
 ## 権限（実行元のターミナルに付与）
 システム設定 → プライバシーとセキュリティ で、次の3つをオンにする。
 - カメラ

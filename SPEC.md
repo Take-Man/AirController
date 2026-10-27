@@ -848,3 +848,20 @@ Mac のトラックパッド操作を、ハンドジェスチャーだけで行�
   - ホームの状態の表示を 1 行に横に並べ、項目を減らした（操作・カメラ・動いている時間。設定モードのときはその旨）。モード・遅延・fps は
     オーバーレイで見える。動作中と停止中で、ホームの縦の大きさは変わらない。
 
+
+### 13.59 AirController.app（2026-10-28、TASKS-20261027-package 第5節）
+- `pkg/build.sh app`（PyInstaller、pkg/AirController.spec）→ `pkg/dist/AirController.app`（292MB、ad hoc 署名、bundle id com.takeman.aircontroller）。
+  `pkg/build.sh dmg` → `pkg/dist/AirController.dmg`（約 129MB、Applications へのリンクつき）。
+- 入口は pkg/main.py。引数なし（Finder・Dock）ならアプリ（ホーム）を開き、出力は <データ>/logs/app-*.log に時刻付きで書く。引数があれば aircontroller の
+  コマンドとして動かす（子プロセスの run、測定の calibrate、見積もりなど。cli_argv が同じ実行ファイルに引数を渡す）。
+- データは `~/Library/Application Support/AirController`（AIRCONTROLLER_HOME で変えられる）。初回は同梱の config.toml（既定値）とモデルを写す。
+  calibration.toml（利用者ごとの値）は同梱しない。MPLCONFIGDIR を残る場所に置く（13.55 の起動の遅れ）。
+- 確かめたこと（作者の Mac、ターミナルの権限で）: 別のデータの場所で開き、ホーム・環境のチェック・設定・チュートリアルの画面と API が応答する、
+  環境のチェックの項目（キーボード配列の読み取りを含む）が動く、子コマンド（settings-history）が動く、SIGINT で後片付けして終わる。
+  権限が付くか（特に子プロセスの run）と、.dmg からの開き方は、作者の実機の確認（CHECKLIST-app.md）。
+- 実機の確認で見つかった不具合（作者、2026-10-28）: 設定のウィンドウを赤いボタンで閉じた後に「開始」すると、オン・オフは効くがカーソルが動かなかった。
+  閉じたウィンドウの中の画面が run のライブにつながったまま残り、run が設定モード（出力を止める）のままだった（イベントログに settings_mode on だけが
+  あった）。→ 設定・チュートリアルのウィンドウを閉じたら、中の画面を空にして、つながりを切る（設定画面の「終了」も同じ閉じ方にした）。
+  あわせて、.app では PYTHONUNBUFFERED が効かず、子プロセスの run の出力がまとまってしか届かなかったので、行ごとに送るようにした。
+- 実機の確認の結果（作者、2026-10-28）: CHECKLIST-app.md の項目はすべて問題なし（.dmg から入れて「このまま開く」、権限が AirController.app に付き、
+  子プロセスの run も操作できる、環境のチェック、設定・測定、ギアのボタン、ウィンドウを閉じても run が続く）。ローカルネットワークの確認には「許可」を選んだ。
