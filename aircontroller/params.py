@@ -9,6 +9,7 @@
 範囲（lo〜hi）と刻み（step）は画面のスライダー用。既定値は範囲の中で、刻みの格子の上にある（テストで確かめる）。
 writers は calibration.toml / auto.toml にこの項目を書く経路（空なら config.toml だけ）。
 position は位置依存の候補（SPEC 13.41 の (b)。第7節で閾値を取る場所を 1 か所にする）。
+sided は左右に依存する項目（右手で操作したときの形で持ち、左手では検出の内部で反転して使う。SPEC 13.53）。
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ class Param:
     desc: str = ""
     writers: tuple[str, ...] = ()  # "calibrate" / "learn-thumbsup" / "learn-zoom" / "run-auto"
     position: bool = False  # 位置依存の候補
+    sided: bool = False  # 左右に依存する（右手の形で持つ）
 
     @property
     def id(self) -> str:
@@ -161,14 +163,14 @@ PARAMS: tuple[Param, ...] = (
     P('thumbsup', 'thumbsup_stay_index_max', 'いいね: 人差し指（保つ）', 'C', 0.5, 1.0, 0.01, '0..1', '', ()),
     P('thumbsup', 'thumbsup_dead_disp', 'いいねの不感帯', 'B', 0.1, 1.5, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",)),
     P('thumbsup', 'thumbsup_max_disp', 'いいねの外周', 'B', 0.5, 4.0, 0.01, '手の大きさ比', 'U5（表示だけ）', ("learn-thumbsup",)),
-    P('thumbsup', 'thumbsup_fire_left', 'いいねの発火: 左', 'B', 0.3, 3.0, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",)),
-    P('thumbsup', 'thumbsup_fire_right', 'いいねの発火: 右', 'B', 0.3, 3.0, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",)),
+    P('thumbsup', 'thumbsup_fire_left', 'いいねの発火: 左', 'B', 0.3, 3.0, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",), sided=True),
+    P('thumbsup', 'thumbsup_fire_right', 'いいねの発火: 右', 'B', 0.3, 3.0, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",), sided=True),
     P('thumbsup', 'thumbsup_fire_up', 'いいねの発火: 上', 'B', 0.3, 3.0, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",)),
     P('thumbsup', 'thumbsup_rearm_disp', 'いいねの再武装', 'B', 0.05, 1.5, 0.01, '手の大きさ比', 'U5', ("learn-thumbsup",)),
     P('thumbsup', 'thumbsup_x_w_thumb', 'いいね左右: 親指の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5（今は 0）', ("learn-thumbsup",)),
     P('thumbsup', 'thumbsup_x_w_knuckle', 'いいね左右: 付け根の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
-    P('thumbsup', 'thumbsup_y_w_thumb', 'いいね上下: 親指の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
-    P('thumbsup', 'thumbsup_y_w_knuckle', 'いいね上下: 付け根の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",)),
+    P('thumbsup', 'thumbsup_y_w_thumb', 'いいね上下: 親指の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",), sided=True),
+    P('thumbsup', 'thumbsup_y_w_knuckle', 'いいね上下: 付け根の角度の重み', 'C', -2.0, 2.0, 0.25, '', 'U5', ("learn-thumbsup",), sided=True),
     P('thumbsup', 'thumbsup_dwell_ms', 'いいねの発火までの時間', 'A', 100, 1500, 50, 'ms', '', ()),
     P('thumbsup', 'thumbsup_cooldown_ms', 'いいねのクールダウン', 'C', 0, 2000, 50, 'ms', '', ()),
     P('thumbsup', 'thumbsup_still_speed', 'いいね: 止まった判定の速さ', 'C', 0.1, 5.0, 0.1, '単位/秒', '', ()),
@@ -187,7 +189,7 @@ PARAMS: tuple[Param, ...] = (
     P('peace', 'thumb_fold_off', '親指の畳み（抜ける）', 'B', -0.5, 1.0, 0.005, '親指の畳み', 'U4', ("calibrate",), True),
     P('peace', 'ring_down_max', 'ピース: 薬指を畳む', 'C', 0.5, 1.0, 0.01, '真っすぐさ 0..1', '', (), True),
     P('peace', 'peace_exit_straight', 'ピースを保つ指の真っすぐさ', 'C', 0.3, 0.9, 0.01, '真っすぐさ 0..1', '右下でピースが抜けにくい件（13.41）', (), True),
-    P('peace', 'peace_neutral_yaw_deg', 'ピースの中立: 方位角', 'B', -90, 90, 0.5, '度', 'U4。angle のときだけ使う（今は displacement）', ("calibrate",)),
+    P('peace', 'peace_neutral_yaw_deg', 'ピースの中立: 方位角', 'B', -90, 90, 0.5, '度', 'U4。angle のときだけ使う（今は displacement）', ("calibrate",), sided=True),
     P('peace', 'peace_neutral_pitch_deg', 'ピースの中立: 仰角', 'B', -90, 90, 0.5, '度', '同上', ("calibrate",)),
     P('peace', 'peace_dead_deg', '不感帯（角度）', 'C', 0, 45, 1, '度', 'angle のときだけ', ()),
     P('peace', 'peace_max_deg', '最大速度の角度', 'C', 10, 90, 1, '度', 'angle のときだけ', ()),

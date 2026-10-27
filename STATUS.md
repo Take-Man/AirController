@@ -1,13 +1,13 @@
 # AirController 現状報告（2026-10-26、段階7と、設定画面の作業の後）
 
-設計の壁打ちをした Claude（元の Claude Chat）向けのまとめ。設計の原本は [SPEC.md](SPEC.md)、実装中に作者と決めた変更はその第13節（13.1〜13.52。2026-10-25 の改善は 13.24〜、設定画面の作業は 13.43〜）に、計測の生データは [logs/stage1-verification-20261024.txt](logs/stage1-verification-20261024.txt) と [logs/load-20261025.md](logs/load-20261025.md) にある。このファイルは、それらを読まなくても現状が分かるように要点をまとめたもの。
+設計の壁打ちをした Claude（元の Claude Chat）向けのまとめ。設計の原本は [SPEC.md](SPEC.md)、実装中に作者と決めた変更はその第13節（13.1〜13.53。2026-10-25 の改善は 13.24〜、設定画面の作業は 13.43〜）に、計測の生データは [logs/stage1-verification-20261024.txt](logs/stage1-verification-20261024.txt) と [logs/load-20261025.md](logs/load-20261025.md) にある。このファイルは、それらを読まなくても現状が分かるように要点をまとめたもの。
 
 ## 0. 2026-10-25 の改善（TASKS-20261025）の要約
 
 - キー: ¥ は印を付ける専用、有効化の切り替えは右 Command だけ（13.24）。
 - 常時の記録: イベントログ（logs/events-*.jsonl）、¥ の前後のランドマーク（recordings/mark-*.jsonl）、集計 `report`（13.24）。記録で遅延は増えない。
 - ズームは 1 回の超過で 1 段（13.25）。操作範囲の大きさの追従を位置の 1/6 に（13.26）。カーソルの beta 0.02（13.27）。戻る・進むの向きを反転（13.28）。
-- 使う手 `hand = "right"`、ラベルの反転のヒステリシス、左手が映ったままでも右手で操作できる（13.29）。
+- 使う手の設定 `[gesture] hand`（`right` / `left` / `both`。コードの既定値は `both`、今の config.toml は `right`）、ラベルの反転のヒステリシス、もう一方の手が映ったままでも設定の手で操作できる（13.29）。
 - 手が 5 秒見えなければ自動でオフ、オフの間は 1Hz、パーでオン、オフのまま 5 分でカメラを止める（13.30, 13.34）。オーバーレイを畳める（13.31）。
 - 負荷の簡易計測と、待機中のオーバーレイ・2 手の推論の無駄の修正（13.32）。git 管理を始めた（変更前の状態が最初のコミット）。
 
@@ -29,7 +29,7 @@
 | 操作 | ジェスチャー | 出力 |
 |---|---|---|
 | 有効化 | 右 Command を単独で押して離す（トグル。SPEC 13.3, 13.24）。オフの間にパーを 0.5 秒（13.30） | — |
-| 自動オフ | 操作中に右手が 5 秒見えない（13.30, 13.34） | ボタン解除 |
+| 自動オフ | 操作中に設定の手が 5 秒見えない（13.30, 13.34） | ボタン解除 |
 | 印 | ¥（13.24。イベントは握りつぶす） | 前 6 秒・後 3 秒の記録 |
 | カーソル | 人差し指だけを立てる。手のひら中心の絶対座標 | マウス移動 |
 | クリック | 親指と人差し指の短いピンチ（離したとき） | 左クリック |
@@ -44,7 +44,11 @@
 | 緊急停止 | Control+Option+Command+ピリオド | ボタン解除して終了 |
 
 範囲外にしたもの: App Exposé、通知センター、いいねの下方向（13.19, 13.21）。
-使う手は右手だけ（`hand = "right"`。左手は「手がない」と同じ。13.29）。
+使う手は `[gesture] hand` で `right` / `left` / `both` を選べる（13.29。コードの既定値は `both`、今の config.toml は `right`）。
+`right` / `left` では、設定と違うラベルの手は「手がない」と同じに扱う。`both` は、信頼度が最も高い手をフレームごとに使う（ラベルのヒステリシスはかけない）。
+設定は右手の形で持ち、左手で操作しているときは、左右に依存する検出の値（いいねの左右の発火の閾値と上下の回転の重み、ピースの中立の方位角、位置の 3×3 の列）を
+内部で反転して使う。方向の操作は利用者から見た絶対方向のまま。`both` でも、操作している手の左右はヒステリシスをかけたラベルで決める。左手で測った値は右手の形に
+反転して保存する（13.53。実機の確認は [CHECKLIST-left-hand.md](CHECKLIST-left-hand.md)）。
 
 ## 3. 設計から変わった主な点と、その理由（詳細は SPEC 13 節）
 
@@ -107,7 +111,7 @@
 - 設定: `config.toml`（既定値と説明）< `calibration.toml`（校正・学習が書く、作者固有の値）< `auto.toml`（run の操作範囲の自動補正）。項目の定義は `aircontroller/params.py`、履歴は `settings-history/`（SPEC 13.43）。測定の候補は `calibration-history/`、効果の見積もりの基準記録は `eval-manifest.toml`、動いている run のライブのサーバーは `live.json`。オーバーレイを畳んだかは `ui_state.json`。
 - 道具（`tools/`）: `latency_summary.py`（遅延ログの要約）、`bench_eventlog.py`・`latency_ab.py`（記録の負荷）、`golden_diff.py`（期待値の差を種類ごとに）、`cursor_smoothing.py`（平滑化の比較）、`handedness_report.py`（左右ラベルの反転率）、`cpu_states.py`・`monitor.py`・`load_report.py`（負荷の計測）、`position_report.py`・`pinch_gate_eval.py`（位置ごとの判定、SPEC 13.41・13.42）、`live_load.py`（設定画面をつないだときの run の負荷）。
 - 記録: `recordings/*.jsonl`（ランドマーク列＋有効化の状態。148MB。`mark-*.jsonl` は ¥ の印の前後）、`*.labels.json`（lab / learn の区間ラベル）。`logs/latency-*.csv`（フレームごとの時刻。古いものは `logs/archive/` に gzip）、`logs/events-*.jsonl`（イベントログ）、`logs/monitor-*.csv`（負荷の計測）。
-- テスト: `tests/`（299本、約 80 秒）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`、作ったときの設定で流す）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。加えて、tests/fixtures/ と recordings/ の 86 本を今の設定（config.toml + calibration.toml）で流し、`tests/golden-current/` の要約（ハッシュ・件数・move と scroll 以外の全イベント）と比べる（13.50。記録がなければスキップ）。設定を確定したら、差を `tools/golden_diff.py --current` で確かめてから `--write` で作り直す。
+- テスト: `tests/`（318本、約 90 秒）。左手・両手は、右手の記録を左右反転して流す（`tests/test_left_hand.py`、13.53）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`、作ったときの設定で流す）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。加えて、tests/fixtures/ と recordings/ の 86 本を今の設定（config.toml + calibration.toml）で流し、`tests/golden-current/` の要約（ハッシュ・件数・move と scroll 以外の全イベント）と比べる（13.50。記録がなければスキップ）。設定を確定したら、差を `tools/golden_diff.py --current` で確かめてから `--write` で作り直す。
 - 環境: Python 3.12 の `.venv`。依存は [requirements.txt](requirements.txt)。権限は実行元のターミナルにカメラ・入力監視・アクセシビリティの 3つ。
 
 ## 7.5 設定画面の作業（2026-10-26、第1〜7節が完了。第8節は見送り）

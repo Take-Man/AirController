@@ -10,6 +10,10 @@
 - "displacement": モードに入ったときの指先の画像上の位置を基準に、そこからの変位（手の大きさで正規化）を使う。
 
 どちらも左右は利用者から見た向き（右が正）、上下は上が正。
+
+設定は右手で操作したときの形で持つ。左手で操作しているとき（mirror。ジェスチャー層がフレームごとに決める）は、
+左右に依存する値を反転して使う: ピースの中立の方位角の符号、いいねの左右の発火の閾値の入れ替え、上下の回転の重みの符号
+（SPEC 13.53）。方向の意味（変位の左右）は利用者から見た絶対方向のままで、反転しない。
 """
 from __future__ import annotations
 
@@ -88,6 +92,7 @@ class PeaceController:
 
     def __init__(self, cfg):
         self.cfg = cfg
+        self.mirror = False  # 左手で操作している（左右に依存する設定値を反転して使う）
         self._filter = OneEuroFilter2D(cfg.peace_min_cutoff, cfg.peace_beta, 1.0)
         self.derive()
         self.reset()
@@ -131,7 +136,8 @@ class PeaceController:
         c = self.cfg
         if self.angle:
             yaw, pitch = direction_angles(hand)
-            sx, sy = yaw - c.peace_neutral_yaw_deg, pitch - c.peace_neutral_pitch_deg
+            nyaw = -c.peace_neutral_yaw_deg if self.mirror else c.peace_neutral_yaw_deg  # 右手の内旋 → 左手では逆向き
+            sx, sy = yaw - nyaw, pitch - c.peace_neutral_pitch_deg
         else:
             x, y, ref = fingertip_position(hand, image_size)
             if self._origin is None:
@@ -178,7 +184,7 @@ class PeaceController:
         # 計時中は発火の閾値を下回っても続ける（閾値付近で行き来すると計時が毎回やり直しになり、発火しなかった: peace03）
         side = region if region in self.discrete else None
         amount = ay if side in ("up", "down") else ax
-        fire = self.fire_by_dir.get(side, self.fire) if side else self.fire
+        fire = self._fire_for(side) if side else self.fire
         if self._nav_since is not None and side != self._nav_side:
             self._nav_since = None
         if side and self._armed and t_s >= self._cooldown_until and (self._nav_since is not None or amount >= fire):
@@ -198,6 +204,12 @@ class PeaceController:
             v.nav_progress = 0.0
         return events
 
+    def _fire_for(self, side: str) -> float:
+        """方向ごとの発火の閾値。設定は右手の形なので、左手では左右を入れ替えて引く（右手の「左へ」は、左手の「右へ」に当たる）。"""
+        if self.mirror and side in ("left", "right"):
+            side = "right" if side == "left" else "left"
+        return self.fire_by_dir.get(side, self.fire)
+
     def _dir_name(self, side: str) -> str:
         # 既定（nav_swap = true）: 手を左へ → 進む（⌘]）、右へ → 戻る（⌘[）。作者の指示で入れ替えた（TASKS-20261025 2.4）
         back_side = "right" if self.cfg.nav_swap else "left"
@@ -215,6 +227,7 @@ class ThumbsUpController(PeaceController):
 
     def __init__(self, cfg):
         self.cfg = cfg
+        self.mirror = False
         self._filter = OneEuroFilter2D(cfg.peace_min_cutoff, cfg.peace_beta, 1.0)
         self.derive()
         self.reset()
@@ -289,7 +302,10 @@ class ThumbsUpController(PeaceController):
         c = self.cfg
         dx, dy, rt, rk = self.raw_signal(hand, image_size)
         sx = dx + (c.thumbsup_x_w_thumb * rt + c.thumbsup_x_w_knuckle * rk) / 45.0
-        sy = dy + (c.thumbsup_y_w_thumb * rt + c.thumbsup_y_w_knuckle * rk) / 45.0
+        # 上下の回転の重みは、左手では符号を反転する（左右反転で角度の変化の符号が逆になり、上下の変位は変わらないため）。
+        # 左右の重みは反転しない（変位と角度の変化が両方とも逆になり、同じ重みで左右の量がそのまま鏡像になる）
+        ys = -1.0 if self.mirror else 1.0
+        sy = dy + ys * (c.thumbsup_y_w_thumb * rt + c.thumbsup_y_w_knuckle * rk) / 45.0
         return self._filter(sx, sy, t_s)
 
     def raw_signal(self, hand: Hand, image_size) -> tuple[float, float, float, float]:

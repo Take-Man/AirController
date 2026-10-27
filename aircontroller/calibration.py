@@ -66,6 +66,20 @@ class LearnResult:
     report: str
 
 
+def canonical_hand(h, hand: str = "both"):
+    """校正・学習で使う手を、右手の形（正準）にそろえる（SPEC 13.53）。左手として扱う手は左右反転する。
+    返り値は (そろえた手, 左手だったか)。左右は、設定の手（right / left）があればそれ、both ならフレームのラベル（gesture.hand_side）。"""
+    from .gesture import hand_side, mirror_hand
+
+    left = hand_side(h, hand) == "Left"
+    return (mirror_hand(h) if left else h), left
+
+
+def _swap_lr(label: str) -> str:
+    """左手の記録の、方向の区間のラベルを右手の形に読み替える（左手の「左へ」は、右手の「右へ」に当たる）。"""
+    return {"left": "right", "right": "left"}.get(label, label)
+
+
 def learn_thumbsup(frames, segments: list[dict], hand: str = "both") -> LearnResult:
     """いいねモードの学習（SPEC 13.18）。frames はラベル付きの記録、segments は区間（label, t_start_ns, t_end_ns）。
 
@@ -74,6 +88,7 @@ def learn_thumbsup(frames, segments: list[dict], hand: str = "both") -> LearnRes
       から求め、軸ごとに「変位 + 重み × 角度/45」の重みを格子探索で選ぶ。選ぶ基準は、正面の揺れ（p95）を単位にした
       両方向の余裕（小さい方）から、反対の軸へのはみ出しを引いたもの（重みを大きくして全体を拡大しても得をしないように）。
       閾値は、正面の p95 と、その方向の p20 の中間に置く。
+    - 左手で記録したときは、手を左右反転し、左右の区間を入れ替えて、右手の形で学習する（保存する値は右手の形。SPEC 13.53）。
     """
     from .gesture import finger_straightness, preferred_hand, thumb_far, thumb_fold_metric, thumb_up
     from .peace import _wrap, hand_angles, palm_position
@@ -87,10 +102,11 @@ def learn_thumbsup(frames, segments: list[dict], hand: str = "both") -> LearnRes
         lab = label_of(f.t_capture_ns)
         if lab is None or not f.hands:
             continue
-        h = preferred_hand(f.hands, hand)
+        h, left = canonical_hand(preferred_hand(f.hands, hand), hand)
         x, y, ref = palm_position(h, f.image_size)
         at, ak = hand_angles(h, f.image_size)
-        rows.append({"label": lab, "_t": f.t_capture_ns, "x": x, "y": y, "ref": ref, "at": at, "ak": ak,
+        rows.append({"label": _swap_lr(lab) if left else lab, "_t": f.t_capture_ns, "left": left,
+                     "x": x, "y": y, "ref": ref, "at": at, "ak": ak,
                      "index": finger_straightness(h.world, INDEX_MCP), "up": thumb_up(h),
                      "fold": thumb_fold_metric(h), "far": thumb_far(h, f.image_size)})
     by = {}
@@ -134,7 +150,8 @@ def learn_thumbsup(frames, segments: list[dict], hand: str = "both") -> LearnRes
     seg_rows = []  # (label, [rows]) を時間順に
     for sgm in segments:
         rs = [r for r in rows if r.get("_t") is not None and sgm["t_start_ns"] <= r["_t"] < sgm["t_end_ns"]]
-        seg_rows.append((sgm["label"], rs))
+        left = sum(r["left"] for r in rs) * 2 > len(rs)  # 区間の大半が左手なら、右手の形の向きに読み替える
+        seg_rows.append((_swap_lr(sgm["label"]) if left else sgm["label"], rs))
     F = {k: [] for k in need}
     origin = None
     for lab, rs in seg_rows:
@@ -209,6 +226,8 @@ def learn_thumbsup(frames, segments: list[dict], hand: str = "both") -> LearnRes
         right = np.mean([r == k for r in reg]) * 100
         wrong = np.mean([r not in (k, "center", "between") for r in reg]) * 100
         lines.append(f"  {k:6s}: {right:3.0f}% / {wrong:3.0f}%")
+    if rows and sum(r["left"] for r in rows) * 2 > len(rows):
+        lines.append("左手で記録した: 手を左右反転し、左右の区間を入れ替えて、右手の形で学習した（上の左・右は右手の形での向き）")
     return LearnResult(params, "\n".join(lines))
 
 
@@ -218,7 +237,7 @@ def learn_zoom(frames, segments: list[dict], hand: str = "both") -> LearnResult:
 
     指先の前後の測り方の候補（zoom.zoom_signals）ごとに、in と out が反対向きに、正面の揺れより十分大きく動くかを比べ、
     いちばん分かれるものを選ぶ。符号はズームインが正になるようにする。"""
-    from .gesture import finger_straightness, palm_facing, preferred_hand
+    from .gesture import finger_straightness, hand_side, palm_facing, preferred_hand
     from .types import INDEX_MCP, MIDDLE_MCP, RING_MCP
     from .zoom import zoom_signals
 
@@ -229,7 +248,7 @@ def learn_zoom(frames, segments: list[dict], hand: str = "both") -> LearnResult:
             if sgm["t_start_ns"] <= f.t_capture_ns < sgm["t_end_ns"] and f.hands:
                 h = preferred_hand(f.hands, hand)
                 sig = zoom_signals(h, f.image_size)
-                sig["_back"] = palm_facing(h)
+                sig["_back"] = palm_facing(h, hand_side(h, hand))
                 sig["_open"] = min(finger_straightness(h.world, m) for m in (INDEX_MCP, MIDDLE_MCP, RING_MCP))
                 rs.append(sig)
         seq.append((sgm["label"], rs))
@@ -374,7 +393,7 @@ def collect_samples(frames, segments: list[dict], hand: str = "both") -> dict[st
             d["rpinch"].append(m["thumb_middle_n"])
         elif lab == "peace":
             d["peace_thumb"].append(thumb_fold_metric(h))
-            d["peace_dir"].append(direction_angles(h))
+            d["peace_dir"].append(direction_angles(canonical_hand(h, hand)[0]))  # 中立の方位角は右手の形で（左手は符号が逆）
     for lab, (n, seen) in count.items():
         d[f"frames_{lab}"], d[f"seen_{lab}"] = [n], [seen]
     return d
@@ -566,7 +585,8 @@ def reconstruct_old_segments(frames) -> list[dict]:
 def thumbsup_points(frames, segments: list[dict], hand: str = "both", weights=(0.0, 0.0, 0.0, 0.0)) -> dict:
     """いいねの記録（learn-thumbsup / calibrate --unit thumbsup）の、各方向の区間の方向の量（右・上が正、単位は
     手首→中指付け根の長さ）と、親指の離れ（thumb_far）。方向の量は learn_thumbsup と同じく、直前の正面の区間の中央値から測る。
-    weights は (左右: 親指, 左右: 付け根, 上下: 親指, 上下: 付け根) の回転の重み。"""
+    weights は (左右: 親指, 左右: 付け根, 上下: 親指, 上下: 付け根) の回転の重み。
+    左手の記録は、learn_thumbsup と同じく右手の形にそろえて出す（設定画面は右手操作の場合を表示する。SPEC 13.53）。"""
     from .gesture import preferred_hand, thumb_far
     from .peace import _wrap, hand_angles, palm_position
 
@@ -575,15 +595,18 @@ def thumbsup_points(frames, segments: list[dict], hand: str = "both", weights=(0
     origin = None
     for sgm in segments:
         lab = sgm["label"]
-        rs = []
+        rs, lefts = [], []
         for f in frames:
             if sgm["t_start_ns"] <= f.t_capture_ns < sgm["t_end_ns"] and f.hands:
-                h = preferred_hand(f.hands, hand)
+                h, left = canonical_hand(preferred_hand(f.hands, hand), hand)
                 x, y, ref = palm_position(h, f.image_size)
                 at, ak = hand_angles(h, f.image_size)
                 rs.append((x, y, ref, at, ak, thumb_far(h, f.image_size)))
+                lefts.append(left)
         if not rs:
             continue
+        if sum(lefts) * 2 > len(lefts):
+            lab = _swap_lr(lab)
         if lab.startswith("neg_fist"):
             far["neg"] += [r[5] for r in rs]
         elif lab in ("center", "up", "left", "right", "down"):

@@ -140,7 +140,7 @@ class App:
             src = "auto" if p.key in auto.get(p.section, {}) else "calibration" if p.key in cal.get(p.section, {}) else "config"
             params.append({"id": p.id, "section": p.section, "key": p.key, "name": p.name, "cls": p.cls, "lo": p.lo,
                            "hi": p.hi, "step": p.step, "unit": p.unit, "desc": p.desc, "writers": list(p.writers),
-                           "position": p.position, "choices": list(CHOICES.get(p.id, ())),
+                           "position": p.position, "sided": p.sided, "choices": list(CHOICES.get(p.id, ())),
                            "default": default[p.section][p.key], "saved": saved[p.section][p.key], "source": src,
                            "measured": measured.get(p.id)})
         cam = default.get("camera", {})

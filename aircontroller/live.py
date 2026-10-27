@@ -178,12 +178,12 @@ def snapshot(engine, frame, active: bool) -> dict:
         return out
     w = hand.world
     m = image_pinch_metrics(hand, frame.image_size)
-    out.update(hand=True, label=hand.handedness, score=_r(hand.score),
+    out.update(hand=True, label=hand.handedness, side=engine.side, score=_r(hand.score),
                landmarks=[[_r(x), _r(y)] for x, y in hand.landmarks[:, :2]],
                palm=[_r(v) for v in (st.palm or (None, None))],
                ti=_r(m["thumb_index_n"]), tm=_r(m["thumb_middle_n"]), thumb_fold=_r(thumb_fold_metric(hand)),
                straight=[_r(finger_straightness(w, k)) for k in (INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP)],
-               palm_facing=_r(palm_facing(hand)), thumb_up=_r(thumb_up(hand)), thumb_far=_r(thumb_far(hand, frame.image_size)),
+               palm_facing=_r(palm_facing(hand, engine.side)), thumb_up=_r(thumb_up(hand)), thumb_far=_r(thumb_far(hand, frame.image_size)),
                pinch_progress=_r(st.pinch_progress))
     if st.mode == "peace":
         out["peace"] = [_r(v) for v in engine._peace.view.raw]

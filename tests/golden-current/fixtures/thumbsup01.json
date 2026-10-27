@@ -109,11 +109,11 @@
   "roi_width_max": 0.6,
   "position_scale": null
  },
- "sha256": "09235ee38063e5077c65bbc039da1927ef4ab803ae6d313585b8987b9f7b0d4e",
+ "sha256": "457ca79f4d9af1c72c66c61407bac174a5372c54662d222c2135ea10ec0d320b",
  "counts": {
   "hand_acquired": 10,
   "hand_lost": 9,
-  "move": 45,
+  "move": 46,
   "pinch_cancel:left": 2,
   "pinch_start:left": 2,
   "release_all": 1,
@@ -122,7 +122,7 @@
   "thumbsup:right": 3,
   "thumbsup:up": 2
  },
- "move": 45,
+ "move": 46,
  "scroll": {
   "count": 4,
   "dy": -20

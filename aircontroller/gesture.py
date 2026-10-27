@@ -14,6 +14,7 @@ One Euro Filter、親指と人差し指の短いピンチでのクリック。
 """
 from __future__ import annotations
 
+import dataclasses
 import math
 from dataclasses import dataclass, fields
 
@@ -34,7 +35,9 @@ class GestureConfig:
     # 使う手（TASKS-20261025 2.5）: "right" / "left" / "both"。MediaPipe の左右ラベルで選び、別のラベルの手は「手がない」と
     # 同じに扱う。ラベルは一時的に反転する（記録では 1〜3 フレームのものが多い）ので、別のラベルが hand_switch_frames
     # フレーム続いたときだけ別の手とみなす。ピンチ・ドラッグ・右クリック待ち・ピース・いいね・ズームの途中では切り替えない。
-    # 既定値は互換のため "both"。config.toml で "right" にしている
+    # 既定値は互換のため "both"。config.toml で "right" にしている。"both" でも同じヒステリシスで、操作している手のラベル
+    # （side）を決める。設定値は右手を基準の形（正準）として持ち、side が Left のときは、左右に依存する検出の値を内部で反転して
+    # 使う（ピースの中立の方位角、いいねの左右の発火の閾値と上下の回転の重み、位置の 3×3 の列。SPEC 13.53）
     # さらに、ラベルが変わった瞬間に手のひら中心が hand_switch_jump（画像の幅に対する比）以上跳んだときだけ別の手とみなす。
     # 位置が続いたままラベルだけが変わるのは、同じ手の誤判定（記録では跳びは 0.08 以下で、8〜175 フレーム続くこともあった）。
     # 別の手が映ったときは 0.3〜0.45 跳んでいた。0 で無効（フレーム数だけで決める）
@@ -243,16 +246,31 @@ def thumb_up(hand: Hand) -> float:
     return float(-v[1] / n) if n > 0 else 0.0
 
 
-def palm_facing(hand: Hand) -> float:
+def palm_facing(hand: Hand, side: str | None = None) -> float:
     """手の甲がカメラを向くと +1、手のひらがカメラを向くと −1（world の手のひらの法線の z 成分。左右の手でそろえる）。
-    lab01: 手の甲 +0.71、手のひら −0.91。"""
+    lab01: 手の甲 +0.71、手のひら −0.91。side は操作している手のラベル（"Right" / "Left"。ヒステリシスをかけた値）。
+    省くとそのフレームの生のラベルを使う（同じ手のラベルが一時的に反転したフレームで符号が逆になる。SPEC 13.53）。"""
     w = hand.world
     n = np.cross(w[INDEX_MCP] - w[WRIST], w[PINKY_MCP] - w[WRIST])
     nn = float(np.linalg.norm(n))
     if nn == 0:
         return 0.0
     z = float(n[2] / nn)
-    return z if hand.handedness == "Right" else -z
+    return z if (side or hand.handedness) == "Right" else -z
+
+
+def hand_side(hand: Hand, hand_cfg: str = "both") -> str:
+    """校正・学習で、その手を右手・左手のどちらとして扱うか。設定の手（right / left）があればそれ、both ならフレームのラベル。"""
+    return {"right": "Right", "left": "Left"}.get(hand_cfg) or hand.handedness
+
+
+def mirror_hand(hand: Hand) -> Hand:
+    """手を左右反転する（画像 x → 1 − x、world x → −x、ラベルを入れ替える）。左手の値を右手の形（正準）にそろえるときと、
+    テストで右手の記録から左手の記録を作るときに使う（SPEC 13.53）。"""
+    lm, w = hand.landmarks.copy(), hand.world.copy()
+    lm[:, 0] = 1.0 - lm[:, 0]
+    w[:, 0] = -w[:, 0]
+    return dataclasses.replace(hand, handedness="Left" if hand.handedness == "Right" else "Right", landmarks=lm, world=w)
 
 
 def thumb_far(hand: Hand, image_size: tuple[int, int]) -> float:
@@ -451,9 +469,8 @@ class GestureEngine:
         c = self.cfg
         t = frame.t_capture_ns
         best = self._best(frame)
-        if c.hand == "both":
-            return best, best
-        want = "Right" if c.hand == "right" else "Left"
+        # "both" は、どちらの手でも操作に使う（want = None）。ラベルのヒステリシスは、操作している手の左右（side）を決めるためにかける
+        want = {"right": "Right", "left": "Left"}.get(c.hand)
         hands = [h for h in frame.hands if h.score >= c.min_score]
         if best is None:
             # 見失いが続いたら、ラベルを忘れる（次に見えた手のラベルを、そのまま使う）
@@ -461,16 +478,17 @@ class GestureEngine:
                 self._label, self._label_run, self._label_palm = None, 0, None
             return None, None
         self._label_seen_t = t
-        matching = [h for h in hands if h.handedness == want]
+        matching = [h for h in hands if want is None or h.handedness == want]
         if len(hands) > 1:
             # 両方の手が映っている（tracker.num_hands = 2）: 設定の手のラベルの手だけを使う。もう一方の手が先に映っていても、
-            # 設定の手を出せばすぐに操作できる。ラベルの状態もその手に合わせる（もう一方の手が去った後も、続けて使えるように）
+            # 設定の手を出せばすぐに操作できる。ラベルの状態もその手に合わせる（もう一方の手が去った後も、続けて使えるように）。
+            # "both" では信頼度が最も高い手
             if not matching:
                 return None, best
             chosen = max(matching, key=lambda h: h.score)
-            if self._label != want:
+            if self._label != chosen.handedness:
                 self._label_age = 0
-            self._label, self._label_run = want, 0
+            self._label, self._label_run = chosen.handedness, 0
             self._label_palm = tuple(float(v) for v in chosen.landmarks[list(PALM), :2].mean(axis=0))
             self._label_palm_t = t
             return chosen, best
@@ -503,11 +521,17 @@ class GestureEngine:
             if (self._label_run >= c.hand_switch_frames and self._flip_jumped
                     and (self._flip_other or self.state.mode not in self.LOCKED_MODES)):
                 self._label, self._label_run, self._label_age = raw, 0, 0
-            elif self._flip_other:
+            elif self._flip_other and want is not None:
                 return None, best  # 切り替わるまでの数フレームも、乗り換えた先の手では操作しない（グーと同じく何もしない）
         else:
             self._label_run = 0
-        return (best if self._label == want else None), best
+        return (best if want is None or self._label == want else None), best
+
+    @property
+    def side(self) -> str:
+        """操作している手の左右（"Right" / "Left"）。"right" / "left" の設定ではその手、"both" ではヒステリシスをかけたラベル。
+        Left のとき、左右に依存する検出の値を内部で反転して使う（SPEC 13.53）。"""
+        return {"right": "Right", "left": "Left"}.get(self.cfg.hand) or self._label or "Right"
 
     def primary_hand(self, frame: LandmarkFrame) -> Hand | None:
         """そのフレームで使う手。update の後に同じフレームで呼ぶと、update が選んだ手を返す。"""
@@ -562,9 +586,12 @@ class GestureEngine:
         t = frame.t_capture_ns
         hand, raw_best = self._select(frame)
         self._selected = (t, hand, raw_best)
+        # 左手で操作しているときは、左右に依存する検出の値を反転して使う（設定は右手を基準の形で持つ。SPEC 13.53）
+        side = self.side
+        self._peace.mirror = self._thumbsup.mirror = side == "Left"
         # 閾値（ピンチ・親指の畳み・ピースの条件）は、手のひら中心の位置を渡して取る。今は位置を無視して設定の値（thresholds.py）
         th = self._th.at(tuple(float(v) for v in hand.landmarks[list(PALM), :2].mean(axis=0)) if hand is not None else None,
-                         self.roi(frame.image_size))
+                         self.roi(frame.image_size), mirror=side == "Left")
         st = self.state
         st.t_ns, st.active = t, frame.active
 
@@ -602,7 +629,7 @@ class GestureEngine:
             tf = thumb_fold_metric(hand)
             self._thumb_folded_raw = tf > (th.thumb_fold_off if self._thumb_folded_raw else th.thumb_fold_on)
             # ズームの姿勢: 入るときは手の甲を向けて人差し指・中指・薬指を伸ばす。入った後は手の甲の向きだけ見る
-            back = palm_facing(hand)
+            back = palm_facing(hand, side)
             if self._zoom_posture.value:
                 self._zoom_raw = (c.zoom_enabled and back > c.zoom_stay_back_min and tf < c.zoom_stay_thumb_max
                                   and float(np.mean(fingers)) > c.zoom_stay_open_min)

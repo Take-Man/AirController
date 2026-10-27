@@ -222,7 +222,7 @@ function itemRow(id, opt = {}) {
   const p = byId[id];
   if (!p) return el("div");
   const box = el("div", { class: "item", "data-id": id });
-  const name = el("span", { class: "name" }, opt.label || p.name);
+  const name = el("span", { class: "name" }, opt.label || p.name, p.sided ? el("span", { class: "muted small sided" }, ` ${SIDED_NOTE}`) : null);
   if (SEG_ITEMS[id]) {
     const seg = segmented(id, SEG_ITEMS[id].opts);
     const vals = el("div", { class: "vals" });
@@ -392,8 +392,12 @@ function keyTable(ids) {
 }
 
 // o.parts: 部品（見出し・図・値の表・注記）を返す（ほかの図と組み合わせて並べるとき）。o.stack: 図の下に値の表。o.below: 値の表の下に置くもの
+const SIDED_NOTE = "右手操作の場合を表示しています。"; // 左右に依存する項目（左手では内部で反転して使う。SPEC 13.53）
+const isSided = (ids) => ids.some((id) => byId[id] && byId[id].sided);
+
 function widgetBox(title, sub, fig, ids, note, o = {}) {
-  const head = el("div", { class: "wtitle" }, el("strong", {}, title), sub ? el("span", { class: "muted small" }, sub) : null);
+  const head = el("div", { class: "wtitle" }, el("strong", {}, title), sub ? el("span", { class: "muted small" }, sub) : null,
+    isSided(ids) ? el("span", { class: "muted small sided" }, SIDED_NOTE) : null);
   const table = keyTable(ids);
   const noteEl = note ? el("p", { class: "muted small" }, note) : null;
   if (o.parts) return { head, fig, table, note: noteEl };

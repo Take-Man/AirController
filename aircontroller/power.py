@@ -40,8 +40,9 @@ class PowerConfig:
         return cls(**{k: v for k, v in e.items() if k in cls.__dataclass_fields__})
 
 
-def is_wake_pose(hand: Hand, c: PowerConfig) -> bool:
-    if palm_facing(hand) >= c.wake_palm_max:
+def is_wake_pose(hand: Hand, c: PowerConfig, side: str | None = None) -> bool:
+    """side は操作している手の左右（ジェスチャー層の side。手のひらの向きの符号をそろえる）。"""
+    if palm_facing(hand, side) >= c.wake_palm_max:
         return False
     if min(finger_straightness(hand.world, m) for m in (INDEX_MCP, MIDDLE_MCP, RING_MCP, PINKY_MCP)) <= c.wake_open_min:
         return False
@@ -77,7 +78,7 @@ class PowerController:
         self._palm_since = None
         self.wake_progress = 0.0
 
-    def update(self, t_ns: int, active: bool, hand: Hand | None) -> str | None:
+    def update(self, t_ns: int, active: bool, hand: Hand | None, side: str | None = None) -> str | None:
         """推論したフレームごとに呼ぶ。hand はジェスチャー層が選んだ手（設定の手でなければ None）。
         返り値: "auto_off"（オフにすべき）/ "wake"（オンにすべき）/ None。"""
         c = self.cfg
@@ -94,7 +95,7 @@ class PowerController:
         if not c.wake_enabled:
             return None
         present = hand is not None
-        palm = present and is_wake_pose(hand, c)
+        palm = present and is_wake_pose(hand, c, side)
         if self.state == "off":
             if present and (not self._prev_present or palm):
                 self.state = "probe"

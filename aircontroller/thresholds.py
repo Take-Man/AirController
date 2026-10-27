@@ -7,6 +7,7 @@
     [position]
     pinch_on = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.1]]   # 行 = 上・中・下、列 = 利用者から見た左・中・右
 マスは操作範囲（roi）を 3×3 に分けたもの（範囲の外は、いちばん近いマス）。読み込むときに形式だけ確かめる。
+表は右手で操作したときの形で持つ。左手で操作しているときは、列（左・右）を入れ替えて使う（SPEC 13.53、作者の決定）。
 """
 from __future__ import annotations
 
@@ -51,13 +52,15 @@ def validate_grid(grid) -> dict[str, tuple[tuple[float, ...], ...]]:
     return out
 
 
-def cell(palm: tuple[float, float], roi: tuple[float, float, float, float]) -> tuple[int, int]:
+def cell(palm: tuple[float, float], roi: tuple[float, float, float, float], mirror: bool = False) -> tuple[int, int]:
     """手のひら中心（画像座標）が、操作範囲を 3×3 に分けたどのマスか（行 = 上 0・中 1・下 2、列 = 利用者から見た左 0・中 1・右 2）。
-    画像は鏡像でないので、画像の右が利用者の左。範囲の外は、いちばん近いマス。"""
+    画像は鏡像でないので、画像の右が利用者の左。範囲の外は、いちばん近いマス。
+    mirror（左手で操作している）のときは、右手の形の表を引くために列を入れ替える（利用者から見た右 → 列 0）。"""
     x0, y0, w, h = roi
     u = 1.0 - (palm[0] - x0) / w if w > 0 else 0.5
     v = (palm[1] - y0) / h if h > 0 else 0.5
-    return min(2, max(0, int(v * 3))), min(2, max(0, int(u * 3)))
+    col = min(2, max(0, int(u * 3)))
+    return min(2, max(0, int(v * 3))), (2 - col if mirror else col)
 
 
 class PositionThresholds:
@@ -74,6 +77,8 @@ class PositionThresholds:
     def base(self) -> Thresholds:
         return self._base
 
-    def at(self, palm: tuple[float, float] | None, roi: tuple[float, float, float, float] | None) -> Thresholds:
-        """手のひら中心の位置での閾値。今は位置を無視して、設定の値を返す（位置による補正は SPEC 13.41 の (b) で、測ってから入れる）。"""
+    def at(self, palm: tuple[float, float] | None, roi: tuple[float, float, float, float] | None,
+           mirror: bool = False) -> Thresholds:
+        """手のひら中心の位置での閾値。今は位置を無視して、設定の値を返す（位置による補正は SPEC 13.41 の (b) で、測ってから入れる）。
+        mirror は左手で操作しているか（マスを引くときは cell(palm, roi, mirror) で列を入れ替える）。"""
         return self._base

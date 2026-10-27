@@ -352,7 +352,7 @@ def cmd_run(args, cfg: dict) -> int:
         slog.observe(frame, events, engine.state.mode, engine.raw_hand(frame),  # 左右ラベルは選ぶ前の手で記録する
                      engine.state.palm, engine.roi(frame.image_size))
         prev_power = power_ctl.state
-        action = power_ctl.update(frame.t_capture_ns, frame.active, engine.primary_hand(frame))
+        action = power_ctl.update(frame.t_capture_ns, frame.active, engine.primary_hand(frame), engine.side)
         if power_ctl.state != prev_power and "on" not in (prev_power, power_ctl.state):
             slog.record(frame.t_capture_ns, "power", state=power_ctl.state)  # off ⇄ probe（確認の窓）
         if action == "auto_off":
