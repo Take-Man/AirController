@@ -466,6 +466,8 @@ def cmd_run(args, cfg: dict) -> int:
         rec = {"active": activation.active, "power": power_ctl.state, "camera": pipe.state,
                "collapsed": hb["collapsed"], "num_hands": hand_policy.num_hands if hand_policy else 1,
                "hand": engine.hand_present, "mode": engine.state.mode, "dt_s": round(dt, 2),
+               # 今の操作範囲（自動補正を含む。中心 x, y と幅）。的のテストの条件として、測った時刻の値を引く（tools/targets_report.py）
+               "roi": [round(engine.roi_cx, 4), round(engine.roi_cy, 4), round(engine.roi_width, 4)],
                "cpu_pct": round((c1.user - c0.user + c1.system - c0.system) / dt * 100, 1),
                "threads_cpu_s": {k: round(v, 3) for k, v in cpustat.totals().items()},
                "proc_cpu_s": round(c1.user + c1.system, 3),

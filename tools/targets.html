@@ -18,7 +18,10 @@
   #panel h1 { font-size: 18px; margin: 0 0 8px; }
   #panel p { margin: 6px 0; color: var(--muted); }
   label { display: block; margin: 10px 0 4px; }
-  input, button, textarea { font: inherit; }
+  input, button, textarea, select { font: inherit; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+  select, input[type=number] { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
   input[type=text] { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
   button { margin-top: 14px; padding: 8px 18px; border-radius: 8px; border: 0; background: var(--fg); color: var(--bg); cursor: pointer; }
   table { border-collapse: collapse; width: 100%; margin: 10px 0; font-variant-numeric: tabular-nums; }
@@ -35,8 +38,16 @@
   <h1>クリック精度テスト</h1>
   <p>表示される円を、できるだけ速く正確にクリックしてください。円の外をクリックするとミスとして数えます。</p>
   <p>大きさ3種類 × 各10回、計30回。最初の1回は練習として集計から除きます。</p>
-  <label for="cond">条件（例: relative / absolute）</label>
-  <input id="cond" type="text" value="relative">
+  <p>測り方は logs/targets-YYYYmmdd.md の手順（tools/targets_report.py の先頭）。終わったら「JSON を保存」で結果を書き出します。</p>
+  <div class="grid2">
+    <div><label for="device">操作</label>
+      <select id="device"><option value="aircontroller">AirController</option><option value="trackpad">トラックパッド</option></select></div>
+    <div><label for="distance">カメラとの距離（cm）</label><input id="distance" type="number" min="0" step="1" placeholder="例: 60"></div>
+  </div>
+  <label for="light">明るさ（例: 昼・窓あり・照明オン）</label>
+  <input id="light" type="text">
+  <label for="note">メモ（任意）</label>
+  <input id="note" type="text">
   <button id="start">開始</button>
 </div>
 <script>
@@ -46,7 +57,13 @@
   const arena = document.getElementById('arena');
   const panel = document.getElementById('panel');
   const hud = document.getElementById('hud');
-  let trials = [], idx = 0, tShown = 0, misses = 0, prev = null, cond = '', el = null;
+  let trials = [], idx = 0, tShown = 0, misses = 0, missOff = [], prev = null, cond = '', el = null, meta = null, runNo = 0;
+  // 壁時計（ローカル時刻、ミリ秒）。イベントログ（logs/events-*.jsonl の wall）と同じ形で、run の状態（操作範囲・遅延）と突き合わせる
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+  function wallIso(d = new Date()) {
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+  }
+  const val = (id) => document.getElementById(id).value.trim();
 
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
@@ -63,12 +80,20 @@
     if (!el) { el = document.createElement('div'); el.className = 'target'; arena.appendChild(el); }
     el.style.width = el.style.height = s + 'px';
     el.style.left = x + 'px'; el.style.top = y + 'px';
-    tShown = performance.now(); misses = 0;
+    tShown = performance.now(); misses = 0; missOff = [];
     hud.textContent = `${cond}  ${idx + 1} / ${trials.length}`;
   }
 
   function start() {
-    cond = document.getElementById('cond').value.trim() || 'unnamed';
+    const device = val('device');
+    cond = device === 'trackpad' ? 'トラックパッド' : 'AirController';
+    runNo++;
+    meta = { format: 'aircontroller-targets', version: 1, device, run_in_page: runNo,
+             distance_cm: val('distance') === '' ? null : Number(val('distance')), light: val('light'), note: val('note'),
+             start: wallIso(), user_agent: navigator.userAgent,
+             window: [innerWidth, innerHeight], screen: [screen.width, screen.height], dpr: devicePixelRatio,
+             fullscreen: !!document.fullscreenElement || (innerWidth === screen.width && innerHeight === screen.height),
+             sizes: SIZES, per_size: PER_SIZE };
     trials = [{ size: 48, practice: true }].concat(shuffle(SIZES.flatMap(s => Array(PER_SIZE).fill(0).map(() => ({ size: s })))));
     idx = 0; prev = null; panel.style.display = 'none';
     place();
@@ -78,8 +103,10 @@
     if (!trials.length || idx >= trials.length) return;
     const t = trials[idx];
     const hit = Math.hypot(ev.clientX - t.x, ev.clientY - t.y) <= t.size / 2;
-    if (!hit) { misses++; return; }
-    t.time = performance.now() - tShown; t.misses = misses;
+    if (!hit) {  // 外れた距離（円の縁から、px）も残す
+      misses++; missOff.push(Math.round(Math.hypot(ev.clientX - t.x, ev.clientY - t.y) - t.size / 2)); return;
+    }
+    t.time = performance.now() - tShown; t.misses = misses; t.miss_px = missOff; t.wall = wallIso();
     prev = { x: t.x, y: t.y }; idx++;
     if (idx < trials.length) place(); else finish();
   });
@@ -100,6 +127,12 @@
     const total = done.reduce((a, t) => a + t.time, 0) / 1000;
     const missAll = done.reduce((a, t) => a + t.misses, 0);
     const tpAll = rows.reduce((a, r) => a + r.tp, 0) / rows.length;
+    meta.end = wallIso();
+    const result = { ...meta, summary: { total_s: +total.toFixed(2), misses: missAll, bits_per_s: +tpAll.toFixed(3),
+      by_size: rows.map(r => ({ size: r.s, median_s: +(r.med / 1000).toFixed(3), mean_s: +(r.mean / 1000).toFixed(3), misses: r.miss, bits_per_s: +r.tp.toFixed(3) })) },
+      trials: trials.map(t => ({ practice: !!t.practice, size: t.size, x: Math.round(t.x), y: Math.round(t.y), dist: Math.round(t.dist),
+        time_ms: Math.round(t.time), misses: t.misses, miss_px: t.miss_px, wall: t.wall })) };
+    const fname = `targets-${meta.start.slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}-${meta.device}.json`;
     const csv = ['cond,size,dist,time_ms,misses'].concat(done.map(t => `${cond},${t.size},${t.dist.toFixed(0)},${t.time.toFixed(0)},${t.misses}`)).join('\n');
     const summary = `[${cond}] 合計 ${total.toFixed(1)}s  ミス ${missAll}  スループット ${tpAll.toFixed(2)} bit/s  ` +
       rows.map(r => `${r.s}px: 中央値 ${(r.med / 1000).toFixed(2)}s ミス ${r.miss}`).join('  ');
@@ -107,15 +140,31 @@
       <table><tr><th>直径</th><th>中央値</th><th>平均</th><th>ミス</th><th>bit/s</th></tr>
       ${rows.map(r => `<tr><td>${r.s}px</td><td>${(r.med / 1000).toFixed(2)}s</td><td>${(r.mean / 1000).toFixed(2)}s</td><td>${r.miss}</td><td>${r.tp.toFixed(2)}</td></tr>`).join('')}
       <tr><td>合計</td><td colspan="2">${total.toFixed(1)}s</td><td>${missAll}</td><td>${tpAll.toFixed(2)}</td></tr></table>
-      <p>下の内容をコピーして貼ってください。</p>
-      <textarea readonly>${summary}\n${csv}</textarea>
-      <label for="cond">次の条件</label><input id="cond" type="text" value="${cond === 'relative' ? 'absolute' : 'relative'}">
-      <button id="start">もう一度</button>`;
+      <div class="row"><button id="save">JSON を保存（${fname}）</button><button id="again">もう一度（同じ条件）</button></div>
+      <p>保存した JSON は logs/targets/ に移し、tools/targets_report.py でまとめます。下は控え（コピー用）です。</p>
+      <textarea readonly>${summary}\n${csv}</textarea>`;
     panel.style.display = 'block';
-    document.getElementById('start').onclick = start;
+    document.getElementById('save').onclick = () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(result, null, 1)], { type: 'application/json' }));
+      a.download = fname; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    document.getElementById('again').onclick = () => { setupForm(meta); };
   }
 
-  document.getElementById('start').onclick = start;
+  // 「もう一度」: 入力欄を同じ条件で戻す（画面を作り直すので、値を引き継ぐ）
+  const form = panel.innerHTML;
+  function setupForm(m) {
+    panel.innerHTML = form;
+    if (m) {
+      document.getElementById('device').value = m.device;
+      document.getElementById('distance').value = m.distance_cm ?? '';
+      document.getElementById('light').value = m.light; document.getElementById('note').value = m.note;
+    }
+    document.getElementById('start').onclick = start;
+  }
+  setupForm(null);
 })();
 </script>
 </body>

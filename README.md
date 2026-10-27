@@ -55,7 +55,7 @@ uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
 .venv/bin/python -m aircontroller lab-position                   # 位置ごとに カーソル・クリック・ピース を記録（集計は tools/position_report.py）
 .venv/bin/python -m aircontroller lab-position --suite edge      # 右端・右下・下端への往復・静止・ピースで、意図しないピンチが出るかを記録
 .venv/bin/python -m aircontroller lab-report recordings/lab01.jsonl  # 候補ごとの区別のしやすさ
-open tools/targets.html                                          # クリック精度テスト（ブラウザで開く）
+open tools/targets.html                                          # クリック精度テスト（ブラウザで開く。手順は CHECKLIST-targets.md）
 .venv/bin/python -m aircontroller modkeys --old --new             # 修飾キーが押されたままと扱われていないか確認
 .venv/bin/python -m aircontroller keytest                        # キーコードと CGEventTap の確認
 .venv/bin/python -m aircontroller camlatency                     # カメラ側の遅延
@@ -77,6 +77,7 @@ open tools/targets.html                                          # クリック�
 .venv/bin/python tools/handedness_report.py                      # 左右ラベルの反転率
 .venv/bin/python tools/position_report.py recordings/labpos-....jsonl  # 位置ごとの判定と指の特徴量（lab-position の記録）
 .venv/bin/python tools/live_load.py                            # 設定画面をつないだ間とつながない間の run の CPU・遅延（run の起動中に）
+.venv/bin/python tools/targets_report.py logs/targets/targets-*.json  # 的のテストの結果（JSON）を logs/targets-YYYYmmdd.md にまとめる
 .venv/bin/python tools/pinch_gate_eval.py                        # ピンチを止める案の効果測定（SPEC 13.42、実装はしていない）
 ```
 

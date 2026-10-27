@@ -85,6 +85,8 @@
 - 体感遅延の見積もり: 約 100ms（合格ライン 80ms を超える。主因はカメラ）。
 - Swift 移行の判断（段階1・4の後）: 見送り。Python のコードは 1ms 未満で、遅延の大半はカメラ側。権限の扱いも問題なかった。
 - クリック精度テスト（tools/targets.html、30個の円）: 校正前 174.4秒・ミス 27・0.97 bit/s → 校正後 91.0秒・ミス 32（うち 19 が直径 24px）・1.49 bit/s。
+  今の設定での測り直し（2026-10-27、3 回の中央値と最小〜最大。logs/targets-20261027.md）: 61.2秒（50.6〜64.9）・ミス 3（0〜5、24px で 0〜3）・2.07 bit/s（2.06〜2.36）。
+  参考のトラックパッド（1 回）: 34.3秒・ミス 0・3.27 bit/s。前回とは操作範囲・ピンチの閾値・平滑化が違い、同じ条件の比較ではない（13.54）。
 - 負荷（2026-10-25、作者の環境・バッテリー駆動の簡易計測。[logs/load-20261025.md](logs/load-20261025.md)）: CPU（1コア比）は、有効・手あり 54%、有効・手なし 約 60%、オフ（1Hz）13%、カメラの取得だけ 9%。消費電力（Mac 全体）は、有効 約 18W、オフ 約 13W、カメラ停止 約 11W。熱の警告なし。バッテリー駆動の操作中の遅延 p95 約 24ms。待機中のオーバーレイ（17% → 4%）と 2 手の推論（30Hz → 10Hz）の無駄を直した。1 時間以上の連続稼働でのメモリは、現状で問題が出ていないため、作者の判断でクリアとみなす（2026-10-26）。
 - 記録の負荷（2026-10-25）: 推論の後の部分の p95 0.25 → 0.28ms（実機の A/B）。
 
@@ -109,7 +111,7 @@
 
 - `aircontroller/`: `eventlog.py`（イベントログ・印の記録）、`report.py`（イベントログの集計）、`power.py`（自動オフ・パーでのオン・1Hz）、`cpustat.py`（スレッド別の CPU）、`input.py`（カメラ・推論・停止と再起動・1 手と 2 手の切り替え）、`gesture.py`（状態機械。フレーム時刻と有効化の状態だけで動き、記録から再現できる）、`peace.py`（ピース・いいね）、`zoom.py`、`calibration.py`（校正・学習・測定ユニット）、`thresholds.py`（位置によって変えうる閾値の入口）、`params.py`（パラメータ台帳）、`settings.py`（設定の層・保存・履歴）、`settings_eval.py`（効果の見積もり）、`settings_server.py` と `web/`（設定画面）、`live.py`（run に内蔵するライブのサーバー）、`features.py`、`recording.py`、`latency.py`、`output/`（`mouse.py` CGEvent、`activation.py` CGEventTap、`overlay.py` AppKit、`permissions.py`）。
 - 設定: `config.toml`（既定値と説明）< `calibration.toml`（校正・学習が書く、作者固有の値）< `auto.toml`（run の操作範囲の自動補正）。項目の定義は `aircontroller/params.py`、履歴は `settings-history/`（SPEC 13.43）。測定の候補は `calibration-history/`、効果の見積もりの基準記録は `eval-manifest.toml`、動いている run のライブのサーバーは `live.json`。オーバーレイを畳んだかは `ui_state.json`。
-- 道具（`tools/`）: `latency_summary.py`（遅延ログの要約）、`bench_eventlog.py`・`latency_ab.py`（記録の負荷）、`golden_diff.py`（期待値の差を種類ごとに）、`cursor_smoothing.py`（平滑化の比較）、`handedness_report.py`（左右ラベルの反転率）、`cpu_states.py`・`monitor.py`・`load_report.py`（負荷の計測）、`position_report.py`・`pinch_gate_eval.py`（位置ごとの判定、SPEC 13.41・13.42）、`live_load.py`（設定画面をつないだときの run の負荷）。
+- 道具（`tools/`）: `latency_summary.py`（遅延ログの要約）、`bench_eventlog.py`・`latency_ab.py`（記録の負荷）、`golden_diff.py`（期待値の差を種類ごとに）、`cursor_smoothing.py`（平滑化の比較）、`handedness_report.py`（左右ラベルの反転率）、`cpu_states.py`・`monitor.py`・`load_report.py`（負荷の計測）、`position_report.py`・`pinch_gate_eval.py`（位置ごとの判定、SPEC 13.41・13.42）、`live_load.py`（設定画面をつないだときの run の負荷）、`targets.html`・`targets_report.py`（的のテストと、結果の JSON のまとめ。13.54）。
 - 記録: `recordings/*.jsonl`（ランドマーク列＋有効化の状態。148MB。`mark-*.jsonl` は ¥ の印の前後）、`*.labels.json`（lab / learn の区間ラベル）。`logs/latency-*.csv`（フレームごとの時刻。古いものは `logs/archive/` に gzip）、`logs/events-*.jsonl`（イベントログ）、`logs/monitor-*.csv`（負荷の計測）。
 - テスト: `tests/`（318本、約 90 秒）。左手・両手は、右手の記録を左右反転して流す（`tests/test_left_hand.py`、13.53）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`、作ったときの設定で流す）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。加えて、tests/fixtures/ と recordings/ の 86 本を今の設定（config.toml + calibration.toml）で流し、`tests/golden-current/` の要約（ハッシュ・件数・move と scroll 以外の全イベント）と比べる（13.50。記録がなければスキップ）。設定を確定したら、差を `tools/golden_diff.py --current` で確かめてから `--write` で作り直す。
 - 環境: Python 3.12 の `.venv`。依存は [requirements.txt](requirements.txt)。権限は実行元のターミナルにカメラ・入力監視・アクセシビリティの 3つ。
