@@ -205,16 +205,24 @@ def cmd_run(args, cfg: dict) -> int:
                          run_io=evlog.call if evlog else None, on_saved=mark_saved)
 
     mouse = Mouse()
+    from .keyboard import key_label, resolve_shortcut
+
+    # 戻る・進む・ズームのキーは、"auto" なら今のキーボード配列から決める（SPEC 13.57）
+    short = {n: resolve_shortcut(n, cfg.get(sec, {}).get(key, "auto"))
+             for n, (sec, key) in (("back", ("peace", "back_keycode")), ("forward", ("peace", "forward_keycode")),
+                                   ("in", ("zoom", "in_keycode")), ("out", ("zoom", "out_keycode")))}
+    print("ショートカットのキー: " + "、".join(f"{ja} {key_label(short[n][0])}（{short[n][0]}、{short[n][1]}）"
+                                       for n, ja in (("back", "戻る ⌘"), ("forward", "進む ⌘"), ("in", "ズームイン ⌘"),
+                                                     ("out", "ズームアウト ⌘"))))
     pc = cfg.get("peace", {})
-    nav_keys = {"back": {"keycode": pc.get("back_keycode", 30), "mods": pc.get("back_mods", ["cmd"])},
-                "forward": {"keycode": pc.get("forward_keycode", 42), "mods": pc.get("forward_mods", ["cmd"])}}
+    nav_keys = {"back": {"keycode": short["back"][0], "mods": pc.get("back_mods", ["cmd"])},
+                "forward": {"keycode": short["forward"][0], "mods": pc.get("forward_mods", ["cmd"])}}
     tc = cfg.get("thumbsup", {})
     thumbsup_keys = {d: {"keycode": tc.get(f"{d}_keycode", k), "mods": tc.get(f"{d}_mods", m)}
                  for d, k, m in (("left", 123, ["ctrl", "fn"]), ("right", 124, ["ctrl", "fn"]),
                                  ("up", 126, ["ctrl", "fn", "numpad"]))}
     zc = cfg.get("zoom", {})
-    zoom_keys = {d: {"keycode": zc.get(f"{d}_keycode", k), "mods": zc.get(f"{d}_mods", ["cmd"])}
-                 for d, k in (("in", 41), ("out", 27))}
+    zoom_keys = {d: {"keycode": short[d][0], "mods": zc.get(f"{d}_mods", ["cmd"])} for d in ("in", "out")}
     stop = threading.Event()
     output_enabled = threading.Event()
     if not args.no_output:
@@ -1584,7 +1592,7 @@ def cmd_settings(args, cfg: dict) -> int:
     write_info(ROOT, httpd.server_address[1], url)  # オーバーレイのギアのボタンが、動いているこのサーバーを開くため（13.51）
     print(f"設定画面: {url}\n（この URL にはトークンが入っています。終わるには Ctrl+C）", flush=True)
     if not args.no_open:
-        webbrowser.open(url)
+        webbrowser.open(url.replace("/?t=", "/check?t=") if args.check else url)
 
     def on_term(*_):
         raise KeyboardInterrupt  # kill <PID>（ギアのボタンから起動したものは端末を持たない）でも、settings-server.json を消して終わる
@@ -1720,6 +1728,7 @@ def main(argv=None) -> int:
     sv = sub.add_parser("settings", help="設定画面（127.0.0.1 の Web 画面）を開く")
     sv.add_argument("--port", type=int, default=0, help="待ち受けるポート（既定: 空いているもの）")
     sv.add_argument("--no-open", action="store_true", help="ブラウザを開かない（URL を表示するだけ）")
+    sv.add_argument("--check", action="store_true", help="環境のチェックの画面を開く（権限・カメラ・キーボード）")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     global HAND

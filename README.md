@@ -22,6 +22,7 @@
 - `aircontroller/thresholds.py` 位置によって変えうる閾値の入口（ピンチ・親指の畳み・ピースの条件。今は位置を無視する）
 - `aircontroller/live.py` run に内蔵する、設定画面のライブのプレビュー用のサーバー（設定モード、今の値、変更中の値の差し替え）
 - `aircontroller/settings_server.py` 設定画面のサーバー（標準ライブラリ）。画面は `aircontroller/web/`（素の HTML/CSS/JS）
+- `aircontroller/envcheck.py` 環境のチェックの項目（画面は `web/check.html`）。`keyboard.py` キーボード配列の読み取り（Carbon を ctypes で）
 - `aircontroller/settings_launch.py` オーバーレイのギアのボタンから設定画面を開く（動いているサーバーがあればそのページを開き、なければ別プロセスで起動する。`settings-server.json`）
 - `aircontroller/settings_eval.py` 効果の見積もり（基準記録を 2 つの設定で流して差を出す）。基準記録の一覧は `eval-manifest.toml`
 - 設定の層: `config.toml`（既定値と説明）< `calibration.toml`（利用者と測定が書く）< `auto.toml`（run の操作範囲の自動補正。calibrate で測り直すと使われなくなる）。オーバーレイを畳んだかは `ui_state.json`
@@ -48,6 +49,7 @@ uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
 .venv/bin/python -m aircontroller learn-thumbsup                 # いいねモードを上下左右 1回分の記録から学習 → calibration.toml
 .venv/bin/python -m aircontroller learn-zoom                     # ズームモードを手招きの記録から学習 → calibration.toml
 .venv/bin/python -m aircontroller settings                     # 設定画面（127.0.0.1。項目・分布・測定・見積もり・保存・履歴）
+.venv/bin/python -m aircontroller settings --check             # 環境のチェック（権限・カメラ・キーボード配列・印のキー。SPEC 13.56）
 .venv/bin/python -m aircontroller settings-eval --candidate calibration-history/....json  # 効果の見積もり（基準記録は eval-manifest.toml）
 .venv/bin/python -m aircontroller settings-eval --set click.pinch_off=0.26                 # 値を 1 つ変えたときの差
 .venv/bin/python -m aircontroller settings-history               # 設定の履歴の一覧（undo: 前の保存に戻す、name 快適 / restore 快適）

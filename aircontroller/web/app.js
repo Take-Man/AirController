@@ -3,6 +3,7 @@
 // B（測定で決まる値）と発火の位置は、分布図や run の操作中の UI の上で、線や円をドラッグして変更する。
 
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
+document.addEventListener("DOMContentLoaded", () => { const a = document.getElementById("to-check"); if (a) a.href = `/check?t=${encodeURIComponent(TOKEN)}`; });
 const WARN = 0.15; // 変化量の警告（保存済みから 15% 以上）
 const UNITS = [["range", "U1 操作範囲"], ["pinch", "U2 左ピンチ"], ["right", "U3 右クリック"], ["peace", "U4 ピース"],
   ["thumbsup", "U5 いいね"], ["zoom", "U6 ズーム"]];

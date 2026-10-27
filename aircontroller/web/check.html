@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirController 環境のチェック</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header class="bar">
+  <h1>AirController 環境のチェック</h1>
+  <span class="spacer"></span>
+  <a id="to-settings" class="muted small" href="#">設定画面へ</a>
+</header>
+<main>
+  <section class="panel" id="menu">
+    <h2>環境のチェック</h2>
+    <p class="note">AirController を使う前提（権限・カメラ・キーボード）を、順番に確かめます（約 20 秒。途中で 1 回、キーを押す指示が出ます）。</p>
+    <div class="row wrap"><button id="btn-start" class="primary">テスト開始</button></div>
+    <div id="menu-msg" class="note"></div>
+  </section>
+
+  <section class="panel hidden" id="run-panel">
+    <div class="row wrap">
+      <h2 id="run-title">チェック中…</h2>
+      <span class="spacer"></span>
+      <span id="totals" class="summary"></span>
+    </div>
+    <div class="progress"><div id="progress-fill"></div></div>
+    <div id="now" class="now"></div>
+    <ul id="list" class="check-list"></ul>
+    <div class="row wrap hidden" id="end-actions">
+      <button id="btn-again" class="primary">もう一度</button>
+      <button id="btn-menu" class="ghost">メニューに戻る</button>
+    </div>
+  </section>
+</main>
+<script src="/check.js"></script>
+</body>
+</html>

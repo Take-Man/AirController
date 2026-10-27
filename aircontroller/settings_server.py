@@ -27,7 +27,9 @@ from .params import BY_ID, CHOICES, FEATURE_TOGGLES, OFF_AT_ZERO, PARAMS, SECTIO
 from .settings import SettingsStore, _read, state_key
 
 WEB = Path(__file__).parent / "web"
-STATIC = {"/app.js": "application/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8"}
+STATIC = {"/app.js": "application/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8",
+          "/check.js": "application/javascript; charset=utf-8"}
+PAGES = {"/": "settings.html", "/check": "check.html"}  # 環境のチェック（TASKS-20261027-package 第4節）
 DIST_KEYS = {"pinch": ("rest_ti", "pinch"), "right": ("rest_tm", "rpinch"), "peace": ("rest_thumb", "peace_thumb")}
 RUN_RE = re.compile(r"-m aircontroller(\s+--config\s+\S+)?\s+run(\s|$)")
 
@@ -88,6 +90,7 @@ class App:
         self.closed_by_page = False  # 画面の「終了」で止めた
         self.lock = threading.Lock()
         self._dist_cache: dict = {}
+        self._check = None  # 環境のチェックの、今の「テスト開始」の状態（envcheck.CheckContext）
 
     # ------------------------------------------------------------ 閲覧
     def _cli(self, *args: str) -> list[str]:
@@ -381,6 +384,56 @@ class App:
         self.closed_by_page = True
         return {"ok": True, "left": [k for k in running if k == "measure"]}
 
+    # ------------------------------------------------------------ 環境のチェック（第4節）
+    def check_items(self) -> dict:
+        from .envcheck import ITEMS, mark_key_info, CheckContext
+
+        info = mark_key_info(CheckContext(self.root, self.store.load))
+        return {"items": ITEMS, "run": run_pids(), "mark_key": info}
+
+    def check_start(self, stop_run: bool) -> dict:
+        """「テスト開始」: run が動いていれば止めてから（カメラとキーの監視が重なるため）、新しい状態で始める。"""
+        from .envcheck import CheckContext
+
+        pids = run_pids()
+        if pids and not stop_run:
+            return {"need_stop": True, "run": pids}
+        for pid in pids:
+            os.kill(pid, signal.SIGINT)
+        t_end = time.time() + 10
+        while run_pids() and time.time() < t_end:
+            time.sleep(0.2)
+        if run_pids():
+            raise ValueError("run が止まりません")
+        self._check = CheckContext(self.root, self.store.load)
+        return {"ok": True}
+
+    def check_item(self, item: str) -> dict:
+        if self._check is None:
+            raise ValueError("「テスト開始」から始めてください")
+        return self._check.run(item)
+
+    def capture_key(self) -> dict:
+        from .envcheck import capture_key, judge_key
+        from .output.activation import keycode_of
+
+        out = capture_key(10.0)
+        if "keycode" in out:
+            cfg = self.store.load()
+            toggles = tuple(keycode_of(k) for k in cfg["activation"].get("toggle_keys", ["right_command"]))
+            out.update(judge_key(out["keycode"], cfg["safety"].get("emergency_keycode", 47), toggles))
+        return out
+
+    def set_mark_key(self, keycode: int) -> dict:
+        """印のキーを保存する（calibration.toml の [activation] mark_key。¥ なら名前で、ほかはキーコードで書く）。"""
+        from .envcheck import CheckContext, judge_key, mark_key_info
+
+        code = int(keycode)
+        if judge_key(code)["level"] == "refuse":
+            raise ValueError("このキーは印に使えません")
+        self.store.save({"activation": {"mark_key": "jis_yen" if code == 93 else code}}, "check", "印のキー（環境のチェック）")
+        return {"mark_key": mark_key_info(CheckContext(self.root, self.store.load))}
+
     def job(self, ident: str) -> dict:
         j = self.jobs.get(ident)
         if j is None:
@@ -463,14 +516,14 @@ def make_handler(app: App, port_ref: list[int]):
                 if self._check(False):
                     self._send(200, (WEB / u.path.lstrip("/")).read_bytes(), STATIC[u.path])
                 return
-            if u.path == "/":
+            if u.path in PAGES:
                 if not self._check(False):
                     return
                 tok = parse_qs(u.query).get("t", [""])[0]
                 if not hmac.compare_digest(tok.encode(), app.token.encode()):
                     self._send(403, "起動したときに表示した URL で開いてください".encode(), "text/plain; charset=utf-8")
                     return
-                self._send(200, (WEB / "settings.html").read_bytes(), "text/html; charset=utf-8")
+                self._send(200, (WEB / PAGES[u.path]).read_bytes(), "text/html; charset=utf-8")
                 return
             if u.path == "/api/live/stream":  # EventSource はヘッダーを付けられないので、トークンは URL で受ける
                 if not self._check(False):
@@ -494,6 +547,8 @@ def make_handler(app: App, port_ref: list[int]):
                     self._send(200, app.dist(q.get("unit", "")))
                 elif u.path == "/api/job":
                     self._send(200, app.job(q.get("id", "")))
+                elif u.path == "/api/check/items":
+                    self._send(200, app.check_items())
                 else:
                     self._send(404, {"error": "ありません"})
             except ValueError as e:
@@ -527,6 +582,14 @@ def make_handler(app: App, port_ref: list[int]):
                     out = app.evaluate(body.get("values", {}), str(body.get("label", "")))
                 elif path == "/api/shutdown":
                     out = app.shutdown(bool(body.get("force")))
+                elif path == "/api/check/start":
+                    out = app.check_start(bool(body.get("stop_run")))
+                elif path == "/api/check/item":
+                    out = app.check_item(str(body.get("id", "")))
+                elif path == "/api/check/capture_key":
+                    out = app.capture_key()
+                elif path == "/api/check/set_mark_key":
+                    out = app.set_mark_key(int(body.get("keycode")))
                 else:
                     self._send(404, {"error": "ありません"})
                     return

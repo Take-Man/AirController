@@ -142,10 +142,11 @@ zoom_fire_hold_ms = 300.0     # 閾値を超えてこの時間保ったら 1 段
 zoom_rearm_frac = 1.0         # 変化が 不感帯 × これ の内側に戻ったら、次の段を許す（再武装）
 zoom_min_cutoff = 1.0         # 安定度（One Euro Filter）
 zoom_beta = 0.5
-# ショートカット: ⌘+ / ⌘−。キーコードは JIS 配列の位置（; + のキー = 41、- のキー = 27）。US 配列では = 24、- 27
-in_keycode = 41
+# ショートカット: ⌘+ / ⌘−。"auto": run の起動時に、今のキーボード配列で「+」（Shift なしの = のキー、なければ Shift で + のキー）と
+# 「-」のキーを使う（SPEC 13.57）。数値を書くと、そのキーコードを使う（JIS 配列では ; + のキー = 41、- のキー = 27。US 配列では = 24、- 27）
+in_keycode = "auto"
 in_mods = ["cmd"]
-out_keycode = 27
+out_keycode = "auto"
 out_mods = ["cmd"]
 
 [fist]
@@ -218,10 +219,11 @@ nav_dwell_ms = 400.0          # 戻る・進むの領域にこの時間とどま
 nav_cooldown_ms = 500.0       # 戻る・進むのクールダウン
 nav_swap = true               # 戻る・進むの向き。true: 手を左へ → 進む（⌘]）、右へ → 戻る（⌘[）（2026-10-25、作者の指示で入れ替え）
                               # false: 左へ → 戻る、右へ → 進む（以前の向き）
-# 戻る・進むのショートカット。キーコードはキーの位置: JIS 配列では [ = 30、] = 42（US 配列では 33、30）
-back_keycode = 30
+# 戻る・進むのショートカット。"auto": run の起動時に、今のキーボード配列で「[」「]」のキーを使う（SPEC 13.57）。
+# 数値を書くと、そのキーコード（キーの位置）を使う: JIS 配列では [ = 30、] = 42（US 配列では 33、30）
+back_keycode = "auto"
 back_mods = ["cmd"]
-forward_keycode = 42
+forward_keycode = "auto"
 forward_mods = ["cmd"]
 
 [log]
