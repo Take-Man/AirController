@@ -24,7 +24,9 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parent.parent
+# 設定・ログ・記録・モデルの置き場所。既定はソースの隣。.app にしたとき（.app の中は書き込めない）は、起動用の入口が
+# AIRCONTROLLER_HOME に書き込める場所（~/Library/Application Support/...）を渡す（TASKS-20261027-package 第3節の試作）
+ROOT = Path(os.environ.get("AIRCONTROLLER_HOME") or Path(__file__).resolve().parent.parent)
 
 
 CALIBRATION = ROOT / "calibration.toml"

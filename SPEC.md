@@ -751,3 +751,33 @@ Mac のトラックパッド操作を、ハンドジェスチャーだけで行�
   AirController 3 回: 合計 64.9 / 50.6 / 61.2 秒（中央値 61.2）、ミス 3 / 0 / 5（中央値 3。うち 24px で 3 / 0 / 3）、2.07 / 2.36 / 2.06 bit/s（中央値 2.07）。
   ミスの多くは円の縁から 0〜3px（1 回だけ 45px）。トラックパッド 1 回: 34.3 秒、ミス 0、3.27 bit/s。
   前回（校正後 91.0 秒・ミス 32・1.49 bit/s）とは条件が違うので、改善量としては扱わない。
+
+### 13.55 パッケージ化の実現性の試作（2026-10-28、TASKS-20261027-package 第3節）
+- 依存: 別の venv `.venv-pkg`（requirements.txt + PyInstaller 6.22.3 + py2app 0.28.10。作者が承認）。今の `.venv` は変えていない。
+- 中身: 今の `run` をそのまま .app にした（pkg/probe_main.py が入口）。.app の中は書き込めないので、設定・ログ・記録・モデルの置き場所を
+  環境変数 `AIRCONTROLLER_HOME`（`~/Library/Application Support/AirController-probe`）で指す（aircontroller/__main__.py の ROOT。
+  設定しなければ従来どおりソースの隣）。初回は同梱の config.toml・calibration.toml・モデルを写す。出力は logs/app-*.log（時刻付き）。
+  `--selftest` で、権限なしに同梱（OpenCV、pyobjc、MediaPipe のモデルと推論）だけを確かめる。
+- ビルド: `pkg/build.sh pyinstaller | py2app`。Info.plist に NSCameraUsageDescription、LSUIElement（Dock に出さない）。署名は ad hoc。
+  - PyInstaller: onedir、292MB、ビルド約 35 秒。mediapipe の vision が matplotlib を読み込み、PyInstaller の実行時フックが matplotlib の設定の場所を
+    毎回一時ディレクトリにするため、起動が毎回約 10 秒遅れた → 入口で MPLCONFIGDIR を残る場所に置き直した（初回だけ約 12 秒、以後約 1 秒）。
+  - py2app: 352MB、ビルド約 45 秒、起動約 1.5〜2 秒。同じ venv の PyInstaller の hooks をたどって失敗したので除外した。Pillow の liblzma を
+    写したときに壊し、署名が通らなかった（main executable failed strict validation）→ Homebrew の xz の liblzma に差し替えて、中から順に署名した。
+  - どちらも `codesign --verify --deep --strict` が通り、同梱の MediaPipe の推論は約 14ms（ソースから動かしたときと同じ）。
+- .dmg（PyInstaller 版、130MB）に、ダウンロードしたときと同じ隔離の属性（com.apple.quarantine）を付けた。`spctl` の評価は .app・.dmg とも rejected
+  （ad hoc 署名なので想定どおり）。
+- 実機の確認（作者、2026-10-28 00:12〜00:31。CHECKLIST-package.md）:
+  - 権限は .app に付く（PyInstaller 版・py2app 版とも。bundle id ごとに別）。今の run は足りない権限を見つけると終わるので、
+    1 回目にアクセシビリティ・入力監視、2 回目にカメラ、3 回目にローカルの通信の許可（推測: 設定画面のライブのサーバーが 127.0.0.1 で待ち受けるため）を
+    求められ、開き直すたびに 1 つずつ進んだ（第4節で、まとめて案内する形にする）。
+  - 遅延・CPU はターミナルと同じ: CGEvent を送ったフレームの p50 13.6 / 13.4ms、p95 14.9 / 14.9ms（.app / ターミナル）、オン・手ありの CPU 54 / 52%、
+    処理 29.3 / 29.7fps。起動からカメラがつながるまで 2.5〜3 秒。
+  - .dmg（隔離の属性つき）から写した .app を開くと「"AirController Probe (PyInstaller)" は開いていません。Apple は、… マルウェアが含まれていないことを
+    検証できませんでした。」と出て、ボタンは「完了」「ゴミ箱に入れる」。システム設定 → プライバシーとセキュリティ の「このまま開く」を 2 回押すと起動した。
+    写した .app は bundle id と署名の中身（cdhash）が同じなので、権限は求め直されなかった。
+  - ad hoc 署名で作り直すと（同じコードでも cdhash が 9d6d46… → 841ce4… に変わる）、アクセシビリティと入力監視を求め直された。
+    配布 (a) では、更新のたびに付与し直しになる。
+  - .app のダイアログのアイコンが Python のものになる（アプリのアイコンを用意していない）。
+- 設定画面（ギアのボタン）は、別プロセスを `sys.executable -m aircontroller settings` で起動する作りなので、.app では動かない（第5節で設計する）。
+- 判断（作者、2026-10-28）: Python のまま、PyInstaller で .app にする（13.43 の Swift 見送りを維持。py2app は使わない）。配布 (a)（アカウントなし）でも、
+  更新の頻度は高くないので、当面は更新のたびに権限を付け直す仕様でよい。

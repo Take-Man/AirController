@@ -12,3 +12,8 @@ settings-history/
 calibration-history/
 live.json
 settings-server.json
+
+# パッケージ化の試作（TASKS-20261027-package 第3節）
+.venv-pkg/
+pkg/build/
+pkg/dist/
