@@ -1,10 +1,10 @@
-"""オーバーレイのギアのボタンから設定画面を開く（SPEC 13.51）。
+"""オーバーレイのギアのボタンから設定を開く（SPEC 13.51、13.58）。
 
-設定画面のサーバー（`python -m aircontroller settings`）は、起動すると settings-server.json（所有者だけ読める。終了時に消す。
-git の管理外）に PID・ポート・トークン付きの URL を書く。ギアを押したとき、そのサーバーが動いていて応答すれば、新しく立てずに
-その URL をブラウザで開く。なければ別プロセス（sys.executable、start_new_session で切り離す）で起動し、そのプロセスが
-いつもどおりブラウザを開く（webbrowser.open）。確認と起動はスレッドで行い、オーバーレイのメインスレッドを止めない。
-run を終えても、起動した設定画面のサーバーは止めない（止めるときは設定画面のヘッダの「終了」。13.52）。
+設定画面のサーバー（アプリの中のもの、または `python -m aircontroller settings`）は、起動すると settings-server.json（所有者だけ読める。
+終了時に消す。git の管理外）に PID・ポート・トークン付きの URL と、アプリの中のサーバーかどうか（app）を書く。
+ギアを押したとき、アプリが動いていて応答すれば、そのウィンドウを前に出して設定タブを開く（POST /api/app/focus。ウィンドウを閉じていても）。
+動いていなければ、アプリを別プロセス（start_new_session で切り離す）で起動して設定タブを開く。ブラウザは開かない（作者の FB）。
+確認と起動はスレッドで行い、オーバーレイのメインスレッドを止めない。run を終えても、起動したアプリは止めない。
 """
 from __future__ import annotations
 
@@ -23,10 +23,18 @@ LOG = "logs/settings-server.log"
 LAUNCH_GUARD_S = 10.0  # 起動してから settings-server.json ができるまでの間に、もう一度押されても 2 つ目を立てない
 
 
-def write_info(root: Path, port: int, url: str) -> None:
+def cli_argv(*args: str) -> list[str]:
+    """このプログラムを、引数を付けて別プロセスで起動するときのコマンド（.app なら実行ファイルそのもの。SPEC 13.58）。"""
+    if getattr(sys, "frozen", False):
+        return [sys.executable, *args]
+    return [sys.executable, "-m", "aircontroller", *args]
+
+
+def write_info(root: Path, port: int, url: str, app: bool = False) -> None:
+    """app: アプリ（python -m aircontroller app / .app）の中のサーバー。ギアのボタンは、ブラウザではなくそのウィンドウを前に出す。"""
     fd = os.open(root / INFO, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as fp:
-        json.dump({"pid": os.getpid(), "port": port, "url": url}, fp)
+        json.dump({"pid": os.getpid(), "port": port, "url": url, "app": app}, fp)
 
 
 def remove_info(root: Path) -> None:
@@ -46,6 +54,28 @@ def _probe(url: str) -> bool:
         return False
 
 
+def is_app(root: Path) -> bool:
+    try:
+        return bool(json.loads((root / INFO).read_text()).get("app"))
+    except (OSError, ValueError):
+        return False
+
+
+def focus_app(url: str, tab: str = "settings") -> bool:
+    """アプリのウィンドウを前に出して、そのタブを開く（POST /api/app/focus。トークンは URL のもの）。"""
+    from urllib.parse import parse_qs, urlparse
+
+    u = urlparse(url)
+    tok = parse_qs(u.query).get("t", [""])[0]
+    req = urllib.request.Request(f"{u.scheme}://{u.netloc}/api/app/focus", data=json.dumps({"tab": tab}).encode(), method="POST",
+                                 headers={"X-Token": tok, "Origin": f"{u.scheme}://{u.netloc}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=2.0) as r:
+            return r.status == 200
+    except (OSError, ValueError):
+        return False
+
+
 def running_url(root: Path, probe: Callable[[str], bool] = _probe) -> str | None:
     """動いている設定画面のサーバーの URL（トークン付き）。PID が生きていて、その URL が応答するときだけ（PID の使い回しに備える）。"""
     try:
@@ -58,20 +88,18 @@ def running_url(root: Path, probe: Callable[[str], bool] = _probe) -> str | None
 
 
 class SettingsLauncher:
-    def __init__(self, root: Path, config: str | None = None, *, open_url: Callable[[str], object] | None = None,
+    def __init__(self, root: Path, config: str | None = None, *,
                  popen: Callable[..., subprocess.Popen] = subprocess.Popen, probe: Callable[[str], bool] = _probe,
-                 background: bool = True):
-        if open_url is None:
-            import webbrowser
-
-            open_url = webbrowser.open
+                 background: bool = True, focus: Callable[[str, str], bool] | None = None):
         self.root, self.config = Path(root), config
-        self.open_url, self.popen, self.probe, self.background = open_url, popen, probe, background
+        self.popen, self.probe, self.background = popen, probe, background
+        self.focus = focus or focus_app
         self._lock = threading.Lock()
         self._launched_at = -1e9
 
     def argv(self) -> list[str]:
-        return [sys.executable, "-m", "aircontroller", *(["--config", self.config] if self.config else []), "settings"]
+        """アプリを起動して、設定タブを開く（SPEC 13.58。以前は設定画面のサーバーを起動してブラウザで開いていた）。"""
+        return cli_argv(*(["--config", self.config] if self.config else []), "app", "--tab", "settings")
 
     def __call__(self) -> None:
         """ギアのボタン（メインスレッド）。確認と起動はスレッドで。"""
@@ -83,13 +111,14 @@ class SettingsLauncher:
     def open(self) -> None:
         try:
             with self._lock:
+                # アプリが動いていれば、そのウィンドウを前に出して設定タブを開く（ウィンドウを閉じていても）。動いていなければ、
+                # アプリを起動する（ブラウザで開く設定画面のサーバーが動いていても、アプリのウィンドウで開く。作者の FB）
                 url = running_url(self.root, self.probe)
-                if url:
-                    print("[settings] 動いている設定画面を開きます", flush=True)
-                    self.open_url(url)
+                if url and is_app(self.root) and self.focus(url, "settings"):
+                    print("[settings] アプリのウィンドウで設定タブを開きます", flush=True)
                     return
                 if time.monotonic() - self._launched_at < LAUNCH_GUARD_S:
-                    print("[settings] 設定画面を起動中です", flush=True)
+                    print("[settings] アプリを起動中です", flush=True)
                     return
                 log_path = self.root / LOG
                 log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,11 +126,11 @@ class SettingsLauncher:
                     proc = self.popen(self.argv(), cwd=self.root, stdin=subprocess.DEVNULL, stdout=log,
                                       stderr=subprocess.STDOUT, start_new_session=True)
                 self._launched_at = time.monotonic()
-                print(f"[settings] 設定画面を起動しました（PID {proc.pid}。出力は {LOG}）", flush=True)
+                print(f"[settings] アプリを起動しました（PID {proc.pid}。出力は {LOG}）", flush=True)
             if self.background:  # すぐ終わったら（起動の失敗）端末に知らせる
                 time.sleep(3.0)
                 if proc.poll() is not None:
-                    print(f"[settings] 設定画面のサーバーが終了しました（終了コード {proc.returncode}。{LOG} を見てください）",
+                    print(f"[settings] アプリが終了しました（終了コード {proc.returncode}。{LOG} を見てください）",
                           flush=True)
         except Exception as e:  # オーバーレイは落とさない
             print(f"[settings] 設定画面を開けませんでした: {e}", flush=True)

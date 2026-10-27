@@ -15,7 +15,6 @@ import re
 import secrets
 import signal
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -28,10 +27,13 @@ from .settings import SettingsStore, _read, state_key
 
 WEB = Path(__file__).parent / "web"
 STATIC = {"/app.js": "application/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8",
-          "/check.js": "application/javascript; charset=utf-8"}
-PAGES = {"/": "settings.html", "/check": "check.html"}  # 環境のチェック（TASKS-20261027-package 第4節）
+          "/check.js": "application/javascript; charset=utf-8", "/nav.js": "application/javascript; charset=utf-8",
+          "/launch.js": "application/javascript; charset=utf-8"}
+# 画面: 設定、環境のチェック（第4節）、ホーム（起動）・チュートリアル（第5節。ホームから各画面へ進み、「ホームに戻る」で戻る）
+PAGES = {"/": "settings.html", "/check": "check.html", "/launch": "launch.html", "/tutorial": "tutorial.html"}
 DIST_KEYS = {"pinch": ("rest_ti", "pinch"), "right": ("rest_tm", "rpinch"), "peace": ("rest_thumb", "peace_thumb")}
-RUN_RE = re.compile(r"-m aircontroller(\s+--config\s+\S+)?\s+run(\s|$)")
+# run のプロセス: python -m aircontroller run、または .app の実行ファイルに引数 run（SPEC 13.58）
+RUN_RE = re.compile(r"(-m aircontroller|\.app/Contents/MacOS/[^/]+?)(\s+--config\s+\S+)?\s+run(\s|$)")
 
 
 def screen_size() -> tuple[float, float]:
@@ -91,10 +93,15 @@ class App:
         self.lock = threading.Lock()
         self._dist_cache: dict = {}
         self._check = None  # 環境のチェックの、今の「テスト開始」の状態（envcheck.CheckContext）
+        self.runner = None  # アプリの中で動かすとき: 子プロセスの run（app.RunProcess）
+        self.focus = None  # アプリの中で動かすとき: ウィンドウを前に出してタブを開く関数
+        self.close_window = None  # アプリの中で動かすとき: 設定などのウィンドウを閉じる関数（設定画面の「終了」）
 
     # ------------------------------------------------------------ 閲覧
     def _cli(self, *args: str) -> list[str]:
-        return [sys.executable, "-m", "aircontroller", *(["--config", self.config] if self.config else []), *args]
+        from .settings_launch import cli_argv
+
+        return cli_argv(*(["--config", self.config] if self.config else []), *args)
 
     def _history(self):
         """測定の履歴（古い順）。--from で以前の記録を計算し直したもの（*-from-*）は、新しい測定ではないので使わない。"""
@@ -381,8 +388,42 @@ class App:
         for j in self.jobs.values():
             if j.kind == "eval" and j.proc.poll() is None:
                 j.proc.terminate()
+        if self.close_window is not None:
+            # アプリの中: サーバーはホームの画面も出しているので止めない。設定のウィンドウを閉じる（SPEC 13.58、作者の FB）
+            self.close_window("settings")
+            return {"ok": True, "window": True, "left": [k for k in running if k == "measure"]}
         self.closed_by_page = True
         return {"ok": True, "left": [k for k in running if k == "measure"]}
+
+    # ------------------------------------------------------------ アプリの起動タブ（第5節、SPEC 13.58）
+    def app_status(self) -> dict:
+        if self.runner is None:
+            return {"app": False, "others": run_pids(), "live": self._live_status()}
+        return {"app": True, **self.runner.status(self)}
+
+    def _live_status(self) -> dict | None:
+        if self.live_info() is None:
+            return None
+        try:
+            return self.live_request("GET", "/status")
+        except (ValueError, OSError):
+            return None
+
+    def app_start(self) -> dict:
+        if self.runner is None:
+            raise ValueError("アプリの中でだけ使えます（python -m aircontroller app）")
+        return self.runner.start()
+
+    def app_stop(self, others: bool) -> dict:
+        if self.runner is None:
+            raise ValueError("アプリの中でだけ使えます（python -m aircontroller app）")
+        return self.runner.stop(others=others)
+
+    def app_focus(self, tab: str) -> dict:
+        if self.focus is None:
+            raise ValueError("アプリの中でだけ使えます")
+        self.focus(tab)
+        return {"ok": True}
 
     # ------------------------------------------------------------ 環境のチェック（第4節）
     def check_items(self) -> dict:
@@ -547,6 +588,8 @@ def make_handler(app: App, port_ref: list[int]):
                     self._send(200, app.dist(q.get("unit", "")))
                 elif u.path == "/api/job":
                     self._send(200, app.job(q.get("id", "")))
+                elif u.path == "/api/app/status":
+                    self._send(200, app.app_status())
                 elif u.path == "/api/check/items":
                     self._send(200, app.check_items())
                 else:
@@ -582,6 +625,12 @@ def make_handler(app: App, port_ref: list[int]):
                     out = app.evaluate(body.get("values", {}), str(body.get("label", "")))
                 elif path == "/api/shutdown":
                     out = app.shutdown(bool(body.get("force")))
+                elif path == "/api/app/start":
+                    out = app.app_start()
+                elif path == "/api/app/stop":
+                    out = app.app_stop(bool(body.get("others")))
+                elif path == "/api/app/focus":
+                    out = app.app_focus(str(body.get("tab", "settings")))
                 elif path == "/api/check/start":
                     out = app.check_start(bool(body.get("stop_run")))
                 elif path == "/api/check/item":
@@ -594,7 +643,7 @@ def make_handler(app: App, port_ref: list[int]):
                     self._send(404, {"error": "ありません"})
                     return
                 self._send(200, out)
-                if path == "/api/shutdown" and out.get("ok"):  # 応答を返してから止める（serve_forever が戻り、settings コマンドが終わる）
+                if path == "/api/shutdown" and out.get("ok") and not out.get("window"):  # 応答を返してから止める（serve_forever が戻り、settings コマンドが終わる）
                     threading.Thread(target=self.server.shutdown, daemon=True).start()
             except (ValueError, TypeError, OSError) as e:
                 self._send(400, {"error": str(e)})

@@ -124,32 +124,49 @@ def _launcher(tmp_path, probe=lambda u: True, popen_exc=None, config=None):
         spawned.append((argv, kw))
         return FakeProc()
 
-    lz = SettingsLauncher(tmp_path, config, open_url=opened.append, popen=popen, probe=probe, background=False)
+    focused = []
+
+    def focus(url, tab):
+        focused.append((url, tab))
+        return True
+
+    lz = SettingsLauncher(tmp_path, config, popen=popen, probe=probe, background=False, focus=focus)
+    lz.focused = focused
     return lz, opened, spawned
 
 
 def test_info_file_owner_only_and_removed(tmp_path):
     write_info(tmp_path, 1234, "http://127.0.0.1:1234/?t=abc")
     assert (os.stat(tmp_path / INFO).st_mode & 0o777) == 0o600
-    assert json.loads((tmp_path / INFO).read_text()) == {"pid": os.getpid(), "port": 1234, "url": "http://127.0.0.1:1234/?t=abc"}
+    assert json.loads((tmp_path / INFO).read_text()) == {"pid": os.getpid(), "port": 1234, "url": "http://127.0.0.1:1234/?t=abc",
+                                                          "app": False}
     remove_info(tmp_path)
     assert not (tmp_path / INFO).exists()
 
 
-def test_reuses_running_server(tmp_path):
-    write_info(tmp_path, 1234, "http://127.0.0.1:1234/?t=abc")  # 自分の PID（生きている）
+def test_focuses_running_app(tmp_path):
+    """アプリが動いていれば、そのウィンドウを前に出して設定タブを開く（ブラウザは開かない。SPEC 13.58）。"""
+    write_info(tmp_path, 1234, "http://127.0.0.1:1234/?t=abc", app=True)  # 自分の PID（生きている）
     lz, opened, spawned = _launcher(tmp_path)
     lz()
-    assert opened == ["http://127.0.0.1:1234/?t=abc"] and spawned == []
+    assert lz.focused == [("http://127.0.0.1:1234/?t=abc", "settings")] and opened == [] and spawned == []
+
+
+def test_browser_server_still_starts_app(tmp_path):
+    """ブラウザで開く設定画面のサーバー（settings コマンド）だけが動いていても、アプリを起動する（作者の FB）。"""
+    write_info(tmp_path, 1234, "http://127.0.0.1:1234/?t=abc")
+    lz, opened, spawned = _launcher(tmp_path)
+    lz()
+    assert opened == [] and len(spawned) == 1 and spawned[0][0][-3:] == ["app", "--tab", "settings"]
 
 
 def test_starts_new_server_detached(tmp_path):
     lz, opened, spawned = _launcher(tmp_path, config="my.toml")
     lz()
     (argv, kw), = spawned
-    assert argv == [sys.executable, "-m", "aircontroller", "--config", "my.toml", "settings"]
+    assert argv == [sys.executable, "-m", "aircontroller", "--config", "my.toml", "app", "--tab", "settings"]
     assert kw["start_new_session"] is True and kw["cwd"] == tmp_path and kw["stdin"] == subprocess.DEVNULL
-    assert opened == []  # ブラウザは起動したサーバー（settings コマンド）が開く
+    assert opened == []  # ブラウザは開かない（アプリのウィンドウで設定タブを開く）
     lz()  # 起動してすぐ（settings-server.json がまだない）に押しても、2 つ目は立てない
     assert len(spawned) == 1
 

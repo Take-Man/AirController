@@ -22,6 +22,7 @@
 - `aircontroller/thresholds.py` 位置によって変えうる閾値の入口（ピンチ・親指の畳み・ピースの条件。今は位置を無視する）
 - `aircontroller/live.py` run に内蔵する、設定画面のライブのプレビュー用のサーバー（設定モード、今の値、変更中の値の差し替え）
 - `aircontroller/settings_server.py` 設定画面のサーバー（標準ライブラリ）。画面は `aircontroller/web/`（素の HTML/CSS/JS）
+- `aircontroller/app.py` アプリ（WKWebView のウィンドウ。ホーム〔起動〕から各画面へ。子プロセスの run の開始・停止）。画面は `web/launch.html`・`tutorial.html`、「ホームに戻る」は `web/nav.js`
 - `aircontroller/envcheck.py` 環境のチェックの項目（画面は `web/check.html`）。`keyboard.py` キーボード配列の読み取り（Carbon を ctypes で）
 - `aircontroller/settings_launch.py` オーバーレイのギアのボタンから設定画面を開く（動いているサーバーがあればそのページを開き、なければ別プロセスで起動する。`settings-server.json`）
 - `aircontroller/settings_eval.py` 効果の見積もり（基準記録を 2 つの設定で流して差を出す）。基準記録の一覧は `eval-manifest.toml`
@@ -36,6 +37,7 @@ uv venv --python 3.12 .venv && uv pip install --python .venv -r requirements.txt
 
 ## 使い方
 ```bash
+.venv/bin/python -m aircontroller app                            # アプリ（ホームから 環境のチェック・チュートリアル・設定 へ。run は「開始」で子プロセスとして起動。SPEC 13.58）
 .venv/bin/python -m aircontroller run                            # 右 Command（単独で押して離す）で開始・終了、¥ で印
 .venv/bin/python -m aircontroller report logs/events-*.jsonl     # イベントログの集計（印、取り消し、誤ドラッグの候補など）
 .venv/bin/python -m aircontroller report --from-recording recordings/xxx.jsonl  # 記録から集計

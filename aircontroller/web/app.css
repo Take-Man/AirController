@@ -342,3 +342,32 @@ svg.fig.meter { width: 100%; height: 16px; }
 .prompt input { width: 100%; margin-top: 6px; }
 .summary { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
 @media (max-width: 600px) { .detail { margin-left: 0; } }
+
+/* ---------------------------------------------------------------- ホーム（起動）と、各画面の「ホームに戻る」（TASKS-20261027-package 第5節） */
+.backbar { padding: 8px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.backbar .back { color: var(--accent); text-decoration: none; font-size: 14px; }
+.backbar .back:hover { text-decoration: underline; }
+.home-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 14px 0; }
+@media (max-width: 720px) { .home-cards { grid-template-columns: 1fr; } }
+.home-card { display: flex; flex-direction: column; gap: 6px; min-height: 120px; padding: 18px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--fg); text-decoration: none; transition: border-color 0.15s, background 0.15s; }
+.home-card strong { font-size: 17px; }
+.home-card span { color: var(--muted); font-size: 13px; }
+.home-card:hover, .home-card:focus-visible { border-color: var(--accent); background: var(--soft); outline: none; }
+.status-line { display: flex; flex-wrap: nowrap; gap: 20px; min-height: 1.6em; margin: 10px 0 0; overflow: hidden; white-space: nowrap;
+  font-variant-numeric: tabular-nums; } /* 動作中も停止中も同じ高さ（1 行） */
+.tail { margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: var(--soft); white-space: pre-wrap;
+  font: 12px/1.45 ui-monospace, Menlo, monospace; max-height: 220px; overflow: auto; }
+
+/* 「操作に反映する」の大きいスイッチ（作者の FB） */
+.big-switch { display: flex; align-items: center; gap: 12px; margin: 12px 0; font-size: 16px; font-weight: 600; cursor: pointer; }
+.big-switch .muted { margin-left: 8px; font-weight: 400; }
+.switch.big { width: 54px; height: 30px; }
+.switch.big .knob::before { width: 24px; height: 24px; }
+.switch.big input:checked + .knob::before { transform: translateX(24px); }
+
+/* 環境のチェック: 進捗の棒の横に「再チェック」、項目の一覧は畳む（作者の FB。ホームのウィンドウにスクロールなしで収める） */
+.progress-row { display: flex; align-items: center; gap: 12px; margin: 10px 0 6px; }
+.progress-row .progress { flex: 1; margin: 0; }
+.list-wrap { margin-top: 8px; }
+.list-wrap > summary { cursor: pointer; color: var(--muted); padding: 4px 0; }

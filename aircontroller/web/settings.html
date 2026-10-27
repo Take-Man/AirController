@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
+<nav class="backbar"><a data-go="/launch" class="back">‹ ホームに戻る</a></nav>
 <header class="bar">
   <h1>AirController 設定</h1>
   <span id="run-chip" class="chip">run: —</span>
@@ -14,7 +15,6 @@
   <span id="dirty" class="muted"></span>
   <button id="btn-discard" class="ghost">変更をやり直す</button>
   <button id="btn-save" class="primary" disabled>変更を確定</button>
-  <a id="to-check" class="muted small" href="#">環境のチェック</a>
   <button id="btn-quit" class="ghost" title="設定画面のサーバーを止めます（run は止めません）">終了</button>
 </header>
 
@@ -78,7 +78,8 @@
 <aside id="live-drawer" class="live-drawer" aria-label="ライブ">
   <div class="phead"><h2>ライブ</h2><span class="spacer"></span><button id="live-close" class="small ghost" aria-label="閉じる">閉じる ›</button></div>
   <div class="row wrap"><span id="live-chip" class="chip">run に接続していません</span></div>
-  <label class="check" id="live-output-wrap"><input type="checkbox" id="live-output"> 操作に反映する</label>
+  <label class="big-switch" id="live-output-wrap"><span class="switch big"><input type="checkbox" role="switch" id="live-output"><span class="knob"></span></span>
+    <span>操作に反映する<span class="muted small" id="live-output-state">オフ</span></span></label>
   <p class="muted small" id="live-note">run の起動中に、手の形と今の値を出します。この画面を開いている間、run は「設定モード」になり、出力を止めます。
     変更中の値は run で試せます（確定するまで保存しません。画面を閉じると、run は確定済みの値に戻ります）。</p>
   <div class="live-body hidden" id="live-body">
@@ -88,6 +89,7 @@
   </div>
 </aside>
 <div id="toast" class="toast hidden"></div>
+<script src="/nav.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

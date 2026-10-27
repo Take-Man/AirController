@@ -5,10 +5,14 @@
 - find_keycode(ch): その文字を入力するキー（Shift なし・あり）
 - resolve_shortcut(name, value): 戻る・進む・ズームのキーコード。設定が "auto" なら、今の配列で「[」「]」「+」「-」のキーを使う（SPEC 13.57）
 macOS 以外や、読み取れないときは例外を投げずに None を返す（呼ぶ側で「要確認」にする）。
+
+入力ソースの関数（TIS）は、AppKit のイベントループが動いているプロセス（アプリ）では、メインスレッドから呼ばないと macOS がプロセスを止める
+（dispatch_assert_queue。アプリで環境のチェックを開くと落ちた）。ほかのスレッドから呼ばれたら、メインスレッドで動かして結果を待つ（_on_main）。
 """
 from __future__ import annotations
 
 import ctypes
+import functools
 from ctypes import POINTER, byref, c_long, c_uint16, c_uint32, c_ulong, c_void_p
 
 # キー名（画面に出す。文字を入力しないキー）
@@ -55,6 +59,26 @@ class _Carbon:
 _C: _Carbon | None = None
 
 
+def _on_main(fn):
+    """AppKit のイベントループが動いていて、メインスレッドでないときは、メインスレッドで呼んで結果を待つ。
+    ループが動いていないとき（設定画面のサーバー、テスト）は、そのまま呼ぶ（メインスレッドに頼むと、返ってこない）。"""
+    @functools.wraps(fn)
+    def wrapper(*args, **kw):
+        try:
+            import AppKit
+            import Foundation
+            from libdispatch import dispatch_get_main_queue, dispatch_sync
+
+            if Foundation.NSThread.isMainThread() or not AppKit.NSApplication.sharedApplication().isRunning():
+                return fn(*args, **kw)
+        except ImportError:
+            return fn(*args, **kw)
+        out = []
+        dispatch_sync(dispatch_get_main_queue(), lambda: out.append(fn(*args, **kw)))
+        return out[0] if out else None
+    return wrapper
+
+
 def _carbon() -> _Carbon | None:
     global _C
     if _C is None:
@@ -65,6 +89,7 @@ def _carbon() -> _Carbon | None:
     return _C
 
 
+@_on_main
 def layout() -> dict | None:
     """{"physical": "JIS" / "ISO" / "ANSI", "layout_id": "com.apple.keylayout.ABC", "input_id": ...}。"""
     c = _carbon()
@@ -85,6 +110,7 @@ def layout() -> dict | None:
                 c.cf.CFRelease(p)
 
 
+@_on_main
 def char_of(keycode: int, shift: bool = False) -> str | None:
     """今のキー配列で、そのキーが入力する文字（入力しないキーは ""）。"""
     c = _carbon()
@@ -106,6 +132,7 @@ def char_of(keycode: int, shift: bool = False) -> str | None:
         c.cf.CFRelease(src)
 
 
+@_on_main
 def find_keycode(ch: str, shift: bool | None = None) -> int | None:
     """その文字を入力するキー（shift = None ならどちらでも。Shift なしを優先）。"""
     for sh in ((False, True) if shift is None else (shift,)):

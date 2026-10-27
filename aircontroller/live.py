@@ -5,6 +5,7 @@
   進行中のピンチ・ドラッグ・モードを打ち切り、押下中のボタンを離す。抜けると、画面から送られた変更中の値を捨て、保存済みの設定に戻す。
 - POST /config {"values": {"節.キー": 値}}: 変更中の値（保存済みの設定に重ねる）。安全な瞬間（ドラッグ・ピンチ・モードの途中でない）に差し替える。
 - POST /mode {"output": bool}、POST /reload（保存済みの設定を読み直す。設定画面で確定したとき）、GET /stats（負荷の計測用）。
+- GET /status: アプリの起動タブに出す状態（オン・オフ、モード、カメラ、fps、遅延）。つないでも設定モードにはならない（SPEC 13.58）。
 設定画面のサーバーだけが使う（ブラウザは直接つながない）: 127.0.0.1、Host の確認、起動時のトークン（live.json に書く。所有者だけ読める）。
 フレームの処理（推論スレッド）では、つながっている画面が無ければ何もしない。
 """
@@ -55,6 +56,7 @@ class LiveHub:
         self.lat = deque(maxlen=4000)  # (時刻, 遅延 ms)
         self.httpd: ThreadingHTTPServer | None = None
         self.on_connect = None  # 画面がつながったとき（run がカメラを起動する）
+        self.status_fn = None  # run の状態（オン・オフ、モードなど）を返す関数。GET /status に使う
 
     # ------------------------------------------------------------ 状態
     @property
@@ -224,6 +226,14 @@ def make_handler(hub: LiveHub):
             if u.path == "/stats":
                 q = parse_qs(u.query)
                 self._send(200, hub.stats(float(q.get("window", ["10"])[0])))
+                return
+            if u.path == "/status":
+                st = hub.stats(3.0)
+                out = {"pid": os.getpid(), "fps": round(st["frames"] / 3.0, 1), "lat_p95": st["lat_p95"],
+                       "settings_mode": hub.settings_mode}
+                if hub.status_fn is not None:
+                    out.update(hub.status_fn())
+                self._send(200, out)
                 return
             if u.path != "/stream":
                 self._send(404, {"error": "ありません"})

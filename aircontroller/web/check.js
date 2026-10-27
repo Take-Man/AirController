@@ -79,6 +79,7 @@ async function runItem(item, i) {
     }
   }
   $("list").append(row(res));
+  $("list-summary").textContent = `項目ごとの結果（${$("list").children.length} / ${ITEMS.length}）`;
   totals();
 }
 
@@ -93,8 +94,9 @@ async function start() {
   busy = true;
   $("menu").classList.add("hidden");
   $("run-panel").classList.remove("hidden");
-  $("end-actions").classList.add("hidden");
+  $("btn-again").classList.add("hidden");
   $("now").classList.remove("hidden");
+  $("list-wrap").open = false;
   $("run-title").textContent = "チェック中…";
   for (const k of Object.keys(rows)) delete rows[k];
   $("list").replaceChildren();
@@ -104,7 +106,8 @@ async function start() {
   $("now").classList.add("hidden");
   const n = totals();
   $("run-title").textContent = n.fail ? "結果: 失敗があります" : n.warn ? "結果: 要確認があります" : "結果: すべて合格";
-  $("end-actions").classList.remove("hidden");
+  $("btn-again").classList.remove("hidden");
+  $("list-summary").textContent = `項目ごとの結果（${ITEMS.length} 項目）`;
   busy = false;
 }
 
@@ -151,9 +154,7 @@ async function init() {
   ITEMS = r.items;
   MARK = r.mark_key;
   if (r.run.length) $("menu-msg").textContent = `run が動いています（PID ${r.run.join(", ")}）。テスト開始のときに止めます。`;
-  $("to-settings").href = `/?t=${encodeURIComponent(TOKEN)}`;
   $("btn-start").onclick = () => start().catch((e) => { busy = false; $("menu-msg").textContent = e.message; });
-  $("btn-again").onclick = () => start().catch((e) => { busy = false; alert(e.message); });
-  $("btn-menu").onclick = () => { $("run-panel").classList.add("hidden"); $("menu").classList.remove("hidden"); };
+  $("btn-again").onclick = () => start().catch((e) => { busy = false; alert(e.message); });  // 再チェック
 }
 init().catch((e) => { $("menu-msg").textContent = `読み込めませんでした: ${e.message}`; });

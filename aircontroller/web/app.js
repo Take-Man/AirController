@@ -3,7 +3,6 @@
 // B（測定で決まる値）と発火の位置は、分布図や run の操作中の UI の上で、線や円をドラッグして変更する。
 
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
-document.addEventListener("DOMContentLoaded", () => { const a = document.getElementById("to-check"); if (a) a.href = `/check?t=${encodeURIComponent(TOKEN)}`; });
 const WARN = 0.15; // 変化量の警告（保存済みから 15% 以上）
 const UNITS = [["range", "U1 操作範囲"], ["pinch", "U2 左ピンチ"], ["right", "U3 右クリック"], ["peace", "U4 ピース"],
   ["thumbsup", "U5 いいね"], ["zoom", "U6 ズーム"]];
@@ -981,12 +980,13 @@ let runTimer = null;
 
 async function quit() {
   const n = changedIds().length;
-  const body = [el("p", {}, "設定画面のサーバーを止めます。run は止めません（つながっていれば設定モードを抜け、操作に戻ります）。"),
+  const body = [el("p", {}, "設定画面を閉じます（ブラウザで開いているときは、設定画面のサーバーも止めます）。run は止めません（つながっていれば設定モードを抜け、操作に戻ります）。"),
     n ? el("p", {}, `変更中の ${n} 項目は確定せずに捨てます。`) : null,
     el("p", { class: "muted" }, "もう一度開くには、オーバーレイのギアのボタンか python -m aircontroller settings。")];
   if (!(await confirmBox("設定画面を終了する", body, n ? "捨てて終了" : "終了"))) return;
+  let r;
   try {
-    let r = await api("/api/shutdown", { force: false });
+    r = await api("/api/shutdown", { force: false });
     if (r.busy) {
       const what = r.busy.map((k) => ({ measure: "測定", eval: "見積もり" }[k] || k)).join("・");
       const ok = await confirmBox(`${what}の途中です`, [
@@ -997,6 +997,11 @@ async function quit() {
       r = await api("/api/shutdown", { force: true });
     }
   } catch (e) { return toast(`終了できませんでした: ${e.message}`); }
+  if (r.window) { // アプリの中: ウィンドウが閉じる。変更中の値を捨て、run との接続を切る（次に開いたときは読み直す）
+    for (const k of Object.keys(edits)) delete edits[k];
+    if (live.es) { live.es.close(); live.es = null; }
+    return;
+  }
   for (const k of Object.keys(edits)) delete edits[k]; // run には送らない（サーバーが止まると run は保存済みの値に戻る）
   clearInterval(runTimer);
   if (live.es) { live.es.close(); live.es = null; }
@@ -1302,6 +1307,7 @@ function connectLive() {
 function setOutputIcon(on) {
   document.body.classList.toggle("output-on", on);
   document.querySelector("#live-handle .out-icon").title = on ? "操作に反映する（オン）" : "操作に反映する（オフ）";
+  document.getElementById("live-output-state").textContent = on ? "オン" : "オフ";
 }
 
 // 変更中の値を run に送る（少し待ってまとめて。保存はしない）

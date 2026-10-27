@@ -425,6 +425,9 @@ def cmd_run(args, cfg: dict) -> int:
                 print("[camera] 設定画面がつながったので、カメラを起動します")
                 pipe.start_async()
         hub.on_connect = live_connected
+        # アプリの起動タブ（SPEC 13.58）が読む状態
+        hub.status_fn = lambda: {"active": activation.active, "power": power_ctl.state, "camera": pipe.state,
+                                 "mode": engine.state.mode, "hand": engine.hand_present}
         hub.start()
 
     t_start = time.monotonic()
@@ -1610,6 +1613,13 @@ def cmd_settings(args, cfg: dict) -> int:
     return 0
 
 
+def cmd_app(args, cfg: dict) -> int:
+    """アプリ（TASKS-20261027-package 第5節、SPEC 13.58）。ウィンドウを閉じても run は動き続け、⌘Q で run も止めて終わる。"""
+    from .app import run_app
+
+    return run_app(ROOT, args.config, args.tab)
+
+
 def cmd_report(args, cfg: dict) -> int:
     """イベントログの集計（TASKS-20261025 1.3）。--from-recording では、ランドマークの記録をジェスチャー層に流して
     イベントログを作ってから集計する（有効化の状態は記録のものを使う。手の不在の自動オフなどは含まない）。"""
@@ -1728,6 +1738,8 @@ def main(argv=None) -> int:
     sv = sub.add_parser("settings", help="設定画面（127.0.0.1 の Web 画面）を開く")
     sv.add_argument("--port", type=int, default=0, help="待ち受けるポート（既定: 空いているもの）")
     sv.add_argument("--no-open", action="store_true", help="ブラウザを開かない（URL を表示するだけ）")
+    ap_app = sub.add_parser("app", help="アプリ（1 つのウィンドウに 起動・チュートリアル・環境のチェック・設定 のタブ。run は子プロセス）")
+    ap_app.add_argument("--tab", default="launch", choices=["launch", "tutorial", "check", "settings"], help="最初に開くタブ")
     sv.add_argument("--check", action="store_true", help="環境のチェックの画面を開く（権限・カメラ・キーボード）")
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
@@ -1737,7 +1749,7 @@ def main(argv=None) -> int:
             "learn-thumbsup": cmd_learn_thumbsup, "learn-zoom": cmd_learn_zoom, "modkeys": cmd_modkeys, "view": cmd_view, "keytest": cmd_keytest, "camlatency": cmd_camlatency,
             "replay": cmd_replay, "stats": cmd_stats, "analyze": cmd_analyze, "report": cmd_report, "lab-position": cmd_lab_position,
             "settings-history": cmd_settings_history, "settings-eval": cmd_settings_eval,
-            "settings": cmd_settings}[args.cmd](args, cfg)
+            "settings": cmd_settings, "app": cmd_app}[args.cmd](args, cfg)
 
 
 if __name__ == "__main__":

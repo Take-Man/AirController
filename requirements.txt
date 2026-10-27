@@ -10,6 +10,7 @@ pyobjc-framework-AVFoundation==12.2.2
 pyobjc-framework-CoreMedia==12.2.2
 pyobjc-framework-ApplicationServices==12.2.2
 pyobjc-framework-libdispatch==12.2.2
+pyobjc-framework-WebKit==12.2.2  # アプリのウィンドウ（WKWebView。2026-10-28 作者が承認、SPEC 13.58）
 pytest==9.1.1
 # モデル: models/hand_landmarker.task（Google 公式配布の float16/latest、7,819,105 バイト）
 #   curl -sSL -o models/hand_landmarker.task https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirController</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<main>
+  <section class="panel">
+    <div class="row wrap">
+      <h2>AirController</h2>
+      <span id="state-chip" class="chip">—</span>
+      <span class="spacer"></span>
+      <button id="btn-start" class="primary">開始</button>
+      <button id="btn-stop" class="ghost">停止</button>
+    </div>
+    <div id="status" class="status-line"></div>
+    <div id="msg" class="note"></div>
+    <div id="tail" class="tail hidden"></div>
+  </section>
+  <nav class="home-cards" aria-label="画面">
+    <a data-go="/check" class="home-card"><strong>環境のチェック</strong><span>権限・カメラ・キーボードが使える状態かを確かめます</span></a>
+    <a data-go="/tutorial" data-window="tutorial" class="home-card"><strong>チュートリアル</strong><span>ジェスチャーと操作を、見て・試して覚えます</span></a>
+    <a data-go="/" data-window="settings" class="home-card"><strong>設定</strong><span>反応の速さや、ピンチなどの効き方を合わせます</span></a>
+  </nav>
+  <section class="panel">
+    <h2>使い方</h2>
+    <ul class="note">
+      <li>「開始」で、カメラと手の読み取りを始めます（画面の右上に小さな表示が出ます）。</li>
+      <li>右 Command を単独で押して離すと、操作のオン・オフを切り替えます。オフの間に手のひらをカメラに向けて 0.5 秒保っても、オンになります。</li>
+      <li>操作中に手が 5 秒見えないと、自動でオフになります。</li>
+      <li>すぐに止めるときは、Control + Option + Command + ピリオド。</li>
+      <li>うまく動かないときは「環境のチェック」を、反応を合わせるときは「設定」を開いてください。</li>
+    </ul>
+  </section>
+</main>
+<script src="/nav.js"></script>
+<script src="/launch.js"></script>
+</body>
+</html>

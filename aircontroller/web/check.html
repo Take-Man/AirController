@@ -7,11 +7,7 @@
 <link rel="stylesheet" href="/app.css">
 </head>
 <body>
-<header class="bar">
-  <h1>AirController 環境のチェック</h1>
-  <span class="spacer"></span>
-  <a id="to-settings" class="muted small" href="#">設定画面へ</a>
-</header>
+<nav class="backbar"><a data-go="/launch" class="back">‹ ホームに戻る</a></nav>
 <main>
   <section class="panel" id="menu">
     <h2>環境のチェック</h2>
@@ -26,15 +22,18 @@
       <span class="spacer"></span>
       <span id="totals" class="summary"></span>
     </div>
-    <div class="progress"><div id="progress-fill"></div></div>
-    <div id="now" class="now"></div>
-    <ul id="list" class="check-list"></ul>
-    <div class="row wrap hidden" id="end-actions">
-      <button id="btn-again" class="primary">もう一度</button>
-      <button id="btn-menu" class="ghost">メニューに戻る</button>
+    <div class="progress-row">
+      <div class="progress"><div id="progress-fill"></div></div>
+      <button id="btn-again" class="hidden">再チェック</button>
     </div>
+    <div id="now" class="now"></div>
+    <details id="list-wrap" class="list-wrap">
+      <summary id="list-summary">項目ごとの結果</summary>
+      <ul id="list" class="check-list"></ul>
+    </details>
   </section>
 </main>
+<script src="/nav.js"></script>
 <script src="/check.js"></script>
 </body>
 </html>
