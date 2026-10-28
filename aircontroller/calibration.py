@@ -459,8 +459,7 @@ def _pair_unit(unit: str, rest: list, op: list, op_label: str, default_on, defau
         return None, stats, warnings
     if th.rest_lo - th.pinch_hi < 0.03:
         warnings.append(f"{op_label}: 分布の間が狭い（{th.rest_lo - th.pinch_hi:.3f}）")
-    if th.rest_lo - th.pinch_hi > 0.3:
-        warnings.append(f"{op_label}: 分布の間が 0.3 より広いので、0.3 として閾値を置いた")
+    # 分布の間が 0.3 より広いときは 0.3 として閾値を置く（derive の中）。警告は出さない（作者の指示: 利用者がすることはない）
     return th, stats, warnings
 
 

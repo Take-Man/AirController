@@ -62,6 +62,15 @@ def run_pids() -> list[int]:
     return pids
 
 
+def history_when(s: dict) -> str:
+    """スナップショットの日時（2026-10-26 18:10:53）。meta の時刻、無ければ名前（YYYYmmdd-HHMMSS）から。"""
+    t = s.get("t") or ""
+    if t:
+        return t.replace("T", " ")
+    m = re.match(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})", s.get("id", ""))
+    return f"{m[1]}-{m[2]}-{m[3]} {m[4]}:{m[5]}:{m[6]}" if m else ""
+
+
 class Job:
     def __init__(self, kind: str, argv: list[str], cwd: Path, result: Path | None = None):
         self.id = secrets.token_hex(4)
@@ -120,8 +129,9 @@ class App:
         units = {}
         for p, d in self._history():
             for u, r in d.get("results", {}).items():
+                # 以前の測定に残っている「分布の間が 0.3 より広い」の警告は出さない（作者の指示）
                 units[u] = {"file": p.name, "t": d.get("t"), "candidate": r.get("candidate"), "stats": r.get("stats"),
-                            "warnings": r.get("warnings"), "report": r.get("report")}
+                            "warnings": [w for w in r.get("warnings") or [] if "0.3 より広い" not in w], "report": r.get("report")}
         return units
 
     def measured(self) -> dict[str, dict]:
@@ -132,7 +142,7 @@ class App:
                 for sec, vals in (r.get("candidate") or {}).items():
                     for k, v in vals.items():
                         out[f"{sec}.{k}"] = {"value": v, "t": d.get("t", ""), "file": p.name, "unit": unit,
-                                             "warnings": r.get("warnings", [])}
+                                             "warnings": [w for w in r.get("warnings") or [] if "0.3 より広い" not in w]}
         return out
 
     def state(self) -> dict:
@@ -160,7 +170,9 @@ class App:
         return {"params": params, "sections": SECTION_JA, "units": self.units(), "off_at_zero": list(OFF_AT_ZERO),
                 "image_size": [cam.get("width", 1280), cam.get("height", 720)], "screen_size": list(screen_size()),
                 "toggles": {k: list(v) for k, v in FEATURE_TOGGLES.items()},
-                "history": [{"id": s["id"], "route": s["route"], "t": s["t"], "key": s["key"], "name": names.get(s["key"], s["id"])}
+                # 履歴: 設定名・日時・コメント（保存のときのメモ。無ければ、何をしたか〔履歴から戻す など〕。ファイル名は出さない）
+                "history": [{"id": s["id"], "route": s["route"], "t": s["t"], "key": s["key"], "name": names.get(s["key"], s["id"]),
+                             "when": history_when(s), "comment": s["note"] or (s["route"] if not s["route"].isascii() else "")}
                             for s in reversed(self.store.snapshots())],
                 "named": [{"name": n, "key": state_key(_read(self.store.named / f"{n}.toml"))} for n in self.store.named_states()],
                 "current": self.store.current_key(), "run": run_pids(),
@@ -288,7 +300,7 @@ class App:
 
         info = self.live_info()
         if info is None:
-            raise ValueError("run が動いていません（ライブのプレビューは run の起動中だけ）")
+            raise ValueError("Controller が動いていません（ライブのプレビューは Controller の動作中だけ）")
         c = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=5)
         c.request(method, path, body=json.dumps(body).encode() if body is not None else None,
                   headers={"Host": f"127.0.0.1:{info['port']}", "X-Token": info["token"], "Content-Type": "application/json"})
@@ -353,7 +365,7 @@ class App:
         while run_pids() and time.time() < t_end:
             time.sleep(0.2)
         if run_pids():
-            raise ValueError("run が止まりません")
+            raise ValueError("Controller が止まりません")
         from .calibration import unit_steps
 
         job = Job("measure", self._cli("calibrate", "--unit", ",".join(units)), self.root)
@@ -447,7 +459,7 @@ class App:
         while run_pids() and time.time() < t_end:
             time.sleep(0.2)
         if run_pids():
-            raise ValueError("run が止まりません")
+            raise ValueError("Controller が止まりません")
         self._check = CheckContext(self.root, self.store.load)
         return {"ok": True}
 
@@ -528,7 +540,7 @@ def make_handler(app: App, port_ref: list[int]):
 
             info = app.live_info()
             if info is None:
-                self._send(503, {"error": "run が動いていません"})
+                self._send(503, {"error": "Controller が動いていません"})
                 return
             up = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=10)
             try:

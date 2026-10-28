@@ -151,7 +151,7 @@ class SettingsStore:
                   "書いた経路ごとの履歴は settings-history/changes.jsonl")
         write_atomic(self.calibration, dump_toml(data, header))
         self._log(changes, "calibration", route)
-        self._snapshot(route)
+        self._snapshot(route, note=note)
         return changes
 
     def save_auto(self, updates: dict[str, dict], route: str = "run") -> list[dict]:
@@ -219,7 +219,8 @@ class SettingsStore:
         for p in self._snapshots():
             d = _read(p)
             meta = d.get("meta", {})
-            out.append({"path": p, "id": p.stem, "route": meta.get("route", ""), "t": meta.get("t", ""), "key": state_key(d)})
+            out.append({"path": p, "id": p.stem, "route": meta.get("route", ""), "t": meta.get("t", ""), "note": meta.get("note", ""),
+                        "key": state_key(d)})
         return out
 
     def names(self) -> dict[str, str]:
@@ -235,13 +236,15 @@ class SettingsStore:
     def current_key(self) -> str:
         return state_key(self.state())
 
-    def _snapshot(self, route: str, path: Path | None = None) -> Path:
+    def _snapshot(self, route: str, path: Path | None = None, note: str = "") -> Path:
+        """note: 保存したときのコメント（設定画面の「メモ」など。履歴に出す）。"""
         if path is None:
             stamp = time.strftime("%Y%m%d-%H%M%S")
             path, n = self.history / f"{stamp}.toml", 2
             while path.exists():
                 path, n = self.history / f"{stamp}-{n}.toml", n + 1
-        data = {"meta": {"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "route": route}, **self.state()}
+        meta = {"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "route": route, **({"note": note} if note else {})}
+        data = {"meta": meta, **self.state()}
         write_atomic(path, dump_toml(data, "設定のスナップショット（利用者の層: calibration.toml と auto.toml の全体）"))
         if path.parent == self.history:
             for old in self._snapshots()[:-KEEP]:

@@ -387,17 +387,17 @@ def judge_key(code: int, emergency_keycode: int = 47, toggle_codes: tuple[int, .
     if code in REFUSE:
         return {"level": "refuse", "reason": f"{REFUSE[code]} は操作・入力に要るので、印に使えません。"}
     if code == emergency_keycode:
-        return {"level": "warn", "reason": "緊急停止（Control+Option+Command と一緒に押す）と同じキーです。run の実行中は、このキーの文字が入力できなくなります。"}
+        return {"level": "warn", "reason": "緊急停止（Control+Option+Command と一緒に押す）と同じキーです。Controller の動作中は、このキーの文字が入力できなくなります。"}
     if code == 93:
-        return {"level": "ok", "reason": "既定の ¥ です。run の実行中は ¥ が入力できなくなります（\\ は Option+¥）。"}
+        return {"level": "ok", "reason": "既定の ¥ です。Controller の動作中は ¥ が入力できなくなります（\\ は Option+¥）。"}
     if code in FUNCTION_CODES:
-        return {"level": "ok", "reason": "ファンクションキーです。run の実行中は、このキーのほかの用途（明るさ・音量など）が効かなくなります。"}
+        return {"level": "ok", "reason": "ファンクションキーです。Controller の動作中は、このキーのほかの用途（明るさ・音量など）が効かなくなります。"}
     if code in (102, 104):
-        return {"level": "warn", "reason": "英数・かなのキーです。run の実行中は、入力モードの切り替えに使えなくなります。"}
+        return {"level": "warn", "reason": "英数・かなのキーです。Controller の動作中は、入力モードの切り替えに使えなくなります。"}
     ch = char_of(code) or ""
     if ch.strip():
-        return {"level": "warn", "reason": f"文字（{ch}）を入力するキーです。run の実行中は、この文字が入力できなくなります。"}
-    return {"level": "ok", "reason": "run の実行中は、このキーのほかの用途が効かなくなります。"}
+        return {"level": "warn", "reason": f"文字（{ch}）を入力するキーです。Controller の動作中は、この文字が入力できなくなります。"}
+    return {"level": "ok", "reason": "Controller の動作中は、このキーのほかの用途が効かなくなります。"}
 
 
 def read_hotkeys() -> dict:

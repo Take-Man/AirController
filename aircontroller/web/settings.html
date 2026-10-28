@@ -10,20 +10,20 @@
 <nav class="backbar"><a data-go="/launch" class="back">‹ ホームに戻る</a></nav>
 <header class="bar">
   <h1>AirController 設定</h1>
-  <span id="run-chip" class="chip">run: —</span>
+  <span id="run-chip" class="chip">Controller: —</span>
   <span class="spacer"></span>
   <span id="dirty" class="muted"></span>
   <button id="btn-discard" class="ghost">変更をやり直す</button>
   <button id="btn-save" class="primary" disabled>変更を確定</button>
-  <button id="btn-quit" class="ghost" title="設定画面のサーバーを止めます（run は止めません）">終了</button>
+  <button id="btn-quit" class="ghost" title="設定画面を閉じます">閉じる</button>
 </header>
 
 <main>
-  <p class="note">確定した値は、動いている run にもすぐ反映されます（使う手とオン・オフと省電力の項目は、run を起動し直すと反映）。確定のたびに履歴（settings-history/）が残ります。</p>
+  <p class="note">確定した値は、動いている Controller にもすぐ反映されます（使う手とオン・オフと省電力の項目は、次回起動時に反映）。</p>
 
   <section class="panel" id="panel-measure">
     <h2>測定</h2>
-    <p class="muted">calibrate を別のウィンドウで起動します。結果は候補として下に並び、確定するまで使われません。各見出しの「U◯ 測定」からも測れます。</p>
+    <p class="muted">測定を別のウィンドウで始めます。結果は候補として下に並び、確定するまで使われません。各見出しの「U◯ 測定」からも測れます。</p>
     <div class="unit-grid" id="measure-buttons"></div>
     <div id="measure-job" class="job hidden"></div>
   </section>
@@ -36,7 +36,7 @@
 
   <section class="panel" id="panel-eval">
     <h2>効果の見積もり</h2>
-    <p class="muted">基準記録（eval-manifest.toml）を、保存済みの値と、比べる値で流して差を出します（約 20 秒）。</p>
+    <p class="muted">基準記録を、保存済みの値と、比べる値で流して差を出します（約 20 秒）。</p>
     <div class="row wrap">
       <button id="btn-eval-measured">測定の候補を見積もる</button>
       <button id="btn-eval-edit">変更中の値を見積もる</button>
@@ -46,6 +46,8 @@
   </section>
   </div>
 
+  <hr class="section-sep">
+  <h2 class="section-head">設定</h2>
   <div id="sections"></div>
 
   <section class="panel" id="panel-history">
@@ -73,15 +75,15 @@
   </form>
 </dialog>
 <button id="live-handle" class="live-handle" aria-controls="live-drawer" aria-expanded="false" title="ライブを開く">
-  <span class="chev" aria-hidden="true">‹</span><span class="dot" title="run とのつながり"></span>
+  <span class="chev" aria-hidden="true">‹</span><span class="dot" title="Controller とのつながり"></span>
   <span class="out-icon" title="操作に反映する（オフ）" aria-hidden="true">✋</span><span class="lbl-text">ライブ</span></button>
 <aside id="live-drawer" class="live-drawer" aria-label="ライブ">
   <div class="phead"><h2>ライブ</h2><span class="spacer"></span><button id="live-close" class="small ghost" aria-label="閉じる">閉じる ›</button></div>
-  <div class="row wrap"><span id="live-chip" class="chip">run に接続していません</span></div>
+  <div class="row wrap"><span id="live-chip" class="chip">Controller に接続していません</span></div>
   <label class="big-switch" id="live-output-wrap"><span class="switch big"><input type="checkbox" role="switch" id="live-output"><span class="knob"></span></span>
     <span>操作に反映する<span class="muted small" id="live-output-state">オフ</span></span></label>
-  <p class="muted small" id="live-note">run の起動中に、手の形と今の値を出します。この画面を開いている間、run は「設定モード」になり、出力を止めます。
-    変更中の値は run で試せます（確定するまで保存しません。画面を閉じると、run は確定済みの値に戻ります）。</p>
+  <p class="muted small" id="live-note">Controller の動作中に、手の形と今の値を出します。この画面を開いている間、Controller は「設定モード」になり、出力を止めます。
+    変更中の値は Controller で試せます（確定するまで保存しません。画面を閉じると、Controller は確定済みの値に戻ります）。</p>
   <div class="live-body hidden" id="live-body">
     <div id="live-mode" class="live-mode"></div>
     <div id="live-hand"></div>

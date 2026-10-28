@@ -55,8 +55,8 @@ function render(s) {
   $("status").replaceChildren(...rows);
   let msg = "";
   if (!s.app) msg = "開始・停止は、アプリの中（python -m aircontroller app）で使えます。";
-  else if (s.others.length) msg = `ターミナルなどから起動した run が動いています（PID ${s.others.join(", ")}）。「停止」で止められます。`;
-  else if (!s.running && s.code != null && s.code !== 0) msg = `run が終了しました（終了コード ${s.code}）。最後の出力を下に出します。`;
+  else if (s.others.length) msg = `ターミナルなどから起動した Controller が動いています（PID ${s.others.join(", ")}）。「停止」で止められます。`;
+  else if (!s.running && s.code != null && s.code !== 0) msg = `Controller が終了しました（終了コード ${s.code}）。最後の出力を下に出します。`;
   $("msg").textContent = msg;
   const showTail = s.app && !s.running && s.code != null && s.code !== 0 && s.tail && s.tail.length;
   $("tail").classList.toggle("hidden", !showTail);

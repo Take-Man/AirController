@@ -468,3 +468,9 @@ svg.fig.meter { width: 100%; height: 16px; }
 .wake-lamp.on { background: var(--chip-on); color: var(--chip-on-fg); border-color: transparent; }
 .wake-list { font-size: 16px; list-style: none; padding: 0; }
 .wake-list li.ok { color: var(--chip-on-fg); font-weight: 600; }
+
+/* 設定画面: 道具（測定・候補・見積もり）と設定の項目の間の区切り（作者の FB） */
+.section-sep { border: 0; border-top: 2px solid var(--line); margin: 28px 0 8px; }
+.section-head { font-size: 20px; margin: 4px 0 4px; }
+.btn-warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+.hwhen { min-width: 11em; font-variant-numeric: tabular-nums; }

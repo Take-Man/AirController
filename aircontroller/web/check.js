@@ -101,10 +101,10 @@ async function start() {
   $("menu-msg").textContent = "";
   let r = await api("/api/check/start", {});
   if (r.need_stop) {
-    const ok = await confirmBox("run を止めて確かめます", "カメラとキーの監視が重なるので、動いている run（PID " + r.run.join(", ")
+    const ok = await confirmBox("Controller を止めて確かめます", "カメラとキーの監視が重なるので、動いている Controller（PID " + r.run.join(", ")
       + "）を止めてから確かめます（確かめた後は、ホームの「開始」で動かし直してください）", "止めて確かめる");
     if (!ok) return;
-    $("menu-msg").textContent = "run を止めています…";
+    $("menu-msg").textContent = "Controller を止めています…";
     r = await api("/api/check/start", { stop_run: true });
     $("menu-msg").textContent = "";
   }
@@ -157,7 +157,7 @@ async function capture(box, msg, btn) {
     try {
       const out = await api("/api/check/set_mark_key", { keycode: r.keycode });
       MARK = out.mark_key;
-      msg.textContent = `印のキーを ${MARK.label} にしました（calibration.toml に保存。run を起動し直すと使われます）。「もう一度」で確かめられます。`;
+      msg.textContent = `印のキーを ${MARK.label} にしました（端末に保存しました。次回起動時に反映）。「もう一度」で確かめられます。`;
     } catch (e) { msg.textContent = `保存できませんでした: ${e.message}`; }
     actions.remove();
   } }, "このキーを使う");
@@ -170,7 +170,7 @@ async function init() {
   const r = await api("/api/check/items");
   ITEMS = r.items;
   MARK = r.mark_key;
-  if (r.run.length) $("menu-msg").textContent = `run が動いています（PID ${r.run.join(", ")}）。テスト開始のときに止めます。`;
+  if (r.run.length) $("menu-msg").textContent = `Controller が動いています（PID ${r.run.join(", ")}）。テスト開始のときに止めます。`;
   $("btn-start").onclick = () => start().catch((e) => { busy = false; $("menu-msg").textContent = e.message; });
   $("btn-again").onclick = () => start().catch((e) => { busy = false; $("run-title").textContent = `確かめられませんでした: ${e.message}`; });  // 再チェック
 }

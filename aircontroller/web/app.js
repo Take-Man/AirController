@@ -14,10 +14,10 @@ const HAND_SEG = [["left", "左手"], ["both", "両手"], ["right", "右手"]];
 // 画面の並び。文字列は項目、{w: ...} は図（ウィジェット）
 // { pair: [節, 節] } は節を横に並べる。項目の { row: [...] } は横並び、{ col: [...] } は縦並び
 const LAYOUT = [
-  { pair: [{ title: "使う手とモード", items: ["gesture.hand", "mode.posture_hold_ms"], flex: 1 },
+  { pair: [{ title: "Controller", items: ["gesture.hand", "mode.posture_hold_ms"], flex: 1 },
     { title: "オン・オフと省電力", items: ["power.wake_enabled", "power.wake_hold_s", "power.auto_off_after_s", "power.idle_stop_s"], flex: 3 }] },
   { title: "カーソルと操作範囲", units: ["range"], items: [{ w: "roi" }, { g: "cursorSens" }, { g: "roiAdapt" }] },
-  { title: "クリック・ピンチ・右クリック", units: ["pinch", "right"], items: [
+  { title: "クリック（ドラッグ）・右クリック", units: ["pinch", "right"], items: [
     { row: [{ w: "pinch", stack: true }, "click.drag_ms"], cls: "with-dial" },
     { row: [{ w: "right", stack: true }, "click.right_hold_ms"], cls: "with-dial" }] },
   { title: "ピース（スクロール、戻る・進む）", toggle: "peace.peace_enabled", units: ["peace"], items: [{ w: "peaceRow" },
@@ -29,7 +29,7 @@ const LAYOUT = [
   { title: "グー（何もしない）", toggle: "fist.fist_enabled", items: [] },
 ];
 const UNIT_SHORT = { range: "U1 測定", pinch: "U2 測定", right: "U3 測定", peace: "U4 測定", thumbsup: "U5 測定", zoom: "U6 測定" };
-const isTime = (p) => p && (p.unit === "ms" || p.unit === "秒"); // 時間の項目は円のダイヤルにする
+const isTime = (p) => p && (p.unit === "ms" || p.unit === "sec"); // 時間の項目は円のダイヤルにする
 
 let S = null; // サーバーの状態
 const edits = {}; // 変更中の値 {id: value}
@@ -128,14 +128,25 @@ function confirmBox(title, body, okLabel = "実行する") {
 
 // ---------------------------------------------------------------- 値
 const num = (v) => typeof v === "number" && isFinite(v);
-function decimals(p) { return p && p.step ? Math.max(0, Math.ceil(-Math.log10(p.step) - 1e-9)) : 4; }
+// 測定などの出力に出るファイルの場所は見せない（「端末に保存」にする。作者の指示）
+const hidePaths = (text) => (text || "").replace(/(?:[\w.-]+\/)*[\w.-]+\.(?:jsonl|json|toml|csv|log)\b/g, "端末に保存");
+
+// コメントの中の履歴の名前（20261026-181053）を日時にする（「履歴から戻す（…）」など）
+const idToWhen = (t) => (t || "").replace(/(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d+)?/g, "$1-$2-$3 $4:$5:$6");
+
+// 図の見出しに出す測定の名前: ファイル名は出さず、日時の部分（20261027-163816）だけ（作者の指示）
+const stamp = (name) => ((name || "").match(/\d{8}-\d{6}/) || [""])[0];
+
+// 画面に出す・動かす値は、小数第 2 位まで（作者の指示。内部の値はそのまま）
+const uiStep = (p) => (p.step && p.step < 0.01 ? 0.01 : p.step); // 画面で動かす刻み（0.01 より細かくしない）
+function decimals(p) { return Math.min(2, p && p.step ? Math.max(0, Math.ceil(-Math.log10(p.step) - 1e-9)) : 2); }
 function fmt(v, p) {
   if (typeof v === "boolean") return v ? "オン" : "オフ";
   if (p && p.id === "gesture.hand") return (HAND_SEG.find(([k]) => k === v) || [v, v])[1];
   if (num(v)) {
-    if (!p || !p.step) return String(+v.toFixed(4));
-    const s = v.toFixed(decimals(p));
-    return +s === v ? s : String(+v.toFixed(4)); // 測定の値など、刻みに乗らない値は 4 桁まで
+    const d = p && p.step ? decimals(p) : 2;
+    const r = Math.round((Math.abs(v) + Number.EPSILON * 10) * 10 ** d) / 10 ** d * Math.sign(v); // 0.205 → 0.21（四捨五入）
+    return p && p.step ? r.toFixed(d) : String(r); // 測定の値など、刻みに乗らない値も第 2 位まで
   }
   return v === undefined || v === null ? "—" : String(v);
 }
@@ -151,8 +162,9 @@ const pct = (r) => (r === null ? "" : `${r >= 0 ? "+" : ""}${Math.round(r * 100)
 function snap(p, v) {
   if (!num(v) || p.lo === null) return v;
   v = Math.min(p.hi, Math.max(p.lo, v));
-  const n = Math.round((v - p.lo) / p.step);
-  return +(p.lo + n * p.step).toFixed(decimals(p) + 2);
+  const st = uiStep(p);
+  const n = Math.round((v - p.lo) / st);
+  return +(p.lo + n * st).toFixed(decimals(p) + 2);
 }
 function changedIds() { return Object.keys(edits).filter((id) => byId[id] && edits[id] !== byId[id].saved); }
 
@@ -250,7 +262,7 @@ function itemRow(id, opt = {}) {
     box.append(el("div", { class: "line" }, name, el("span", { class: "spacer" }), seg), vals);
     box._refresh = () => { seg._refresh(); vals.replaceChildren(...valueLine(p)); box.classList.toggle("changed", cur(id) !== p.saved); };
   } else {
-    const range = el("input", { type: "range", min: p.lo, max: p.hi, step: p.step, oninput: (e) => setEdit(id, +e.target.value) });
+    const range = el("input", { type: "range", min: p.lo, max: p.hi, step: uiStep(p), oninput: (e) => setEdit(id, +e.target.value) });
     const ms = el("span", { class: "marker saved", title: "保存済み" }, "●");
     const mm = el("span", { class: "marker measured hidden", title: "測定" }, "▲");
     const track = el("div", { class: "track" }, ms, mm, range,
@@ -412,12 +424,12 @@ function needMeasure(unit, what) {
 // ---------------------------------------------------------------- 図: 分布（U2・U3・U4・U5）
 const DIST_W = {
   pinch: { unit: "pinch", title: "親指-人差し指の距離（U2）", keys: ["click.pinch_on", "click.pinch_off", "click.drag_off"],
-    rest: "普段の姿勢", op: "摘まんだ状態", short: ["成立", "解除", "ドラッグ中の解除"], metric: "ti" },
+    rest: "普段の姿勢", op: "つまんだ状態", short: ["成立", "解除", "ドラッグ中の解除"], metric: "ti" },
   right: { unit: "right", title: "親指-中指の距離（U3）", keys: ["click.right_on", "click.right_off", "click.right_arm"],
-    rest: "普段の姿勢", op: "中指で摘まんだ状態", short: ["成立", "解除", "直前に離れている"], metric: "tm" },
+    rest: "普段の姿勢", op: "中指でつまんだ状態", short: ["成立", "解除", "直前に離れている"], metric: "tm" },
   thumbfold: { unit: "peace", title: "親指の畳み（U4）", keys: ["peace.thumb_fold_on", "peace.thumb_fold_off"],
     rest: "普段の姿勢", op: "ピース", short: ["入る", "抜ける"], metric: "thumb_fold" },
-  far: { unit: "thumbsup", title: "親指-手の平の中心（U5）", keys: ["thumbsup.thumbsup_thumb_far_min", "thumbsup.thumbsup_stay_thumb_far_min"],
+  far: { unit: "thumbsup", title: "親指-手のひらの中心（U5）", keys: ["thumbsup.thumbsup_thumb_far_min", "thumbsup.thumbsup_stay_thumb_far_min"],
     rest: "間違えやすいグー", op: "いいね", short: ["入る", "保つ"], metric: "thumb_far" },
 };
 
@@ -483,7 +495,7 @@ function distWidget(kind, o = {}) {
   const legend = el("div", { class: "legend" }, el("span", {}, el("span", { class: "sw h-rest" }), `${cfg.rest}（${d.rest.length}）`),
     el("span", {}, el("span", { class: "sw h-op" }), `${cfg.op}（${d.op.length}）`), el("span", { class: "c-saved" }, "▲ 保存済み（上）"),
     el("span", { class: "c-measured" }, "▲ 測定（下）"), el("span", { class: "muted" }, "線をドラッグして変更"));
-  return widgetBox(cfg.title, `${d.recording}、${(d.t || "").replace("T", " ")}`, el("div", {}, svg, legend), cfg.keys, null, o);
+  return widgetBox(cfg.title, stamp(d.recording), el("div", {}, svg, legend), cfg.keys, null, o);
 }
 
 // ---------------------------------------------------------------- 図: 操作範囲（U1）
@@ -531,7 +543,7 @@ function roiWidget() {
     : el("span", { class: "muted" }, "U1 を測ると、届いた手のひら中心の点が出ます"),
     el("span", { class: "c-saved" }, "‐‐ 保存済み"), el("span", { class: "c-measured" }, "‐‐ 測定"), el("span", { class: "c-edit" }, "― 変更中"),
     el("span", { class: "muted" }, "四角を動かす、右下の角で大きさ"));
-  return widgetBox("操作範囲", d ? `カメラの画像（利用者から見た向き）。点は ${d.recording}` : "カメラの画像（利用者から見た向き）", el("div", {}, svg, legend), keys,
+  return widgetBox("操作範囲", d ? `カメラの画像（利用者から見た向き）。点は ${stamp(d.recording)} の測定` : "カメラの画像（利用者から見た向き）", el("div", {}, svg, legend), keys,
     "幅が大きいほど、同じ手の動きでカーソルが動く量は小さくなります。高さは画面の縦横比で決まります。");
 }
 
@@ -595,7 +607,7 @@ function peaceDialWidget(o = {}) {
     liveG.replaceChildren();
     if (snap && snap.peace) svgEl(liveG, "circle", { class: "live-dot", cx: C + Math.max(-C, Math.min(C, snap.peace[0] * SCALE)), cy: C - Math.max(-C, Math.min(C, snap.peace[1] * SCALE)), r: 6 });
   });
-  return widgetBox("ピースの領域", "run のピースモードの円と同じ。上下 = スクロール、左右 = 戻る・進む", svg, keys,
+  return widgetBox("ピースの領域", "Controller のピースモードの円と同じ。上下 = スクロール、左右 = 戻る・進む", svg, keys,
     "単位は手の大きさ（画像上の手首→中指付け根）。弧をドラッグして変更。上下: 不感帯の端から外周までで、スクロールが最大速度まで速くなる。"
     + "左右: 弧を越えて止まると戻る・進む。不感帯は 4 方向に共通の「何もしない」範囲なので、戻る・進むの弧より内側にしかできない。", o);
 }
@@ -650,11 +662,11 @@ function radarWidget() {
     svgEl(liveG, "circle", { class: "live-dot", cx: C + x * k * SCALE, cy: C - y * k * SCALE, r: 6 });
   });
   const legend = el("div", { class: "legend" },
-    d && d.available ? el("span", { class: "muted" }, `点: ${d.recording} の各方向（`, el("span", { class: "c-up" }, "上"), "・", el("span", { class: "c-left" }, "左"), "・",
+    d && d.available ? el("span", { class: "muted" }, `点: ${stamp(d.recording)} の各方向（`, el("span", { class: "c-up" }, "上"), "・", el("span", { class: "c-left" }, "左"), "・",
       el("span", { class: "c-right" }, "右"), "・", el("span", { class: "c-down" }, "下"), "・正面）") : el("span", { class: "muted" }, "点: U5 を測ると、各方向の位置が出ます"),
     el("span", { class: "muted" }, "円・弧をドラッグして変更"));
-  return widgetBox("いいねの領域", "run のいいねモードの円と同じ。中央の円が不感帯、細い破線が再武装、弧が発火", el("div", {}, svg, legend), keys,
-    "単位は手の大きさ。各方向の弧を越えて止まると発火し、再武装の円より中央へ戻ると次を許す。外周は表示の大きさだけ。");
+  return widgetBox("いいねの領域", "Controller のいいねモードの円と同じ。中央の円が不感帯、細い破線が受付待ちに戻る位置、弧が発動の位置", el("div", {}, svg, legend), keys,
+    "単位は手の大きさ。各方向の弧を越えて止まると発動し、破線の円より中央へ戻ると受付待ちに戻る。外周は表示の大きさだけ。");
 }
 
 // ---------------------------------------------------------------- 図: ズームの棒
@@ -693,7 +705,7 @@ function zoomWidget(o = {}) {
       svgEl(dyn, "line", { class: "thr dashed k-1", x1: BX - 8, x2: BX + BW + 8, y1: Y(s * fire), y2: Y(s * fire) });
     }
     svgEl(dyn, "text", { class: "lbl", x: BX - 16, y: Y(max) + 4, "text-anchor": "end" }, "外端");
-    svgEl(dyn, "text", { class: "lbl", x: BX - 16, y: Y(fire) + 4, "text-anchor": "end" }, "発火");
+    svgEl(dyn, "text", { class: "lbl", x: BX - 16, y: Y(fire) + 4, "text-anchor": "end" }, "発動");
     svgEl(dyn, "text", { class: "lbl", x: BX - 16, y: Y(dead) + 4, "text-anchor": "end" }, "不感帯");
   }
   draggable(svg, (pt) => {
@@ -719,7 +731,7 @@ function zoomWidget(o = {}) {
   });
 
   const legend = el("div", { class: "legend" },
-    d && d.available ? el("span", { class: "muted" }, `点: ${d.recording}（`, el("span", { class: "c-in" }, "イン"), "・", el("span", { class: "c-out" }, "アウト"), "・正面）") : null,
+    d && d.available ? el("span", { class: "muted" }, `点: ${stamp(d.recording)}（`, el("span", { class: "c-in" }, "イン"), "・", el("span", { class: "c-out" }, "アウト"), "・正面）") : null,
     el("span", { class: "muted" }, "線をドラッグして変更"));
   // 符号: +1 = 指先を手前（カメラから遠ざける、手招き）でイン。-1 = 画面側（カメラへ近づける）でイン（depth のとき）
   const dir = segmented("zoom.zoom_sign", [[1.0, "手前"], [-1.0, "画面側"]]);
@@ -731,8 +743,8 @@ function zoomWidget(o = {}) {
   const extra = el("div", { class: "zoom-opts small" },
     el("div", { class: "row wrap" }, "ズームインの方向", dir, signNote),
     el("div", { class: "row wrap" }, "測り方", sig, el("span", { class: "muted" }, "（変えたら、不感帯と外端も測り直す）")));
-  return widgetBox("ズームの範囲", "run のズームの棒と同じ。上がイン、下がアウト", el("div", {}, svg, legend, extra), keys,
-    "発火は、不感帯の端（0）から外端（1）までの割合。そこを越えて止まると 1 段送る。", o);
+  return widgetBox("ズームの範囲", "Controller のズームの棒と同じ。上がイン、下がアウト", el("div", {}, svg, legend, extra), keys,
+    "発動の位置は、不感帯の端（0）から外端（1）までの割合。そこを越えて止まると 1 段送る。", o);
 }
 
 // ---------------------------------------------------------------- 図: ピースの中立方向（U4）
@@ -764,7 +776,7 @@ function neutralWidget(o = {}) {
     (o, pt) => { setEdit(keys[0], (pt.x - C) / SCALE); setEdit(keys[1], (C - pt.y) / SCALE); });
   update();
   widgets.push({ keys, update });
-  return widgetBox("ピースの中立方向（U4）", `${d.recording}。方位角（右が正）・仰角（上が正）`, el("div", {}, svg,
+  return widgetBox("ピースの中立方向（U4）", `${stamp(d.recording)}。方位角（右が正）・仰角（上が正）`, el("div", {}, svg,
     el("div", { class: "legend" }, el("span", {}, el("span", { class: "sw pt" }), `ピースの指の向き（${d.neutral.length}）`),
       el("span", { class: "c-saved" }, "● 保存済み"), el("span", { class: "c-measured" }, "▲ 測定"), el("span", { class: "muted" }, "青い点をドラッグ"))), keys,
     "今の方式（指先の変位）では使われません。角度の方式に戻すときのための値です。", o);
@@ -794,7 +806,7 @@ function scrollCurveWidget(o = {}) {
     svgEl(dyn, "line", { class: "axis", x1: X(0), x2: X(0), y1: Y(0), y2: Y(1) });
     svgEl(dyn, "text", { class: "tick", x: X(0) + 4, y: Y(1) - 8 }, "外周（最大）");
     svgEl(dyn, "text", { class: "tick", x: X(0) + 4, y: Y(0) - 4 }, "不感帯の端");
-    svgEl(dyn, "text", { class: "tick", x: (L + W - R) / 2, y: H - 6, "text-anchor": "middle" }, "スクロールの速さ（px/秒）");
+    svgEl(dyn, "text", { class: "tick", x: (L + W - R) / 2, y: H - 6, "text-anchor": "middle" }, "スクロールの速さ（px/sec）");
     svgEl(dyn, "text", { class: "tick", x: 14, y: (T + H - B) / 2, transform: `rotate(-90 14 ${(T + H - B) / 2})`, "text-anchor": "middle" }, "ピースの変位");
     svgEl(dyn, "path", { class: "curve-saved", d: curve(byId[keys[0]].saved, byId[keys[1]].saved) });
     svgEl(dyn, "path", { class: "curve k-0", d: curve(mx, e) });
@@ -826,9 +838,9 @@ function scrollCurveWidget(o = {}) {
     const v = cur(keys[0]) * u ** cur(keys[1]);
     svgEl(liveG, "line", { class: "live-line", x1: X(0), x2: X(v), y1: Y(u), y2: Y(u) });
     svgEl(liveG, "circle", { class: "live-dot", cx: X(v), cy: Y(u), r: 6 });
-    svgEl(liveG, "text", { class: "live-lbl", x: X(v) + 8, y: Y(u) - 8 }, `${Math.round(v)} px/秒 ${sy >= 0 ? "↑" : "↓"}`);
+    svgEl(liveG, "text", { class: "live-lbl", x: X(v) + 8, y: Y(u) - 8 }, `${Math.round(v)} px/sec ${sy >= 0 ? "↑" : "↓"}`);
   });
-  return widgetBox("スクロールの速さ", "上下の変位に対する速さ（run と同じ式）", el("div", {}, svg,
+  return widgetBox("スクロールの速さ", "上下の変位に対する速さ（Controller と同じ式）", el("div", {}, svg,
     el("div", { class: "legend" }, el("span", { class: "c-saved" }, "‐‐ 保存済み"), el("span", { class: "c-edit" }, "― 変更中"),
       el("span", { class: "muted" }, "上の点で最大速度、中ほどの点で曲がり具合（左へ寄せるほど中央付近が遅い）"))), keys, null, { stack: true, ...o });
 }
@@ -924,14 +936,14 @@ let evalRunning = false;
 function refreshTop() {
   const ids = changedIds();
   const nWarn = ids.filter((id) => warned(byId[id], byId[id].saved, edits[id])).length;
-  document.getElementById("dirty").textContent = ids.length ? `変更中 ${ids.length} 項目` + (nWarn ? `（警告 ${nWarn}）` : "") : "";
+  document.getElementById("dirty").textContent = ids.length ? `変更中 ${ids.length} 項目` + (nWarn ? `（大きな変更 ${nWarn}）` : "") : "";
   document.getElementById("btn-save").disabled = !ids.length;
   document.getElementById("btn-save").textContent = ids.length ? `変更を確定（${ids.length}）` : "変更を確定";
   document.getElementById("btn-discard").disabled = !ids.length;
   document.getElementById("btn-eval-edit").disabled = !ids.length || evalRunning;
   document.getElementById("btn-eval-measured").disabled = evalRunning;
   const chip = document.getElementById("run-chip");
-  chip.textContent = S.run.length ? `run 動作中（${S.run.join(", ")}）` : "run 停止中";
+  chip.textContent = S.run.length ? `Controller 動作中（${S.run.join(", ")}）` : "Controller 停止中";
   chip.classList.toggle("on", S.run.length > 0);
 }
 
@@ -951,12 +963,13 @@ function renderCandidates() {
   }
   if (rows.length) {
     const nWarn = rows.filter((p) => warned(p, p.saved, p.measured.value)).length;
-    kids.push(el("p", { class: "muted small" }, `保存済みと違う測定の値: ${rows.length} 項目（警告 ${nWarn} 件）。各図の ▲ が測定の値です。`),
-      el("button", { onclick: async () => {
-        const ok = await confirmBox("測定の値を一括で変更中にする", [el("p", {}, `${rows.length} 項目を、測定の値にします（まだ確定しません）。`),
-          nWarn ? el("p", { class: "warn" }, `保存済みから ${Math.round(WARN * 100)}% 以上動く項目が ${nWarn} 件あります。`) : null], "変更中にする");
-        if (ok) for (const p of rows) setEdit(p.id, p.measured.value, { exact: true });
-      } }, `一括採用（${rows.length} 項目、警告 ${nWarn} 件）`));
+    // 大きな変更（保存済みから WARN 以上動く）がある間は、一括採用のボタンを黄色にし、確認を出す（作者の指示）
+    kids.push(el("p", { class: "muted small" }, `保存済みと違う測定の値: ${rows.length} 項目（大きな変更 ${nWarn} 件）。各図の ▲ が測定の値です。`),
+      el("button", { class: nWarn ? "btn-warn" : "", onclick: async () => {
+        if (nWarn && !(await confirmBox("大きな変更を含めて一括で採用する", [el("p", {}, `${rows.length} 項目を、測定の値にします（まだ確定しません）。`),
+          el("p", { class: "warn" }, `保存済みから ${Math.round(WARN * 100)}% 以上動く項目が ${nWarn} 件あります。`)], "採用する"))) return;
+        for (const p of rows) setEdit(p.id, p.measured.value, { exact: true });
+      } }, nWarn ? `一括採用（${rows.length} 項目、大きな変更 ${nWarn} 件）` : `一括採用（${rows.length} 項目）`));
   } else if (units.length) kids.push(el("p", { class: "muted" }, "測定の値は、すべて保存済みと同じです。"));
   box.replaceChildren(...kids);
 }
@@ -964,13 +977,14 @@ function renderCandidates() {
 // 同じ中身の設定には同じ名前を出す（名前を付けた状態があればその名前、無ければその中身が最初に現れた版の名前。サーバーが付ける）
 function renderHistory() {
   const applied = (key) => key === S.current;
-  const row = (name, sub, key, ident) => el("div", { class: `list-row ${applied(key) ? "applied" : ""}` },
-    el("span", { class: "hname" }, name), el("span", { class: "muted small grow" }, sub),
+  const row = (name, sub, key, ident, comment = "") => el("div", { class: `list-row ${applied(key) ? "applied" : ""}` },
+    el("span", { class: "hname" }, name), sub ? el("span", { class: "muted small hwhen" }, sub) : null,
+    el("span", { class: "muted small grow" }, comment),
     applied(key) ? el("span", { class: "chip on" }, "適用中")
       : el("button", { class: "small", onclick: () => restore(ident, `「${name}」`) }, "この設定を適用"));
   document.getElementById("named").replaceChildren(...(S.named.length ? S.named.map((n) => row(n.name, "", n.key, n.name))
     : [el("p", { class: "muted" }, "なし")]));
-  document.getElementById("history").replaceChildren(...(S.history.length ? S.history.map((h) => row(h.name, `${h.id}  ${h.route}`, h.key, h.id))
+  document.getElementById("history").replaceChildren(...(S.history.length ? S.history.map((h) => row(h.name, h.when, h.key, h.id, idToWhen(h.comment)))
     : [el("p", { class: "muted" }, "まだ保存していません。")]));
   document.getElementById("btn-undo").disabled = S.history.length < 2;
 }
@@ -979,11 +993,9 @@ function renderHistory() {
 let runTimer = null;
 
 async function quit() {
+  // ただ閉じる（作者の指示）。変更中の値があるときだけ、捨ててよいかを聞く
   const n = changedIds().length;
-  const body = [el("p", {}, "設定画面を閉じます（ブラウザで開いているときは、設定画面のサーバーも止めます）。run は止めません（つながっていれば設定モードを抜け、操作に戻ります）。"),
-    n ? el("p", {}, `変更中の ${n} 項目は確定せずに捨てます。`) : null,
-    el("p", { class: "muted" }, "もう一度開くには、オーバーレイのギアのボタンか python -m aircontroller settings。")];
-  if (!(await confirmBox("設定画面を終了する", body, n ? "捨てて終了" : "終了"))) return;
+  if (n && !(await confirmBox("設定画面を閉じる", el("p", {}, `変更中の ${n} 項目は確定せずに捨てます。`), "捨てて閉じる"))) return;
   let r;
   try {
     r = await api("/api/shutdown", { force: false });
@@ -991,12 +1003,12 @@ async function quit() {
       const what = r.busy.map((k) => ({ measure: "測定", eval: "見積もり" }[k] || k)).join("・");
       const ok = await confirmBox(`${what}の途中です`, [
         r.busy.includes("eval") ? el("p", {}, "見積もりは止めます（結果は出ません）。") : null,
-        r.busy.includes("measure") ? el("p", {}, "測定（calibrate）は最後まで動き、候補は calibration-history/ に残ります。画面には出ません。") : null],
-      "それでも終了");
+        r.busy.includes("measure") ? el("p", {}, "測定は最後まで動き、候補は端末に保存されます（画面には出ません）。") : null],
+      "それでも閉じる");
       if (!ok) return;
       r = await api("/api/shutdown", { force: true });
     }
-  } catch (e) { return toast(`終了できませんでした: ${e.message}`); }
+  } catch (e) { return toast(`閉じられませんでした: ${e.message}`); }
   if (r.window) { // アプリの中: ウィンドウが閉じる。変更中の値を捨て、run との接続を切る（次に開いたときは読み直す）
     for (const k of Object.keys(edits)) delete edits[k];
     if (live.es) { live.es.close(); live.es = null; }
@@ -1005,8 +1017,8 @@ async function quit() {
   for (const k of Object.keys(edits)) delete edits[k]; // run には送らない（サーバーが止まると run は保存済みの値に戻る）
   clearInterval(runTimer);
   if (live.es) { live.es.close(); live.es = null; }
-  document.body.replaceChildren(el("main", {}, el("section", { class: "panel" }, el("h2", {}, "設定画面を終了しました"),
-    el("p", { class: "muted" }, "このタブは閉じてかまいません。もう一度開くには、オーバーレイのギアのボタンか python -m aircontroller settings。"))));
+  document.body.replaceChildren(el("main", {}, el("section", { class: "panel" }, el("h2", {}, "設定画面を閉じました"),
+    el("p", { class: "muted" }, "このタブは閉じてかまいません（もう一度開くには、オーバーレイのギアのボタン）"))));
   window.close(); // スクリプトで開いたタブでなければ閉じない（そのときは上の案内が残る）
 }
 
@@ -1014,7 +1026,7 @@ function clearEdits() { for (const k of Object.keys(edits)) delete edits[k]; sen
 
 async function restore(id, label) {
   if (changedIds().length && !(await confirmBox("変更中の値があります", el("p", {}, "戻すと、変更中の値は捨てます。"), "捨てて続ける"))) return;
-  if (!(await confirmBox(`${label}の設定を適用する`, el("p", {}, "calibration.toml と auto.toml をその設定にします。動いている run にも反映します。適用したことも履歴に残ります。"), "適用する"))) return;
+  if (!(await confirmBox(`${label}の設定を適用する`, el("p", {}, "その設定にします。動いている Controller にも反映します。適用したことも履歴に残ります。"), "適用する"))) return;
   try { const r = await api("/api/restore", { id }); clearEdits(); toast(`適用しました（${r.changes.length} 項目）`); await reload(); }
   catch (e) { toast(`適用できませんでした: ${e.message}`); }
 }
@@ -1032,7 +1044,7 @@ async function save() {
   const note = el("input", { type: "text", class: "wide", placeholder: "メモ（任意。履歴に残る）" });
   const ok = await confirmBox(`${ids.length} 項目の変更を確定する`, [t,
     nWarn ? el("p", { class: "warn" }, `保存済みから ${Math.round(WARN * 100)}% 以上動く項目が ${nWarn} 件あります。`) : null,
-    el("p", { class: "muted" }, "calibration.toml に書き、スナップショットを残します。run を起動し直すと使われます。"), note], "確定する");
+    el("p", { class: "muted" }, "端末に保存し、履歴を残します。動いている Controller にもすぐ反映します（使う手とオン・オフと省電力の項目は、次回起動時に反映）。"), note], "確定する");
   if (!ok) return;
   try {
     const r = await api("/api/save", { values: Object.fromEntries(ids.map((id) => [id, edits[id]])), note: note.value });
@@ -1050,8 +1062,8 @@ async function pollJob(id, boxId, onDone, progress) {
   for (;;) {
     let j;
     try { j = await api(`/api/job?id=${id}`); } catch (e) { status.textContent = e.message; return; }
-    status.textContent = `${{ running: "実行中", done: "終わりました", failed: "失敗しました" }[j.status]}（${j.elapsed_s} 秒）`;
-    logBox.textContent = j.log.split("\n").slice(-60).join("\n");
+    status.textContent = `${{ running: "実行中", done: "終わりました", failed: "失敗しました" }[j.status]}（${j.elapsed_s} sec）`;
+    logBox.textContent = hidePaths(j.log).split("\n").slice(-60).join("\n");
     if (progress) progress.feed(j);
     if (j.status !== "running") { if (progress) progress.finish(j.status === "done"); onDone(j); return; }
     await new Promise((r) => setTimeout(r, 700));
@@ -1134,7 +1146,7 @@ async function measure(units) {
   try {
     let r = await api("/api/measure", { units, stop_run: false });
     if (r.need_stop) {
-      const ok = await confirmBox("run を止めて測定する", el("p", {}, `run が動いています（${r.run.join(", ")}）。測定はカメラを使うので、run を止めます（押下中のボタンとモードは解除されます）。測定の後、run は自動では起動しません。`), "止めて測定する");
+      const ok = await confirmBox("Controller を止めて測定する", el("p", {}, `Controller が動いています（${r.run.join(", ")}）。測定はカメラを使うので、Controller を止めます（押下中のボタンとモードは解除されます）。測定の後は、ホームの「開始」で動かし直してください。`), "止めて測定する");
       if (!ok) return;
       r = await api("/api/measure", { units, stop_run: true });
     }
@@ -1226,7 +1238,7 @@ const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [
 const METERS = [
   ["親指-人差し指", (s) => s.ti, [0, 0.8], ["click.pinch_on", "click.pinch_off", "click.drag_off"]],
   ["親指-中指", (s) => s.tm, [0, 0.8], ["click.right_on", "click.right_off", "click.right_arm"]],
-  ["親指-手の平の中心", (s) => s.thumb_far, [0, 3], ["thumbsup.thumbsup_thumb_far_min", "thumbsup.thumbsup_stay_thumb_far_min"]],
+  ["親指-手のひらの中心", (s) => s.thumb_far, [0, 3], ["thumbsup.thumbsup_thumb_far_min", "thumbsup.thumbsup_stay_thumb_far_min"]],
   ["親指の畳み", (s) => s.thumb_fold, [-1, 1], ["peace.thumb_fold_on", "peace.thumb_fold_off"]],
   ["人差し指の真っすぐさ", (s) => s.straight?.[0], [0.3, 1], ["cfg:index_up_enter", "cfg:index_up_exit", "cfg:peace_exit_straight"]],
   ["中指の真っすぐさ", (s) => s.straight?.[1], [0.3, 1], ["cfg:index_up_enter", "cfg:index_up_exit", "cfg:peace_exit_straight"]],
@@ -1293,11 +1305,11 @@ function connectLive() {
   live.es = es;
   const chip = document.getElementById("live-chip");
   chip.textContent = "接続中…";
-  es.onopen = () => { chip.textContent = "設定モード（run とつながっています）"; chip.classList.add("on"); document.body.classList.add("live-on"); sendLiveConfig(); };
+  es.onopen = () => { chip.textContent = "設定モード（Controller とつながっています）"; chip.classList.add("on"); document.body.classList.add("live-on"); sendLiveConfig(); };
   es.onmessage = (e) => { live.snap = JSON.parse(e.data); renderLive(live.snap); };
   es.onerror = () => { // run が終わった・つながらない: 閉じて、次の確認でつなぎ直す
     es.close(); live.es = null; live.snap = null;
-    chip.textContent = "run に接続していません"; chip.classList.remove("on"); document.body.classList.remove("live-on"); setOutputIcon(false);
+    chip.textContent = "Controller に接続していません"; chip.classList.remove("on"); document.body.classList.remove("live-on"); setOutputIcon(false);
     document.getElementById("live-body").classList.add("hidden");
     for (const h of live.hooks) h(null);
   };
@@ -1316,7 +1328,7 @@ function sendLiveConfig() {
   clearTimeout(live.sendTimer);
   live.sendTimer = setTimeout(async () => {
     const values = Object.fromEntries(changedIds().filter((id) => id !== "gesture.hand").map((id) => [id, edits[id]]));
-    try { await api("/api/live/config", { values }); } catch (e) { toast(`run に送れませんでした: ${e.message}`); }
+    try { await api("/api/live/config", { values }); } catch (e) { toast(`Controller に送れませんでした: ${e.message}`); }
   }, 150);
 }
 
@@ -1347,7 +1359,7 @@ function setup() {
   document.getElementById("btn-save").onclick = save;
   document.getElementById("btn-discard").onclick = () => { clearEdits(); refreshAll(); };
   document.getElementById("btn-undo").onclick = async () => {
-    if (!(await confirmBox("前の保存に戻す", el("p", {}, `最新の保存（${S.history[0]?.route}）の 1 つ前の状態に戻します。`), "戻す"))) return;
+    if (!(await confirmBox("前の保存に戻す", el("p", {}, `最新の保存（${S.history[0]?.when}）の 1 つ前の状態に戻します。`), "戻す"))) return;
     try { const r = await api("/api/undo", {}); clearEdits(); toast(`戻しました（${r.changes.length} 項目）`); await reload(); }
     catch (e) { toast(`戻せませんでした: ${e.message}`); }
   };
