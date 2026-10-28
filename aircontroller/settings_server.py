@@ -15,6 +15,7 @@ import re
 import secrets
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -28,11 +29,13 @@ from .settings import SettingsStore, _read, state_key
 WEB = Path(__file__).parent / "web"
 STATIC = {"/app.js": "application/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8",
           "/check.js": "application/javascript; charset=utf-8", "/nav.js": "application/javascript; charset=utf-8",
-          "/launch.js": "application/javascript; charset=utf-8", "/tutorial.js": "application/javascript; charset=utf-8"}
+          "/launch.js": "application/javascript; charset=utf-8", "/tutorial.js": "application/javascript; charset=utf-8",
+          "/about.js": "application/javascript; charset=utf-8"}
 # 画面: 設定、環境のチェック（第4節）、ホーム（起動）・チュートリアル（第5節。ホームから各画面へ進み、「ホームに戻る」で戻る）
 TUTORIAL_TYPES = {".json": "application/json; charset=utf-8", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                   ".webp": "image/webp", ".gif": "image/gif"}
-PAGES = {"/": "settings.html", "/check": "check.html", "/launch": "launch.html", "/tutorial": "tutorial.html"}
+PAGES = {"/": "settings.html", "/check": "check.html", "/launch": "launch.html", "/tutorial": "tutorial.html",
+         "/about": "about.html"}  # このアプリについて（開き方・データの扱い・アンインストール。第8節）
 DIST_KEYS = {"pinch": ("rest_ti", "pinch"), "right": ("rest_tm", "rpinch"), "peace": ("rest_thumb", "peace_thumb")}
 # run のプロセス: python -m aircontroller run、または .app の実行ファイルに引数 run（SPEC 13.58）
 RUN_RE = re.compile(r"(-m aircontroller|\.app/Contents/MacOS/[^/]+?)(\s+--config\s+\S+)?\s+run(\s|$)")
@@ -423,6 +426,30 @@ class App:
         except (ValueError, OSError):
             return None
 
+    def app_info(self) -> dict:
+        """このアプリについて（第8節）: 版、データの場所、アプリを消した後に残る場所（アンインストールの案内）。"""
+        home = Path.home()
+        tilde = lambda p: "~/" + str(Path(p).relative_to(home)) if Path(p).is_relative_to(home) else str(p)  # noqa: E731
+        version, bid = "", ""
+        if getattr(sys, "frozen", False):
+            from Foundation import NSBundle
+
+            d = NSBundle.mainBundle().infoDictionary()
+            version, bid = str(d.get("CFBundleShortVersionString", "")), str(d.get("CFBundleIdentifier", ""))
+        left = [tilde(self.root)]
+        if bid:  # macOS がアプリごとに作る場所（ウィンドウの位置、画面の保存領域、キャッシュ）
+            lib = home / "Library"
+            left += [tilde(lib / "Preferences" / f"{bid}.plist"), tilde(lib / "WebKit" / bid), tilde(lib / "Caches" / bid),
+                     tilde(lib / "Saved Application State" / f"{bid}.savedState")]
+        return {"app": self.runner is not None, "version": version, "home": tilde(self.root), "leftovers": left}
+
+    def app_reveal(self) -> dict:
+        """データの場所を Finder で開く（アプリの中だけ）。"""
+        if self.runner is None:
+            raise ValueError("アプリの中でだけ使えます")
+        subprocess.Popen(["open", str(self.root)])
+        return {"ok": True}
+
     def app_start(self) -> dict:
         if self.runner is None:
             raise ValueError("アプリの中でだけ使えます（python -m aircontroller app）")
@@ -614,6 +641,8 @@ def make_handler(app: App, port_ref: list[int]):
                     self._send(200, app.job(q.get("id", "")))
                 elif u.path == "/api/app/status":
                     self._send(200, app.app_status())
+                elif u.path == "/api/app/info":
+                    self._send(200, app.app_info())
                 elif u.path == "/api/check/items":
                     self._send(200, app.check_items())
                 else:
@@ -653,6 +682,8 @@ def make_handler(app: App, port_ref: list[int]):
                     out = app.app_start()
                 elif path == "/api/app/stop":
                     out = app.app_stop(bool(body.get("others")))
+                elif path == "/api/app/reveal":
+                    out = app.app_reveal()
                 elif path == "/api/app/focus":
                     out = app.app_focus(str(body.get("tab", "settings")))
                 elif path == "/api/check/start":

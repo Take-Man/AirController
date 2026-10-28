@@ -474,3 +474,9 @@ svg.fig.meter { width: 100%; height: 16px; }
 .section-head { font-size: 20px; margin: 4px 0 4px; }
 .btn-warn { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
 .hwhen { min-width: 11em; font-variant-numeric: tabular-nums; }
+
+/* このアプリについて（第8節） */
+.about { max-width: 760px; }
+.about h3 { margin: 0 0 6px; }
+.about code { font-size: 12px; }
+.about .paths li { font-family: ui-monospace, Menlo, monospace; }

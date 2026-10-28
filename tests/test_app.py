@@ -106,3 +106,16 @@ def test_tutorial_manifest_and_static(tmp_path):
     finally:
         httpd.shutdown()
         httpd.server_close()
+
+
+def test_about_info_lists_data_location(tmp_path, monkeypatch):
+    """このアプリについて（第8節）: データの場所と、アプリを消した後に残る場所（.app のときは macOS がアプリごとに作る場所も）。"""
+    app = App(tmp_path)
+    info = app.app_info()
+    assert info["app"] is False and info["leftovers"] == [info["home"]] and info["version"] == ""
+    try:
+        app.app_reveal()
+    except ValueError as e:
+        assert "アプリの中" in str(e)
+    else:
+        raise AssertionError("アプリの外で Finder を開いてしまった")

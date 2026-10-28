@@ -116,6 +116,18 @@ pkg/build.sh dmg    # pkg/dist/AirController.dmg
 署名は ad hoc（Apple のアカウントなし）。ダウンロードした .dmg から入れたアプリは、初回に「開いていません」の警告が出るので、システム設定 →
 プライバシーとセキュリティ の「このまま開く」で開く。作り直したアプリは、権限を付け直す（SPEC 13.55）。
 
+## 配布・開き方・アンインストール（.dmg、SPEC 13.62）
+- 配り方: `pkg/dist/AirController.dmg` をそのまま配る（Apple Developer のアカウントなし。署名は ad hoc。作者の判断 (a)）。
+- はじめて開くとき: 「開いていません」の警告が出るので「完了」→ システム設定 → プライバシーとセキュリティ の「このまま開く」→ もう一度「このまま開く」。
+  その後、アクセシビリティ・入力監視・カメラをオンにして開き直す（環境のチェックで確かめられる）。新しい版に入れ替えたら、権限を付け直す。
+- データの扱い: カメラの映像は保存も送信もしない。設定・ログ・手の点の記録は、この Mac の `~/Library/Application Support/AirController` にだけ保存する。
+  ネットワークには何も送らない（画面と Controller のやり取りは 127.0.0.1 だけ）。
+- アンインストール: ⌘Q で終了 → /Applications の AirController をゴミ箱へ → 残るデータを消す（要らなければ）:
+  `~/Library/Application Support/AirController`、`~/Library/Preferences/com.takeman.aircontroller.plist`、`~/Library/WebKit/com.takeman.aircontroller`、
+  `~/Library/Caches/com.takeman.aircontroller`、`~/Library/Saved Application State/com.takeman.aircontroller.savedState`（あれば）
+  → システム設定 → プライバシーとセキュリティ の アクセシビリティ・入力監視・カメラ の一覧から AirController を「−」で外す。
+- アプリの中では、ホームの「このアプリについて」（メニューの「AirController について」）に同じ案内がある。
+
 ## 権限（実行元のターミナルに付与）
 システム設定 → プライバシーとセキュリティ で、次の3つをオンにする。
 - カメラ

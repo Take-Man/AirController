@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AirController について</title>
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<nav class="backbar"><a data-go="/launch" class="back">‹ ホームに戻る</a></nav>
+<main class="about">
+  <h2>AirController について</h2>
+  <p class="muted small" id="version"></p>
+
+  <section class="panel">
+    <h3>はじめて開くとき</h3>
+    <p class="note">このアプリは Apple の開発者の署名をしていないので、はじめて開くと「開いていません」の警告が出ます</p>
+    <ol class="tut-lines">
+      <li>警告の「完了」を押す</li>
+      <li>システム設定 → プライバシーとセキュリティ を開き、下の方の「このまま開く」を押す</li>
+      <li>もう一度確認が出たら「このまま開く」を押す（次からは、そのまま開けます）</li>
+      <li>アクセシビリティ・入力監視・カメラの許可を求められたら、AirController をオンにして開き直す（環境のチェックで確かめられます）</li>
+    </ol>
+    <p class="note">新しい版に入れ替えたときは、権限（アクセシビリティ・入力監視・カメラ）を付け直す必要があります</p>
+  </section>
+
+  <section class="panel">
+    <h3>データの扱い</h3>
+    <ul class="tut-lines">
+      <li>カメラの映像は、保存も送信もしません（手の形を読み取るためだけに使います）</li>
+      <li>設定・ログ・手の動きの記録（手の点の位置）は、この Mac の中のデータの場所にだけ保存します</li>
+      <li>ネットワークには何も送りません（画面と Controller のやり取りも、この Mac の中だけです）</li>
+    </ul>
+    <p class="note">データの場所: <code id="home-dir">—</code> <button id="btn-reveal" class="small hidden">Finder で開く</button></p>
+  </section>
+
+  <section class="panel">
+    <h3>アンインストール</h3>
+    <ol class="tut-lines">
+      <li>AirController を終了する（⌘Q。Controller も止まります）</li>
+      <li>アプリケーション フォルダの AirController をゴミ箱に入れる</li>
+      <li>残るデータを消す（要らなければ）: 下の場所をゴミ箱に入れる</li>
+      <li>システム設定 → プライバシーとセキュリティ の、アクセシビリティ・入力監視・カメラの一覧から AirController を選び、「−」で外す</li>
+    </ol>
+    <ul class="tut-lines muted small paths" id="leftovers"></ul>
+  </section>
+</main>
+<script src="/nav.js"></script>
+<script src="/about.js"></script>
+</body>
+</html>

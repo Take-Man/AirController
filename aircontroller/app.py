@@ -21,7 +21,7 @@ from pathlib import Path
 from .settings_launch import cli_argv
 from .settings_server import App, run_pids, serve
 
-TABS = {"launch": "/launch", "tutorial": "/tutorial", "check": "/check", "settings": "/"}
+TABS = {"launch": "/launch", "tutorial": "/tutorial", "check": "/check", "settings": "/", "about": "/about"}
 SEPARATE = {"settings": "AirController 設定", "tutorial": "AirController チュートリアル"}  # 別のウィンドウで開く画面
 HOME_SIZE = (744, 540)  # ホームの大きさ（固定。作者が示した大きさ。状態の 1 行と案内の 1 行が出てもスクロールしない高さ）。環境のチェックも、項目を畳んだ状態でこの中に収める
 # 設定・チュートリアルの大きさ: 設定画面のライブを開いても、本文（最大 1040）の左に余白が残らない幅（1040 + ライブ 380）。画面に収める
@@ -206,6 +206,9 @@ def run_app(root: Path, config: str | None = None, tab: str = "launch") -> int:
                 home.makeKeyAndOrderFront_(None)  # Dock のアイコンで開き直す
             return True
 
+        def showAbout_(self, sender):  # メニューの「AirController について」
+            show("about")
+
         def applicationWillTerminate_(self, note):
             runner.stop()
             httpd.shutdown()
@@ -216,7 +219,8 @@ def run_app(root: Path, config: str | None = None, tab: str = "launch") -> int:
 
     # メニュー: アプリ（終了）と編集（Web の入力欄でコピー・貼り付けを使うため）
     menubar = AppKit.NSMenu.alloc().init()
-    for title, items in (("AirController", [("AirController を終了", "terminate:", "q")]),
+    for title, items in (("AirController", [("AirController について（開き方・アンインストール）", "showAbout:", ""),
+                                            ("AirController を終了", "terminate:", "q")]),
                          ("編集", [("取り消す", "undo:", "z"), ("カット", "cut:", "x"), ("コピー", "copy:", "c"),
                                   ("ペースト", "paste:", "v"), ("すべてを選択", "selectAll:", "a")]),
                          ("表示", [("再読み込み", "reload:", "r")]),
