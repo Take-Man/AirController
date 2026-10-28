@@ -28,8 +28,10 @@ from .settings import SettingsStore, _read, state_key
 WEB = Path(__file__).parent / "web"
 STATIC = {"/app.js": "application/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8",
           "/check.js": "application/javascript; charset=utf-8", "/nav.js": "application/javascript; charset=utf-8",
-          "/launch.js": "application/javascript; charset=utf-8"}
+          "/launch.js": "application/javascript; charset=utf-8", "/tutorial.js": "application/javascript; charset=utf-8"}
 # 画面: 設定、環境のチェック（第4節）、ホーム（起動）・チュートリアル（第5節。ホームから各画面へ進み、「ホームに戻る」で戻る）
+TUTORIAL_TYPES = {".json": "application/json; charset=utf-8", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                  ".webp": "image/webp", ".gif": "image/gif"}
 PAGES = {"/": "settings.html", "/check": "check.html", "/launch": "launch.html", "/tutorial": "tutorial.html"}
 DIST_KEYS = {"pinch": ("rest_ti", "pinch"), "right": ("rest_tm", "rpinch"), "peace": ("rest_thumb", "peace_thumb")}
 # run のプロセス: python -m aircontroller run、または .app の実行ファイルに引数 run（SPEC 13.58）
@@ -519,8 +521,9 @@ def make_handler(app: App, port_ref: list[int]):
             self.end_headers()
             self.wfile.write(data)
 
-        def _relay_stream(self):
-            """run の SSE を、そのままブラウザへ流す（画面を閉じると切れ、run は設定モードを抜ける）。"""
+        def _relay_stream(self, practice: bool = False):
+            """run の SSE を、そのままブラウザへ流す（画面を閉じると切れ、run は設定モードを抜ける）。
+            practice: 練習モード（キーの出力だけを止める。ジェスチャー別のテスト、SPEC 13.60）。"""
             import http.client
 
             info = app.live_info()
@@ -529,7 +532,7 @@ def make_handler(app: App, port_ref: list[int]):
                 return
             up = http.client.HTTPConnection("127.0.0.1", info["port"], timeout=10)
             try:
-                up.request("GET", "/stream", headers={"Host": f"127.0.0.1:{info['port']}", "X-Token": info["token"]})
+                up.request("GET", "/stream?practice=1" if practice else "/stream", headers={"Host": f"127.0.0.1:{info['port']}", "X-Token": info["token"]})
                 r = up.getresponse()
                 if r.status != 200:
                     self._send(502, {"error": f"run が断りました（{r.status}）"})
@@ -557,6 +560,15 @@ def make_handler(app: App, port_ref: list[int]):
                 if self._check(False):
                     self._send(200, (WEB / u.path.lstrip("/")).read_bytes(), STATIC[u.path])
                 return
+            if u.path.startswith("/tutorial/"):  # チュートリアルの画像と manifest.json（SPEC 13.60）。web/tutorial/ の中だけ
+                if self._check(False):
+                    f = (WEB / u.path.lstrip("/")).resolve()
+                    ctype = TUTORIAL_TYPES.get(f.suffix.lower())
+                    if ctype and f.is_file() and f.is_relative_to((WEB / "tutorial").resolve()):
+                        self._send(200, f.read_bytes(), ctype)
+                    else:
+                        self._send(404, {"error": "ありません"})
+                return
             if u.path in PAGES:
                 if not self._check(False):
                     return
@@ -573,7 +585,7 @@ def make_handler(app: App, port_ref: list[int]):
                 if not hmac.compare_digest(tok.encode(), app.token.encode()):
                     self._send(403, {"error": "トークンが違います"})
                     return
-                self._relay_stream()
+                self._relay_stream(parse_qs(u.query).get("practice") == ["1"])
                 return
             if not self._check(True):
                 return

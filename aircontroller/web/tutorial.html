@@ -8,12 +8,49 @@
 </head>
 <body>
 <nav class="backbar"><a data-go="/launch" class="back">‹ ホームに戻る</a></nav>
-<main>
-  <section class="panel">
-    <h2>チュートリアル</h2>
-    <p class="note">準備中です（ジェスチャーごとの説明と練習を、次の段階で作ります）。</p>
-  </section>
+
+<!-- 一覧: スキルツリー（系統ごとに円をつなぐ）。円にカーソルを合わせると説明が出て、押すとその操作の練習の画面に進む -->
+<main class="tut-list" id="view-list">
+  <h2>チュートリアル</h2>
+  <p class="note">操作にカーソルを合わせると説明が出ます（押すと、その操作の練習の画面に進みます）</p>
+  <div class="tree" id="tree"><svg class="tree-lines" id="tree-lines" aria-hidden="true"></svg></div>
 </main>
+
+<!-- 練習: 左に画像（上）と説明・前へ／次へ、右に練習 -->
+<div class="tut-practice hidden" id="view-practice">
+  <div class="tut-head">
+    <button id="btn-list" class="ghost">‹ 一覧に戻る</button>
+    <h2 id="step-title"></h2>
+    <span class="spacer"></span>
+    <button id="btn-prev" class="ghost">‹ 前へ</button>
+    <button id="btn-next" class="ghost">次へ ›</button>
+  </div>
+  <div class="tut-cols">
+    <section class="tut-left">
+      <figure class="tut-anim" id="anim"></figure>
+      <ul id="step-lines" class="tut-lines"></ul>
+      <h3>コツ</h3>
+      <ul id="step-tips" class="tut-lines muted"></ul>
+    </section>
+    <section class="panel tut-test" id="test">
+      <div class="row wrap">
+        <h3 id="test-title">練習</h3>
+        <span id="test-state" class="chip">—</span>
+        <span class="spacer"></span>
+        <button id="btn-test" class="primary">練習を始める</button>
+      </div>
+      <p id="test-task" class="note"></p>
+      <div id="test-area" class="test-area"></div>
+      <div id="test-hint" class="fix hidden"></div>
+      <ul class="muted small tut-lines">
+        <li>練習の間は、キーの操作（戻る・進む、デスクトップ移動、Mission Control、ズーム）を送らず、この画面の中で動きを見せます</li>
+        <li>マウスの操作（移動・クリック・ドラッグ・スクロール・右クリック）は、そのまま出ます</li>
+        <li>ホームで「開始」し、オンにしてから始めてください</li>
+      </ul>
+    </section>
+  </div>
+</div>
 <script src="/nav.js"></script>
+<script src="/tutorial.js"></script>
 </body>
 </html>

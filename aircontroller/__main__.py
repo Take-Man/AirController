@@ -321,6 +321,10 @@ def cmd_run(args, cfg: dict) -> int:
                         release_all()
         events = engine.update(frame)
         posted = 0
+        # 練習モード（SPEC 13.60）: キーの出力（ズーム・いいね・戻る・進む）だけを止め、マウスは出す
+        keys_ok = not (hub is not None and hub.suppress_keys())
+        if hub is not None:
+            hub.note_events(events, frame.active)
         if output_enabled.is_set() and not (hub is not None and hub.suppress_output()):
             for ev in events:
                 if ev.kind == "move":
@@ -343,6 +347,8 @@ def cmd_run(args, cfg: dict) -> int:
                 elif ev.kind == "scroll":
                     mouse.scroll(ev.data["dy"])
                     posted += 1
+                elif ev.kind in ("zoom", "thumbsup", "nav") and not keys_ok:
+                    continue
                 elif ev.kind == "zoom":
                     key = zoom_keys[ev.data["dir"]]
                     mouse.shortcut(key["keycode"], tuple(key["mods"]))
@@ -426,8 +432,8 @@ def cmd_run(args, cfg: dict) -> int:
                 pipe.start_async()
         hub.on_connect = live_connected
         # アプリの起動タブ（SPEC 13.58）が読む状態
-        hub.status_fn = lambda: {"active": activation.active, "power": power_ctl.state, "camera": pipe.state,
-                                 "mode": engine.state.mode, "hand": engine.hand_present}
+        hub.status_fn = lambda: {"active": activation.active, "reason": activation.last_reason, "power": power_ctl.state,
+                                 "camera": pipe.state, "mode": engine.state.mode, "hand": engine.hand_present}
         hub.start()
 
     t_start = time.monotonic()

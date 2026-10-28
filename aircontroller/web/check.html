@@ -33,6 +33,17 @@
     </details>
   </section>
 </main>
+<!-- 確認（アプリのウィンドウ〔WKWebView〕では confirm() が何も出さずに「いいえ」を返すので、画面の中のダイアログで聞く） -->
+<dialog id="confirm">
+  <form method="dialog">
+    <h3 id="confirm-title"></h3>
+    <div id="confirm-body"></div>
+    <div class="row end">
+      <button value="cancel" class="ghost">やめる</button>
+      <button value="ok" class="primary" id="confirm-ok">実行する</button>
+    </div>
+  </form>
+</dialog>
 <script src="/nav.js"></script>
 <script src="/check.js"></script>
 </body>

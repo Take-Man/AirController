@@ -128,6 +128,25 @@ def run_app(root: Path, config: str | None = None, tab: str = "launch") -> int:
         # 別のウィンドウ（設定・チュートリアル）には win=1 を付ける（「ホームに戻る」を出さない）
         return Foundation.NSURL.URLWithString_(f"{base}{TABS.get(name, '/launch')}?t={token}{'&win=1' if separate else ''}")
 
+    class UIDelegate(AppKit.NSObject):
+        """画面の alert() / confirm() を、ネイティブのダイアログで出す。WKWebView は既定では何も出さず、confirm() は「いいえ」を返す
+        （環境のチェックで run を止める確認が出ず、何も起こらなかった。作者の実機、2026-10-28）。画面の側も、確認は画面の中のダイアログにした。"""
+
+        def webView_runJavaScriptAlertPanelWithMessage_initiatedByFrame_completionHandler_(self, web, message, frame, handler):
+            alert = AppKit.NSAlert.alloc().init()
+            alert.setMessageText_(str(message))
+            alert.runModal()
+            handler()
+
+        def webView_runJavaScriptConfirmPanelWithMessage_initiatedByFrame_completionHandler_(self, web, message, frame, handler):
+            alert = AppKit.NSAlert.alloc().init()
+            alert.setMessageText_(str(message))
+            alert.addButtonWithTitle_("OK")
+            alert.addButtonWithTitle_("キャンセル")
+            handler(alert.runModal() == AppKit.NSAlertFirstButtonReturn)
+
+    ui_delegate = UIDelegate.alloc().init()
+
     def make_window(title: str, w: float, h: float, resizable: bool, autosave: str):
         style = AppKit.NSWindowStyleMaskTitled | AppKit.NSWindowStyleMaskClosable | AppKit.NSWindowStyleMaskMiniaturizable
         if resizable:
@@ -142,6 +161,7 @@ def run_app(root: Path, config: str | None = None, tab: str = "launch") -> int:
         conf = WebKit.WKWebViewConfiguration.alloc().init()
         web = WebKit.WKWebView.alloc().initWithFrame_configuration_(win.contentView().bounds(), conf)
         web.setAutoresizingMask_(AppKit.NSViewWidthSizable | AppKit.NSViewHeightSizable)
+        web.setUIDelegate_(ui_delegate)
         win.contentView().addSubview_(web)
         return win, web
 

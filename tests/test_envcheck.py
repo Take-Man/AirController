@@ -69,3 +69,25 @@ def test_resolve_shortcut(monkeypatch):
     assert keyboard.resolve_shortcut("in", "auto") == (24, "今の配列から")
     monkeypatch.setattr(keyboard, "find_keycode", lambda ch, shift=None: None)
     assert keyboard.resolve_shortcut("forward", "auto") == (42, "配列を読めないので JIS の位置")
+
+
+def test_check_start_stops_run_then_checks(tmp_path, monkeypatch):
+    """run が動いていれば、まず止めてよいか聞き（need_stop）、承認されたら SIGINT で止めてから始める（作者の FB: run 実行中に
+    環境のチェックを押しても何も起きなかった）。本物の run には触れないよう、run の代わりのプロセスを使う。"""
+    import subprocess
+    import sys
+
+    from aircontroller import settings_server
+    from aircontroller.settings_server import App
+
+    dummy = subprocess.Popen([sys.executable, "-c", "import time\ntry:\n time.sleep(60)\nexcept KeyboardInterrupt:\n pass"])
+    try:
+        monkeypatch.setattr(settings_server, "run_pids", lambda: [dummy.pid] if dummy.poll() is None else [])
+        app = App(tmp_path)
+        assert app.check_start(False) == {"need_stop": True, "run": [dummy.pid]}
+        assert dummy.poll() is None  # 承認の前は止めない
+        assert app.check_start(True) == {"ok": True}
+        assert dummy.wait(5) is not None and app._check is not None
+    finally:
+        if dummy.poll() is None:
+            dummy.kill()

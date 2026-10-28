@@ -107,6 +107,9 @@
 - カーソル操作で中指も立てるとピースと区別できない（人差し指だけを立てる前提）。
 - git 管理は 2026-10-25 に始めた（最初のコミットが改善タスクの前の状態）。それ以前の履歴は SPEC 13 節と検証ログで追う。
 
+- 練習（チュートリアル）に遊び心を入れる（例: スクロールのいちばん下に「折り返し地点です」、戻り切ったら「ゴール！この感情をピースで表してください」。
+  2026-10-28 作者、やることとして残す。SPEC 13.60）。
+
 ## 7. コードとデータの構成
 
 - `aircontroller/`: `eventlog.py`（イベントログ・印の記録）、`report.py`（イベントログの集計）、`power.py`（自動オフ・パーでのオン・1Hz）、`cpustat.py`（スレッド別の CPU）、`input.py`（カメラ・推論・停止と再起動・1 手と 2 手の切り替え）、`gesture.py`（状態機械。フレーム時刻と有効化の状態だけで動き、記録から再現できる）、`peace.py`（ピース・いいね）、`zoom.py`、`calibration.py`（校正・学習・測定ユニット）、`thresholds.py`（位置によって変えうる閾値の入口）、`params.py`（パラメータ台帳）、`settings.py`（設定の層・保存・履歴）、`settings_eval.py`（効果の見積もり）、`settings_server.py` と `web/`（設定画面と、環境のチェック `/check`）、`envcheck.py`・`keyboard.py`（環境のチェック、13.56）、`app.py`（アプリの枠組み、13.58）、`live.py`（run に内蔵するライブのサーバー）、`features.py`、`recording.py`、`latency.py`、`output/`（`mouse.py` CGEvent、`activation.py` CGEventTap、`overlay.py` AppKit、`permissions.py`）。

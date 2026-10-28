@@ -22,7 +22,7 @@
 - `aircontroller/thresholds.py` 位置によって変えうる閾値の入口（ピンチ・親指の畳み・ピースの条件。今は位置を無視する）
 - `aircontroller/live.py` run に内蔵する、設定画面のライブのプレビュー用のサーバー（設定モード、今の値、変更中の値の差し替え）
 - `aircontroller/settings_server.py` 設定画面のサーバー（標準ライブラリ）。画面は `aircontroller/web/`（素の HTML/CSS/JS）
-- `aircontroller/app.py` アプリ（WKWebView のウィンドウ。ホーム〔起動〕から各画面へ。子プロセスの run の開始・停止）。画面は `web/launch.html`・`tutorial.html`、「ホームに戻る」は `web/nav.js`
+- `aircontroller/app.py` アプリ（WKWebView のウィンドウ。ホーム〔起動〕から各画面へ。子プロセスの run の開始・停止）。画面は `web/launch.html`・`tutorial.html`（チュートリアルと練習。画像と説明は `web/tutorial/manifest.json`、画像は `web/tutorial/img/`。SPEC 13.60）、「ホームに戻る」は `web/nav.js`
 - `aircontroller/envcheck.py` 環境のチェックの項目（画面は `web/check.html`）。`keyboard.py` キーボード配列の読み取り（Carbon を ctypes で）
 - `aircontroller/settings_launch.py` オーバーレイのギアのボタンから設定画面を開く（動いているサーバーがあればそのページを開き、なければ別プロセスで起動する。`settings-server.json`）
 - `aircontroller/settings_eval.py` 効果の見積もり（基準記録を 2 つの設定で流して差を出す）。基準記録の一覧は `eval-manifest.toml`

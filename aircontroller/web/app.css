@@ -371,3 +371,100 @@ svg.fig.meter { width: 100%; height: 16px; }
 .progress-row .progress { flex: 1; margin: 0; }
 .list-wrap { margin-top: 8px; }
 .list-wrap > summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
+
+/* ---------------------------------------------------------------- チュートリアル（TASKS-20261027-package 第6節） */
+/* 一覧: スキルツリー（作者の FB）。オン・オフを中心に放射状。円の位置・大きさ・線は tutorial.js が枠の幅から計算する */
+.tut-list { max-width: none; padding: 16px 24px 40px; }
+.tree { position: relative; margin-top: 8px; --size: 80px; }
+.tree-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.tree-lines path { fill: none; stroke-width: 3; opacity: 0.55; }
+.tree-node { position: absolute; width: var(--size); height: var(--size); transform: translate(-50%, -50%); cursor: pointer; outline: none; }
+.tree-node::after { content: ""; position: absolute; inset: -16px; } /* 円とカードの間を動いても、カードが消えないように */
+.tree-node:hover, .tree-node:focus-visible { z-index: 20; }
+.tree-ring { width: 100%; height: 100%; border-radius: 50%; border: 3px solid var(--c); background: var(--panel); overflow: hidden;
+  display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 4px var(--bg); transition: transform 0.15s ease, box-shadow 0.15s ease; }
+.tree-ring img { width: 100%; height: 100%; object-fit: cover; }
+.tree-dot { width: 34%; height: 34%; border-radius: 50%; background: var(--c); opacity: 0.35; }
+.tree-node:hover .tree-ring, .tree-node:focus-visible .tree-ring { transform: scale(1.08); box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px var(--c); }
+.tree-label { position: absolute; top: calc(100% + 6px); background: var(--bg); padding: 0 4px; border-radius: 4px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(var(--size) * 1.5);
+  text-align: center; font-size: 14px; font-weight: 600; line-height: 1.3; }
+/* 説明のカード: 左に画像、右に操作名・説明・コツ、下の端まで「練習する」の帯。カード全体を押すと練習に進む */
+.tree-card { position: absolute; display: none; z-index: 10; border-radius: 12px; border: 1px solid var(--c); background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4); overflow: hidden; cursor: pointer; }
+.tree-node:hover .tree-card, .tree-node:focus-visible .tree-card { display: block; }
+.tree-card-body { display: grid; grid-template-columns: minmax(120px, 42%) 1fr; gap: 14px; padding: 12px; }
+@media (max-width: 520px) { .tree-card-body { grid-template-columns: 1fr; } }
+.tree-card-title { display: block; font-size: 17px; margin-bottom: 2px; }
+.tree-card-text { font-size: 13px; min-width: 0; }
+.tree-card-go { padding: 10px 14px; background: var(--c); color: var(--bg); font-weight: 700; text-align: right; }
+.tile-img .tut-frame { width: 100% !important; height: auto !important; aspect-ratio: 4 / 3; }
+.tile-img .tut-dots { display: flex; }
+.tile-tips { margin-top: 8px; }
+.tut-lines { margin: 6px 0; padding-left: 18px; }
+.tut-lines li { margin: 2px 0; }
+
+/* 練習の画面: 上に一覧へ戻る・前へ・次へ、左に画像（上）と説明・コツ、右に練習。スクロールなしで収める */
+.tut-practice { padding: 12px 24px; }
+.tut-head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+.tut-head h2 { margin: 0 0 0 4px; }
+.tut-cols { display: grid; grid-template-columns: 500px 1fr; gap: 24px; align-items: start; }
+.tut-left h3 { margin: 10px 0 0; font-size: 14px; }
+.tut-left .tut-lines { font-size: 14px; }
+.tut-test { margin: 0; }
+.tut-frame { display: none; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--soft); }
+.tut-frame.on { display: block; }
+.tut-frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.tut-ph { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; text-align: center; padding: 12px;
+  border: 2px dashed var(--line); border-radius: 12px; }
+.tut-ph strong { font-size: 16px; }
+.tut-anim { margin: 0; }
+.tut-dots { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
+.tut-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.tut-dots span.on { background: var(--accent); }
+.test-area { position: relative; height: 560px; margin: 8px 0; border-radius: 10px; border: 1px dashed var(--line); background: var(--bg); overflow: hidden; }
+.test-target { position: absolute; border-radius: 50%; background: var(--accent); opacity: 0.85; }
+.test-target.hot { outline: 4px solid var(--live); }
+.test-target.btn { color: var(--accent-fg); border: 0; font-size: 14px; cursor: pointer; }
+.test-progress { position: absolute; right: 10px; bottom: 8px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fake-browser { position: absolute; inset: 16px 16px 40px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--panel); }
+.fake-bar { display: flex; gap: 16px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--soft); }
+.fake-bar .ok { color: var(--chip-on-fg); font-weight: 600; }
+.fake-page { display: flex; align-items: center; justify-content: center; height: calc(100% - 40px); font-size: 28px; }
+.fake-page.back { animation: slide-r 0.35s ease-out; }
+.fake-page.forward { animation: slide-l 0.35s ease-out; }
+@keyframes slide-r { from { transform: translateX(-40%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes slide-l { from { transform: translateX(40%); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* 練習の画面の中の再現（ドラッグ・右クリック・スクロール・デスクトップ・Mission Control・ズーム・オン・オフ） */
+.drag-card { position: absolute; width: 160px; height: 80px; display: flex; align-items: center; justify-content: center; border-radius: 10px;
+  background: var(--accent); color: var(--accent-fg); font-weight: 600; cursor: grab; user-select: none; }
+.drag-card.hot { outline: 4px solid var(--live); cursor: grabbing; }
+.drop-box { position: absolute; width: 220px; height: 160px; display: flex; align-items: center; justify-content: center; border-radius: 12px;
+  border: 3px dashed var(--muted); color: var(--muted); }
+.fake-menu { position: absolute; display: flex; flex-direction: column; min-width: 150px; padding: 4px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3); z-index: 3; }
+.fake-menu button { text-align: left; border: 0; background: none; padding: 8px 12px; border-radius: 6px; color: var(--fg); }
+.fake-menu button:hover { background: var(--accent); color: var(--accent-fg); }
+.fake-scroll { position: absolute; inset: 0; overflow-y: auto; padding: 12px 20px; }
+.scroll-mark { padding: 14px; margin: 8px 0; border-radius: 8px; background: var(--soft); font-weight: 600; text-align: center; }
+.fake-screen { position: absolute; inset: 16px 16px 40px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); }
+.fake-desktops { display: flex; height: 100%; transition: transform 0.4s ease; }
+.fake-desktop { position: relative; flex: 0 0 100%; height: 100%; padding: 14px; background: linear-gradient(135deg, var(--soft), var(--bg)); }
+.fake-desktop:nth-child(2) { background: linear-gradient(135deg, rgba(31, 111, 235, 0.25), var(--bg)); }
+.fake-desktop:nth-child(3) { background: linear-gradient(135deg, rgba(219, 39, 119, 0.22), var(--bg)); }
+.fake-desktop > span { font-size: 22px; font-weight: 600; }
+.fake-win { position: absolute; left: 12%; top: 25%; width: 40%; height: 45%; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); }
+.fake-win.b { left: 48%; top: 38%; width: 36%; height: 40%; }
+.fake-screen.overview .fake-desktops { transform: none !important; flex-wrap: nowrap; gap: 12px; padding: 30px 12px; height: 45%; }
+.fake-screen.overview .fake-desktop { flex: 1 1 0; border-radius: 8px; border: 2px solid var(--line); }
+.fake-screen.overview .fake-desktop > span { font-size: 13px; }
+.zoom-view { position: absolute; inset: 16px 16px 40px; overflow: hidden; border-radius: 10px; border: 1px solid var(--line); display: flex;
+  align-items: center; justify-content: center; }
+.zoom-content { text-align: center; transition: transform 0.25s ease; }
+.zoom-figure { width: 120px; height: 80px; margin: 10px auto; border-radius: 8px; background: var(--accent); }
+.wake-view { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 48px; }
+.wake-lamp { width: 140px; height: 140px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 700;
+  background: var(--soft); color: var(--muted); border: 2px solid var(--line); }
+.wake-lamp.on { background: var(--chip-on); color: var(--chip-on-fg); border-color: transparent; }
+.wake-list { font-size: 16px; list-style: none; padding: 0; }
+.wake-list li.ok { color: var(--chip-on-fg); font-weight: 600; }

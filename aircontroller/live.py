@@ -5,6 +5,9 @@
   進行中のピンチ・ドラッグ・モードを打ち切り、押下中のボタンを離す。抜けると、画面から送られた変更中の値を捨て、保存済みの設定に戻す。
 - POST /config {"values": {"節.キー": 値}}: 変更中の値（保存済みの設定に重ねる）。安全な瞬間（ドラッグ・ピンチ・モードの途中でない）に差し替える。
 - POST /mode {"output": bool}、POST /reload（保存済みの設定を読み直す。設定画面で確定したとき）、GET /stats（負荷の計測用）。
+- GET /stream?practice=1: 練習モード（ジェスチャー別のテスト、SPEC 13.60）。つないでいる間は、キーの出力（戻る・進む、デスクトップ移動、
+  Mission Control、ズーム）だけを止め、マウスの出力は出す。発火したイベント（クリック・ドラッグ・スクロール・戻る・進むなど）を今の値と一緒に送る
+  （テストの画面が、キーを送らずに動きを再現する）。設定モードにはならない。
 - GET /status: アプリの起動タブに出す状態（オン・オフ、モード、カメラ、fps、遅延）。つないでも設定モードにはならない（SPEC 13.58）。
 設定画面のサーバーだけが使う（ブラウザは直接つながない）: 127.0.0.1、Host の確認、起動時のトークン（live.json に書く。所有者だけ読める）。
 フレームの処理（推論スレッド）では、つながっている画面が無ければ何もしない。
@@ -44,6 +47,8 @@ class LiveHub:
         self.lock = threading.Lock()
         self.cond = threading.Condition(self.lock)
         self.clients = 0
+        self.practice = 0  # 練習モードでつないでいる画面の数（キーの出力だけを止める）
+        self._events: list[dict] = []  # 練習モードの画面に送る、発火したイベント（次の publish で送って空にする）
         self.output = False  # 設定モード中も出力を出すか
         self._mode_was = False  # フレームの処理で見た、設定モードかどうか
         self._interrupt = False  # 「操作に反映する」を切り替えた: 進行中の操作を打ち切る（ボタンの状態を出力と合わせる）
@@ -69,6 +74,26 @@ class LiveHub:
 
     def suppress_output(self) -> bool:
         return self.settings_mode and not self.output
+
+    def suppress_keys(self) -> bool:
+        """キーの出力（ショートカット）を止めるか: 設定モードで出力を止めているとき、または練習モード。"""
+        return self.suppress_output() or self.practice > 0
+
+    PRACTICE_EVENTS = ("click", "drag_start", "drag_end", "scroll", "nav", "thumbsup", "zoom", "pinch_start", "pinch_cancel")
+
+    def note_events(self, events, active: bool) -> None:
+        """練習モードの画面に送るイベント（推論スレッド）。スクロールは量だけを足し合わせる。"""
+        if not self.practice:
+            return
+        with self.lock:
+            for ev in events:
+                if ev.kind not in self.PRACTICE_EVENTS:
+                    continue
+                if ev.kind == "scroll" and self._events and self._events[-1]["kind"] == "scroll":
+                    self._events[-1]["dy"] += ev.data.get("dy", 0)
+                    continue
+                self._events.append({"kind": ev.kind, "active": active, **{k: v for k, v in ev.data.items() if k in ("dir", "button", "dy", "reason")}})
+            del self._events[:-200]
 
     def _config_from(self, overrides: dict):
         from .gesture import GestureConfig
@@ -120,16 +145,19 @@ class LiveHub:
         self.lat.append((time.monotonic(), ms))
 
     def publish(self, engine, frame, active: bool) -> None:
-        if not self.clients:
+        if not (self.clients or self.practice):
             return
         now = time.monotonic()
         if now - self._last_pub < 1.0 / STREAM_HZ:
             return
         self._last_pub = now
         snap = snapshot(engine, frame, active)
-        snap.update(settings_mode=True, output=self.output, pending=self._pending is not None,
-                    overrides=len(self._overrides))
+        snap.update(settings_mode=self.settings_mode, practice=self.practice > 0, output=self.output,
+                    pending=self._pending is not None, overrides=len(self._overrides))
+        if self.status_fn is not None:  # オン・オフとその理由（練習の「オン・オフ」が使う）
+            snap["run"] = self.status_fn()
         with self.cond:
+            snap["events"], self._events = self._events, []
             self._snap, self._snap_n = snap, self._snap_n + 1
             self.cond.notify_all()
 
@@ -174,7 +202,7 @@ def snapshot(engine, frame, active: bool) -> dict:
            "image_size": list(frame.image_size), "roi": [_r(engine.roi_cx), _r(engine.roi_cy), _r(engine.roi_width)],
            "cfg": {k: getattr(c, k) for k in ("index_up_enter", "index_up_exit", "peace_exit_straight", "ring_down_max",
                                                "fist_enter", "fist_exit", "zoom_back_min", "thumbsup_index_max",
-                                               "thumbsup_up_min")}}
+                                               "thumbsup_up_min", "pinch_on", "pinch_off", "right_on", "thumb_fold_on")}}
     hand = engine.primary_hand(frame)
     if hand is None:
         return out
@@ -238,13 +266,20 @@ def make_handler(hub: LiveHub):
             if u.path != "/stream":
                 self._send(404, {"error": "ありません"})
                 return
+            practice = parse_qs(u.query).get("practice") == ["1"]
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
             with hub.lock:
-                hub.clients += 1
-            print(f"[live] 設定画面がつながりました（{hub.clients}）。設定モード: 出力を止めます")
+                if practice:
+                    hub.practice += 1
+                else:
+                    hub.clients += 1
+            if practice:
+                print(f"[live] 練習の画面がつながりました（{hub.practice}）。練習モード: キーの出力を止めます（マウスは出す）")
+            else:
+                print(f"[live] 設定画面がつながりました（{hub.clients}）。設定モード: 出力を止めます")
             if hub.on_connect:
                 hub.on_connect()
             n = -1
@@ -263,8 +298,11 @@ def make_handler(hub: LiveHub):
                 pass
             finally:
                 with hub.lock:
-                    hub.clients -= 1
-                print(f"[live] 設定画面が離れました（{hub.clients}）")
+                    if practice:
+                        hub.practice -= 1
+                    else:
+                        hub.clients -= 1
+                print(f"[live] 練習の画面が離れました（{hub.practice}）" if practice else f"[live] 設定画面が離れました（{hub.clients}）")
 
         def do_POST(self):
             if not self._ok():

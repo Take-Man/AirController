@@ -63,3 +63,46 @@ def test_quit_in_app_closes_window_and_keeps_server(tmp_path):
     app.close_window = closed.append
     out = app.shutdown(force=False)
     assert out["ok"] and out["window"] and closed == ["settings"] and not app.closed_by_page
+
+
+def test_tutorial_manifest_and_static(tmp_path):
+    """チュートリアルの manifest.json の形と、画像の置き場所の外を出さないこと（SPEC 13.60）。"""
+    import http.client
+    import json
+    import threading
+
+    from aircontroller.settings_server import WEB, serve
+
+    m = json.loads((WEB / "tutorial/manifest.json").read_text())
+    ids = [s["id"] for s in m["steps"]]
+    assert len(ids) == len(set(ids)) == 10
+    assert all(len(s.get("frame_text", [])) == s["frames"] and 2 <= s["frames"] <= 3 and s["tips"] for s in m["steps"])
+    # スキルツリー: つながる元は 1 つの根（オン・オフ）に行き着き、系統は groups にある
+    by = {s["id"]: s for s in m["steps"]}
+    roots = [s["id"] for s in m["steps"] if s["parent"] is None]
+    assert roots == ["wake"] and all(s["group"] in m["groups"] for s in m["steps"])
+    for s in m["steps"]:
+        seen, cur = set(), s
+        while cur["parent"] is not None:
+            assert cur["id"] not in seen
+            seen.add(cur["id"])
+            cur = by[cur["parent"]]
+    app = App(tmp_path)
+    httpd, _url = serve(app, 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        port = httpd.server_address[1]
+
+        def get(path):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            c.request("GET", path, headers={"Host": f"127.0.0.1:{port}"})
+            r = c.getresponse()
+            return r.status
+
+        assert get("/tutorial/manifest.json") == 200
+        assert get("/tutorial/img/none-1.png") == 404
+        assert get("/tutorial/../settings_server.py") == 404
+        assert get("/tutorial/img/README.md") == 404  # 画像と JSON だけ
+    finally:
+        httpd.shutdown()
+        httpd.server_close()

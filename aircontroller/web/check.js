@@ -83,13 +83,30 @@ async function runItem(item, i) {
   totals();
 }
 
+// 画面の中の確認のダイアログ（アプリのウィンドウでは confirm() が使えない）
+function confirmBox(title, body, okLabel) {
+  const d = $("confirm");
+  $("confirm-title").textContent = title;
+  $("confirm-body").replaceChildren(el("p", {}, body));
+  $("confirm-ok").textContent = okLabel;
+  return new Promise((res) => {
+    d.addEventListener("close", () => res(d.returnValue === "ok"), { once: true });
+    d.returnValue = "";
+    d.showModal();
+  });
+}
+
 async function start() {
   if (busy) return;
   $("menu-msg").textContent = "";
   let r = await api("/api/check/start", {});
   if (r.need_stop) {
-    if (!confirm(`run が動いています（PID ${r.run.join(", ")}）。カメラとキーの監視が重なるので、止めてから確かめます。止めますか？`)) return;
+    const ok = await confirmBox("run を止めて確かめます", "カメラとキーの監視が重なるので、動いている run（PID " + r.run.join(", ")
+      + "）を止めてから確かめます（確かめた後は、ホームの「開始」で動かし直してください）", "止めて確かめる");
+    if (!ok) return;
+    $("menu-msg").textContent = "run を止めています…";
     r = await api("/api/check/start", { stop_run: true });
+    $("menu-msg").textContent = "";
   }
   busy = true;
   $("menu").classList.add("hidden");
@@ -155,6 +172,6 @@ async function init() {
   MARK = r.mark_key;
   if (r.run.length) $("menu-msg").textContent = `run が動いています（PID ${r.run.join(", ")}）。テスト開始のときに止めます。`;
   $("btn-start").onclick = () => start().catch((e) => { busy = false; $("menu-msg").textContent = e.message; });
-  $("btn-again").onclick = () => start().catch((e) => { busy = false; alert(e.message); });  // 再チェック
+  $("btn-again").onclick = () => start().catch((e) => { busy = false; $("run-title").textContent = `確かめられませんでした: ${e.message}`; });  // 再チェック
 }
 init().catch((e) => { $("menu-msg").textContent = `読み込めませんでした: ${e.message}`; });

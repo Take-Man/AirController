@@ -216,3 +216,45 @@ def test_roi_adapt_paused_in_settings_mode(hub):
         hub.before_update(eng, f.t_capture_ns)
         eng.update(f)
     assert eng.roi_width > start[2]  # 設定モードを抜けると、また補正する
+
+
+def test_practice_mode_suppresses_keys_only_and_sends_events(hub):
+    """練習モード（SPEC 13.60）: キーの出力だけを止め（マウスは出す）、設定モードにはならない。発火したイベントを今の値と一緒に送る。"""
+    from aircontroller.types import Event
+
+    got, leave = [], threading.Event()
+
+    def client():
+        port = hub.httpd.server_address[1]
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.request("GET", "/stream?practice=1", headers={"Host": f"127.0.0.1:{port}", "X-Token": hub.token})
+        r = c.getresponse()
+        while not leave.is_set():
+            line = r.fp.readline()
+            if line.startswith(b"data: "):
+                got.append(json.loads(line[6:]))
+        c.close()
+
+    th = threading.Thread(target=client, daemon=True)
+    th.start()
+    for _ in range(100):
+        if hub.practice:
+            break
+        time.sleep(0.02)
+    assert hub.practice == 1 and not hub.settings_mode
+    assert hub.suppress_keys() and not hub.suppress_output()
+    eng = GestureEngine(golden_config("peace04"))
+    eng.reset()
+    frames = list(iter_frames(FIX / "peace04.jsonl"))
+    eng.update(frames[0])
+    hub.note_events([Event("nav", 1, {"dir": "back"}), Event("scroll", 2, {"dy": 3}), Event("scroll", 3, {"dy": 4}),
+                     Event("move", 4, {"x": 1, "y": 2})], True)
+    hub._last_pub = 0.0
+    hub.publish(eng, frames[0], True)
+    for _ in range(100):
+        if got:
+            break
+        time.sleep(0.02)
+    leave.set()
+    assert got[0]["practice"] is True and got[0]["settings_mode"] is False
+    assert got[0]["events"] == [{"kind": "nav", "active": True, "dir": "back"}, {"kind": "scroll", "active": True, "dy": 7}]
