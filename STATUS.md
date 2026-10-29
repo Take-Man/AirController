@@ -1,6 +1,6 @@
-# AirController 現状報告（2026-10-26、段階7と、設定画面の作業の後）
+# AirController 現状報告（2026-10-29、パッケージ化・チュートリアル・アイコンの作業の後）
 
-設計の壁打ちをした Claude（元の Claude Chat）向けのまとめ。設計の原本は [SPEC.md](SPEC.md)、実装中に作者と決めた変更はその第13節（13.1〜13.53。2026-10-25 の改善は 13.24〜、設定画面の作業は 13.43〜）に、計測の生データは [logs/stage1-verification-20261024.txt](logs/stage1-verification-20261024.txt) と [logs/load-20261025.md](logs/load-20261025.md) にある。このファイルは、それらを読まなくても現状が分かるように要点をまとめたもの。
+設計の壁打ちをした Claude（元の Claude Chat）向けのまとめ。設計の原本は [SPEC.md](SPEC.md)、実装中に作者と決めた変更はその第13節（13.1〜13.66。2026-10-25 の改善は 13.24〜、設定画面の作業は 13.43〜、完成度の確認とパッケージ化は 13.53〜13.63、練習の遊び心・完走・アイコンは 13.64〜13.66）に、計測の生データは [logs/stage1-verification-20261024.txt](logs/stage1-verification-20261024.txt) と [logs/load-20261025.md](logs/load-20261025.md) にある。このファイルは、それらを読まなくても現状が分かるように要点をまとめたもの。
 
 ## 0. 2026-10-25 の改善（TASKS-20261025）の要約
 
@@ -94,7 +94,7 @@
 
 - 小さい的（24px）でのカーソルの揺れ。測ったときの操作範囲（幅 0.71）では静止時 1フレーム 約 1pt（p95）で、以前（2〜3pt）より小さい。今の幅は 0.5513（上限 0.6、13.36）で、再測定はしていない。ピンチを始める前の 150ms に、指を寄せる動きでカーソルがずれる（中央値 4pt、p90 28pt）。
 - 操作範囲の自動補正は広げるだけで狭めない（13.26）。
-- パーでのオンは、話しながら手のひらを見せたときに誤ってオンになる可能性がある（13.30）。
+- パーでのオンは、話しながら手のひらを見せたときに誤ってオンになる可能性がある（13.30）。作者が課題から外した（2026-10-29）。
 - 有効・手なしでは、MediaPipe が毎フレーム手のひらの検出をやり直して CPU が 54% → 約 60% になる（自動オフまでの 5 秒間。作者の判断で対処しない）。
 - オフ（1Hz）の CPU は、2026-10-26 の修正後に中央値 13.9% で、目標 15% 以下を満たした（13.37）。
 - ピンチの閾値は、設定画面で作者が確定した値（成立 0.205、解除 0.2448、ドラッグ中の解除 0.257。測り直す前の成立 0.2235 より厳しい）。測り直した値では、意図しないドラッグと離れにくさが目立った（13.37, 13.38）ので、測定の結果をそのまま採用せず、設定画面の比較と効果の見積もりを経て確定する運用にした（13.43〜13.46）。
@@ -107,17 +107,21 @@
 - カーソル操作で中指も立てるとピースと区別できない（人差し指だけを立てる前提）。
 - git 管理は 2026-10-25 に始めた（最初のコミットが改善タスクの前の状態）。それ以前の履歴は SPEC 13 節と検証ログで追う。
 
-- 練習（チュートリアル）に遊び心を入れる（例: スクロールのいちばん下に「折り返し地点です」、戻り切ったら「ゴール！この感情をピースで表してください」。
-  2026-10-28 作者、やることとして残す。SPEC 13.60）。
+- 練習（チュートリアル）の遊び心は、2026-10-29 に入れた（13.64）。
+- 後に回したもの（作者の決定）: 体感遅延（約 100ms）と操作中の負荷（CPU 54%、約 18W）。配布テスト（別の Mac で .dmg を開く）は、アイコンの作業の後にする。
+- 実機で確かめていないこと: US 配列での戻る・進む・ズームのキー（13.57）、練習の一言・ドラッグの収まりの実際の手での見え方（13.64）、
+  アプリ（WKWebView）の中での完走の表示（13.65）、権限のダイアログのアイコン（13.66）。
+- アプリの中でアイコンを出すか（ホームの見出しの左、「AirController について」）は、作者が決める（13.66）。
 
 ## 7. コードとデータの構成
 
 - `aircontroller/`: `eventlog.py`（イベントログ・印の記録）、`report.py`（イベントログの集計）、`power.py`（自動オフ・パーでのオン・1Hz）、`cpustat.py`（スレッド別の CPU）、`input.py`（カメラ・推論・停止と再起動・1 手と 2 手の切り替え）、`gesture.py`（状態機械。フレーム時刻と有効化の状態だけで動き、記録から再現できる）、`peace.py`（ピース・いいね）、`zoom.py`、`calibration.py`（校正・学習・測定ユニット）、`thresholds.py`（位置によって変えうる閾値の入口）、`params.py`（パラメータ台帳）、`settings.py`（設定の層・保存・履歴）、`settings_eval.py`（効果の見積もり）、`settings_server.py` と `web/`（設定画面と、環境のチェック `/check`）、`envcheck.py`・`keyboard.py`（環境のチェック、13.56）、`app.py`（アプリの枠組み、13.58）、`live.py`（run に内蔵するライブのサーバー）、`features.py`、`recording.py`、`latency.py`、`output/`（`mouse.py` CGEvent、`activation.py` CGEventTap、`overlay.py` AppKit、`permissions.py`）。
-- 設定: `config.toml`（既定値と説明）< `calibration.toml`（校正・学習が書く、作者固有の値）< `auto.toml`（run の操作範囲の自動補正）。項目の定義は `aircontroller/params.py`、履歴は `settings-history/`（SPEC 13.43）。測定の候補は `calibration-history/`、効果の見積もりの基準記録は `eval-manifest.toml`、動いている run のライブのサーバーは `live.json`。オーバーレイを畳んだかは `ui_state.json`。
-- 道具（`tools/`）: `latency_summary.py`（遅延ログの要約）、`bench_eventlog.py`・`latency_ab.py`（記録の負荷）、`golden_diff.py`（期待値の差を種類ごとに）、`cursor_smoothing.py`（平滑化の比較）、`handedness_report.py`（左右ラベルの反転率）、`cpu_states.py`・`monitor.py`・`load_report.py`（負荷の計測）、`position_report.py`・`pinch_gate_eval.py`（位置ごとの判定、SPEC 13.41・13.42）、`live_load.py`（設定画面をつないだときの run の負荷）、`targets.html`・`targets_report.py`（的のテストと、結果の JSON のまとめ。13.54）。
+- 設定: `config.toml`（既定値と説明）< `calibration.toml`（校正・学習が書く、作者固有の値）< `auto.toml`（run の操作範囲の自動補正）。チュートリアルの合格の記録は `tutorial-progress.json`（13.65）。項目の定義は `aircontroller/params.py`、履歴は `settings-history/`（SPEC 13.43）。測定の候補は `calibration-history/`、効果の見積もりの基準記録は `eval-manifest.toml`、動いている run のライブのサーバーは `live.json`。オーバーレイを畳んだかは `ui_state.json`。
+- 道具（`tools/`）: `latency_summary.py`（遅延ログの要約）、`bench_eventlog.py`・`latency_ab.py`（記録の負荷）、`golden_diff.py`（期待値の差を種類ごとに）、`cursor_smoothing.py`（平滑化の比較）、`handedness_report.py`（左右ラベルの反転率）、`cpu_states.py`・`monitor.py`・`load_report.py`（負荷の計測）、`position_report.py`・`pinch_gate_eval.py`（位置ごとの判定、SPEC 13.41・13.42）、`live_load.py`（設定画面をつないだときの run の負荷）、`targets.html`・`targets_report.py`（的のテストと、結果の JSON のまとめ。13.54）、`make_tutorial_images.py`（チュートリアルの画像。13.63）、`make_icon.py`（アプリのアイコン。13.66）。
+- パッケージ: `pkg/`（`AirController.spec`・`main.py`・`build.sh`・`AirController.icns`。13.59, 13.66）。データは `~/Library/Application Support/AirController`。アイコンの元画像は `icon-source/`。
 - 記録: `recordings/*.jsonl`（ランドマーク列＋有効化の状態。148MB。`mark-*.jsonl` は ¥ の印の前後）、`*.labels.json`（lab / learn の区間ラベル）。`logs/latency-*.csv`（フレームごとの時刻。古いものは `logs/archive/` に gzip）、`logs/events-*.jsonl`（イベントログ）、`logs/monitor-*.csv`（負荷の計測）。
-- テスト: `tests/`（318本、約 90 秒）。左手・両手は、右手の記録を左右反転して流す（`tests/test_left_hand.py`、13.53）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`、作ったときの設定で流す）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。加えて、tests/fixtures/ と recordings/ の 86 本を今の設定（config.toml + calibration.toml）で流し、`tests/golden-current/` の要約（ハッシュ・件数・move と scroll 以外の全イベント）と比べる（13.50。記録がなければスキップ）。設定を確定したら、差を `tools/golden_diff.py --current` で確かめてから `--write` で作り直す。
-- 環境: Python 3.12 の `.venv`。依存は [requirements.txt](requirements.txt)。権限は実行元のターミナルにカメラ・入力監視・アクセシビリティの 3つ。
+- テスト: `tests/`（340本、約 90 秒）。左手・両手は、右手の記録を左右反転して流す（`tests/test_left_hand.py`、13.53）。`tests/fixtures/` の実記録 16本（72MB）を流して、期待するイベント列（`*.events.json`、作ったときの設定で流す）と一致するかを確かめる再現テストを含む。挙動を変えたら `python -m tests.make_golden` で期待値を作り直している。加えて、tests/fixtures/ と recordings/ の 86 本を今の設定（config.toml + calibration.toml）で流し、`tests/golden-current/` の要約（ハッシュ・件数・move と scroll 以外の全イベント）と比べる（13.50。記録がなければスキップ）。設定を確定したら、差を `tools/golden_diff.py --current` で確かめてから `--write` で作り直す。
+- 環境: Python 3.12 の `.venv`。依存は [requirements.txt](requirements.txt)。権限は実行元（ターミナル、または AirController.app）にカメラ・入力監視・アクセシビリティの 3つ。.app は作り直すたびに付け直す（13.55）。
 
 ## 7.5 設定画面の作業（2026-10-26、第1〜7節が完了。第8節は見送り）
 
@@ -138,6 +142,22 @@
 - 第7節（位置依存の入口）: ピンチ・親指の畳み・ピースの条件の 12 の閾値を、手のひら中心の位置を受け取る 1 か所（thresholds.py）から取るようにした。
   今は位置を無視する。設定に [position]（3×3 の倍率）の余地を残した。全 86 本の記録でイベント列が変わらないことを確かめた（SPEC 13.48）。
 - 第8節（閾値の詰め）: 作者の判断で見送り（今の設定でおおむね満足、閾値の複雑化を避ける。SPEC 13.49）。
+
+## 7.6 完成度の確認とパッケージ化（2026-10-27〜29、TASKS-20261027-package・TASKS-20261029-*）
+
+節ごとに作者の確認を取って進めた（SPEC 13.53〜13.66）。ジェスチャーの挙動は変えていない。
+- 左手・両手（13.53）: 設定は右手の形で持ち、左手で操作しているときは左右に依存する検出の値を内部で反転する。方向の操作は利用者から見た絶対方向のまま。
+- 的のテストの測り直し（13.54）: 61.2 秒・ミス 3・2.07 bit/s（3 回の中央値）。トラックパッドは 34.3 秒・3.27 bit/s。
+- パッケージ化の試作（13.55）: PyInstaller と py2app を比べ、PyInstaller を選んだ。遅延・CPU はターミナルと同じ。ad hoc 署名なので、作り直すと権限は付け直し。
+- 環境のチェック（13.56）: 9 項目（実行元、macOS、モデルと設定、カメラ、アクセシビリティ、入力監視、キーボード配列、印のキー、システムのショートカット）。
+  戻る・進む・ズームのキーは今のキー配列から決める（13.57）。
+- アプリ（13.58, 13.59）: `python -m aircontroller app` と AirController.app（ホームから環境のチェック・チュートリアル・設定へ。run は子プロセス）。.dmg も作る。
+- チュートリアル（13.60, 13.63〜13.65）: スキルツリーの一覧と 10 個の練習。練習モードはキーの出力だけを止める。画像は作者の手の写真から描いた骨格 30 枚
+  （ライト・ダーク）。練習の遊び心（軽い一言と動き）、合格の記録（tutorial-progress.json）と、合格済みの印・完走の画面。
+- 設定画面の改善（13.61）: 用語、ファイル名を隠す、sec / ms、小数第 2 位、履歴の日時とコメント、大きな変更の確認。
+- 配布（13.62）: (a) アカウントなしで .dmg を配る。開き方・データの扱い・アンインストールの案内を「AirController について」と README に書いた。
+- アプリのアイコン（13.66）: 作者の元画像を角丸の形に整えて .icns にし、.app と .dmg のボリュームに付けた。作者の Mac で Finder・Dock・.dmg に出ることを確かめた。
+- 次: 配布テスト（別の Mac で .dmg を開く）。
 
 ## 8. 段階7の結果と次の一手
 

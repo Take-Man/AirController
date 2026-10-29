@@ -1,6 +1,6 @@
 # AirController
 
-設計は [SPEC.md](SPEC.md)、現状の要約は [STATUS.md](STATUS.md)。段階6まで完了し、2026-10-25 の改善（TASKS-20261025.md）を反映した。次は段階7（総合評価）。実装中の仕様変更は SPEC.md 第13節（2026-10-25 の改善は 13.24〜）。
+設計は [SPEC.md](SPEC.md)、現状の要約は [STATUS.md](STATUS.md)。段階7（総合評価）まで実施し、設定画面、左手・両手、アプリ（.app・.dmg）、チュートリアル（練習・完走の記録）、アプリのアイコンまで進んだ。実装中の仕様変更は SPEC.md 第13節（13.1〜13.66。2026-10-25 の改善は 13.24〜、パッケージ化は 13.53〜）。
 
 ## 構成
 - `aircontroller/types.py` 層の間のデータ（`LandmarkFrame`, `Event`）
@@ -22,7 +22,7 @@
 - `aircontroller/thresholds.py` 位置によって変えうる閾値の入口（ピンチ・親指の畳み・ピースの条件。今は位置を無視する）
 - `aircontroller/live.py` run に内蔵する、設定画面のライブのプレビュー用のサーバー（設定モード、今の値、変更中の値の差し替え）
 - `aircontroller/settings_server.py` 設定画面のサーバー（標準ライブラリ）。画面は `aircontroller/web/`（素の HTML/CSS/JS）
-- `aircontroller/app.py` アプリ（WKWebView のウィンドウ。ホーム〔起動〕から各画面へ。子プロセスの run の開始・停止）。画面は `web/launch.html`・`tutorial.html`（チュートリアルと練習。画像と説明は `web/tutorial/manifest.json`、画像は `web/tutorial/img/`。SPEC 13.60）、「ホームに戻る」は `web/nav.js`
+- `aircontroller/app.py` アプリ（WKWebView のウィンドウ。ホーム〔起動〕から各画面へ。子プロセスの run の開始・停止）。画面は `web/launch.html`・`tutorial.html`（チュートリアルと練習。画像と説明は `web/tutorial/manifest.json`、画像は `web/tutorial/img/`。SPEC 13.60, 13.63。練習の一言は 13.64、合格の記録はデータの場所の `tutorial-progress.json`〔13.65〕）、「ホームに戻る」は `web/nav.js`
 - `aircontroller/envcheck.py` 環境のチェックの項目（画面は `web/check.html`）。`keyboard.py` キーボード配列の読み取り（Carbon を ctypes で）
 - `aircontroller/settings_launch.py` オーバーレイのギアのボタンから設定画面を開く（動いているサーバーがあればそのページを開き、なければ別プロセスで起動する。`settings-server.json`）
 - `aircontroller/settings_eval.py` 効果の見積もり（基準記録を 2 つの設定で流して差を出す）。基準記録の一覧は `eval-manifest.toml`
@@ -111,7 +111,8 @@ open tools/targets.html                                          # クリック�
 ```bash
 uv venv --python 3.12 .venv-pkg && uv pip install --python .venv-pkg -r requirements.txt pyinstaller
 pkg/build.sh app    # pkg/dist/AirController.app
-pkg/build.sh dmg    # pkg/dist/AirController.dmg
+pkg/build.sh dmg    # pkg/dist/AirController.dmg（ボリュームにもアイコンを付ける）
+.venv/bin/python tools/make_icon.py   # icon-source/AirController-icon-1024.png から pkg/AirController.icns を作る（元画像を替えたときだけ。SPEC 13.66）
 ```
 署名は ad hoc（Apple のアカウントなし）。ダウンロードした .dmg から入れたアプリは、初回に「開いていません」の警告が出るので、システム設定 →
 プライバシーとセキュリティ の「このまま開く」で開く。作り直したアプリは、権限を付け直す（SPEC 13.55）。
@@ -120,7 +121,7 @@ pkg/build.sh dmg    # pkg/dist/AirController.dmg
 - 配り方: `pkg/dist/AirController.dmg` をそのまま配る（Apple Developer のアカウントなし。署名は ad hoc。作者の判断 (a)）。
 - はじめて開くとき: 「開いていません」の警告が出るので「完了」→ システム設定 → プライバシーとセキュリティ の「このまま開く」→ もう一度「このまま開く」。
   その後、アクセシビリティ・入力監視・カメラをオンにして開き直す（環境のチェックで確かめられる）。新しい版に入れ替えたら、権限を付け直す。
-- データの扱い: カメラの映像は保存も送信もしない。設定・ログ・手の点の記録は、この Mac の `~/Library/Application Support/AirController` にだけ保存する。
+- データの扱い: カメラの映像は保存も送信もしない。設定・ログ・手の点の記録・チュートリアルの合格の記録（`tutorial-progress.json`）は、この Mac の `~/Library/Application Support/AirController` にだけ保存する。
   ネットワークには何も送らない（画面と Controller のやり取りは 127.0.0.1 だけ）。
 - アンインストール: ⌘Q で終了 → /Applications の AirController をゴミ箱へ → 残るデータを消す（要らなければ）:
   `~/Library/Application Support/AirController`、`~/Library/Preferences/com.takeman.aircontroller.plist`、`~/Library/WebKit/com.takeman.aircontroller`、

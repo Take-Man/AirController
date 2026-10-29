@@ -9,10 +9,16 @@ case "$1" in
   app)
     $PY -m PyInstaller --noconfirm --clean --workpath pkg/build/app --distpath pkg/dist pkg/AirController.spec ;;
   dmg)
-    rm -rf pkg/build/dmg && mkdir -p pkg/build/dmg/src
+    rm -rf pkg/build/dmg && mkdir -p pkg/build/dmg/src pkg/build/dmg/mnt
     cp -R pkg/dist/AirController.app pkg/build/dmg/src/
     ln -s /Applications pkg/build/dmg/src/Applications
-    hdiutil create -quiet -volname "AirController" -srcfolder pkg/build/dmg/src -fs APFS -format UDZO -ov pkg/dist/AirController.dmg
+    # ボリュームのアイコン（SPEC 13.66）: .VolumeIcon.icns を入れ、書き込める形で作ってから、ボリュームの「カスタムアイコン」の印を付けて圧縮する
+    cp pkg/AirController.icns pkg/build/dmg/src/.VolumeIcon.icns
+    hdiutil create -quiet -volname "AirController" -srcfolder pkg/build/dmg/src -fs APFS -format UDRW -ov pkg/build/dmg/rw.dmg
+    hdiutil attach -quiet -nobrowse -noautoopen -mountpoint pkg/build/dmg/mnt pkg/build/dmg/rw.dmg
+    SetFile -a C pkg/build/dmg/mnt || { hdiutil detach -quiet pkg/build/dmg/mnt; exit 1; }
+    hdiutil detach -quiet pkg/build/dmg/mnt
+    hdiutil convert -quiet pkg/build/dmg/rw.dmg -format UDZO -ov -o pkg/dist/AirController.dmg
     echo "pkg/dist/AirController.dmg" ;;
   pyinstaller)
     $PY -m PyInstaller --noconfirm --clean --workpath pkg/build/pyinstaller --distpath pkg/dist pkg/AirControllerProbe.spec ;;

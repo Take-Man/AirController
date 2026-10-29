@@ -10,6 +10,7 @@ INFO = {
     "CFBundleIdentifier": "com.takeman.aircontroller",
     "CFBundleShortVersionString": VERSION,
     "CFBundleVersion": VERSION,
+    "CFBundleIconFile": "AirController.icns",  # tools/make_icon.py で作る（SPEC 13.66）。BUNDLE の icon が Resources に写す
     "LSMinimumSystemVersion": "14.0",
     "NSCameraUsageDescription": "手の形と位置をカメラで読み取り、マウスとキーの操作に変えるために使います。映像は保存も送信もしません。",
     "NSHighResolutionCapable": True,
@@ -30,4 +31,5 @@ pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="AirController", console=False,
           codesign_identity=None, target_arch="arm64")
 coll = COLLECT(exe, a.binaries, a.datas, name="AirController")
-app = BUNDLE(coll, name="AirController.app", bundle_identifier=INFO["CFBundleIdentifier"], info_plist=INFO)
+app = BUNDLE(coll, name="AirController.app", icon=ROOT + "/pkg/AirController.icns", bundle_identifier=INFO["CFBundleIdentifier"],
+             info_plist=INFO)
