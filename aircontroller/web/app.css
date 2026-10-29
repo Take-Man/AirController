@@ -384,6 +384,7 @@ svg.fig.meter { width: 100%; height: 16px; }
 .tree-ring { width: 100%; height: 100%; border-radius: 50%; border: 3px solid var(--c); background: var(--panel); overflow: hidden;
   display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 4px var(--bg); transition: transform 0.15s ease, box-shadow 0.15s ease; }
 .tree-ring img { width: 100%; height: 100%; object-fit: cover; }
+.tree-ring picture, .tut-frame picture { display: contents; } /* ライト・ダークの画像の入れ物。中の img の大きさはそのまま */
 .tree-dot { width: 34%; height: 34%; border-radius: 50%; background: var(--c); opacity: 0.35; }
 .tree-node:hover .tree-ring, .tree-node:focus-visible .tree-ring { transform: scale(1.08); box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px var(--c); }
 .tree-label { position: absolute; top: calc(100% + 6px); background: var(--bg); padding: 0 4px; border-radius: 4px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(var(--size) * 1.5);

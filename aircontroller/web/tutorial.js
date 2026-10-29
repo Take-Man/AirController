@@ -1,6 +1,6 @@
 // チュートリアルとジェスチャー別のテスト（TASKS-20261027-package 第6節、SPEC 13.60）。
 // 一覧: スキルツリー（系統ごとに円をつなぐ）。円にカーソルを合わせると説明のカード、押すと練習の画面（左に画像・説明・コツ、右に練習）。
-// 画像は手のイラスト 2〜3 枚の切り替え（tutorial/manifest.json。画像が無ければ枠と一言の仮の表示）。
+// 画像は手のイラスト 2〜4 枚の切り替え（ライト・ダークの 2 組。SPEC 13.63）（tutorial/manifest.json。画像が無ければ枠と一言の仮の表示）。
 // 練習の間は run に練習モードでつなぐ（キーの出力だけを止め、マウスは出す）。発火したイベントと今の値を受け取り、キーの操作は画面の中で再現する。
 "use strict";
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
@@ -23,14 +23,21 @@ function el(tag, attrs = {}, ...kids) {
 let M = null, cur = 0, animTimer = null;
 
 // ---------------------------------------------------------------- 画像の切り替え（画像が無ければ、枠と一言とファイル名）
+// 画像は、ライトとダークのテーマの 2 組（背景は透明。ダークは <id>-<番号>-dark）。読み込めたら onload(picture) を呼ぶ
+function themedImage(id, n, attrs, onload) {
+  const q = `?t=${encodeURIComponent(TOKEN)}`, base = `/${M.image_dir}/${id}-${n}`;
+  const pic = el("picture", {}, el("source", { media: "(prefers-color-scheme: dark)", srcset: `${base}-dark.${M.ext}${q}` }));
+  const img = el("img", { ...attrs, onload: () => onload(pic) });
+  pic.append(img);
+  img.src = `${base}.${M.ext}${q}`;
+}
+
 function frames(s, w, h) {
   const fs = [...Array(s.frames)].map((_, k) => {
     const f = el("div", { class: "tut-frame", style: `width:${w}px;height:${h}px` },
       el("div", { class: "tut-ph" }, el("strong", {}, s.frame_text?.[k] || `${k + 1} 枚目`),
         el("span", { class: "muted small" }, `${s.id}-${k + 1}.${M.ext}`)));
-    const img = el("img", { alt: s.frame_text?.[k] || "", width: w, height: h });
-    img.onload = () => f.replaceChildren(img);
-    img.src = `/${M.image_dir}/${s.id}-${k + 1}.${M.ext}?t=${encodeURIComponent(TOKEN)}`;
+    themedImage(s.id, k + 1, { alt: s.frame_text?.[k] || "", width: w, height: h }, (pic) => f.replaceChildren(pic));
     return f;
   });
   const dots = el("div", { class: "tut-dots" }, fs.map(() => el("span")));
@@ -69,9 +76,7 @@ function buildTree() {
   nodes = M.steps.map((s, i) => {
     const g = Math.max(0, M.groups.indexOf(s.group));
     const ring = el("div", { class: "tree-ring" }, el("span", { class: "tree-dot" }));  // 画像が無い間は、系統の色の点
-    const img = el("img", { alt: "" });
-    img.onload = () => ring.replaceChildren(img); // 画像があれば円の中に出す
-    img.src = `/${M.image_dir}/${s.id}-1.${M.ext}?t=${encodeURIComponent(TOKEN)}`;
+    themedImage(s.id, 1, { alt: "" }, (pic) => ring.replaceChildren(pic)); // 画像があれば円の中に出す
     const cd = card(s, i);
     const node = el("div", { class: "tree-node", tabindex: 0, role: "button", "aria-label": s.title, style: `--c: var(${GROUP_COLOR[g]})`,
       onclick: () => openStep(i), onkeydown: (e) => { if (e.key === "Enter") openStep(i); },

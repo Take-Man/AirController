@@ -76,7 +76,7 @@ def test_tutorial_manifest_and_static(tmp_path):
     m = json.loads((WEB / "tutorial/manifest.json").read_text())
     ids = [s["id"] for s in m["steps"]]
     assert len(ids) == len(set(ids)) == 10
-    assert all(len(s.get("frame_text", [])) == s["frames"] and 2 <= s["frames"] <= 3 and s["tips"] for s in m["steps"])
+    assert all(len(s.get("frame_text", [])) == s["frames"] and 2 <= s["frames"] <= 4 and s["tips"] for s in m["steps"])
     # スキルツリー: つながる元は 1 つの根（オン・オフ）に行き着き、系統は groups にある
     by = {s["id"]: s for s in m["steps"]}
     roots = [s["id"] for s in m["steps"] if s["parent"] is None]
