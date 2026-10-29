@@ -385,6 +385,10 @@ svg.fig.meter { width: 100%; height: 16px; }
   display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 4px var(--bg); transition: transform 0.15s ease, box-shadow 0.15s ease; }
 .tree-ring img { width: 100%; height: 100%; object-fit: cover; }
 .tree-ring picture, .tut-frame picture { display: contents; } /* ライト・ダークの画像の入れ物。中の img の大きさはそのまま */
+/* 合格済みの印（SPEC 13.65）: 円の右上の小さなチェック */
+.tree-check { display: none; position: absolute; right: 2%; top: 2%; width: 24%; height: 24%; min-width: 18px; min-height: 18px; border-radius: 50%;
+  align-items: center; justify-content: center; background: var(--c); color: var(--bg); font-size: 12px; font-weight: 800; box-shadow: 0 0 0 3px var(--bg); }
+.tree-node.passed .tree-check { display: flex; }
 .tree-dot { width: 34%; height: 34%; border-radius: 50%; background: var(--c); opacity: 0.35; }
 .tree-node:hover .tree-ring, .tree-node:focus-visible .tree-ring { transform: scale(1.08); box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px var(--c); }
 .tree-label { position: absolute; top: calc(100% + 6px); background: var(--bg); padding: 0 4px; border-radius: 4px; left: 50%; transform: translateX(-50%); width: max-content; max-width: calc(var(--size) * 1.5);
@@ -469,6 +473,29 @@ svg.fig.meter { width: 100%; height: 16px; }
 .wake-lamp.on { background: var(--chip-on); color: var(--chip-on-fg); border-color: transparent; }
 .wake-list { font-size: 16px; list-style: none; padding: 0; }
 .wake-list li.ok { color: var(--chip-on-fg); font-weight: 600; }
+
+/* 完走の画面（SPEC 13.65）: 短く、閉じるだけ */
+.tut-done { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); }
+.tut-done .panel { min-width: 260px; text-align: center; padding: 24px 28px; }
+.tut-done h3 { margin: 0 0 6px; font-size: 22px; }
+.tut-done button { margin-top: 12px; }
+
+/* 練習の遊び心（SPEC 13.64）: 軽い一言、ドラッグの収まり、隠れたアイコン、最大のときだけ読める文字 */
+.quip { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); z-index: 5; padding: 6px 12px; border-radius: 999px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); font-weight: 600; white-space: nowrap;
+  pointer-events: none; animation: quip 2.6s ease forwards; }
+.quip.at { transform: none; }
+.quip.stay { animation: quip-in 0.3s ease forwards; }
+@keyframes quip { 0% { opacity: 0; margin-top: 6px; } 12%, 75% { opacity: 1; margin-top: 0; } 100% { opacity: 0; margin-top: -8px; } }
+@keyframes quip-in { from { opacity: 0; margin-top: 6px; } to { opacity: 1; margin-top: 0; } }
+.drag-card.settle { transition: left 0.22s cubic-bezier(0.55, 0, 0.9, 0.4), top 0.22s cubic-bezier(0.55, 0, 0.9, 0.4); animation: thud 0.3s ease 0.22s; }
+@keyframes thud { 0% { transform: none; } 35% { transform: scale(1.08, 0.88); } 70% { transform: scale(0.97, 1.03); } 100% { transform: none; } }
+.fake-secret { position: absolute; right: 18%; bottom: 14%; font-size: 13px; color: var(--muted); opacity: 0; transition: opacity 0.3s; z-index: 2; }
+.fake-screen.overview .fake-secret { opacity: 0.6; }
+.fake-secret.found { opacity: 1 !important; color: var(--accent); animation: hop 0.5s ease; }
+@keyframes hop { 0%, 100% { transform: none; } 40% { transform: translateY(-10px) scale(1.4); } }
+.zoom-secret { font-size: 5px; margin: 6px 0 0; color: var(--muted); opacity: 0.4; }
+.zoom-content.max .zoom-secret { opacity: 1; color: var(--fg); }
 
 /* 設定画面: 道具（測定・候補・見積もり）と設定の項目の間の区切り（作者の FB） */
 .section-sep { border: 0; border-top: 2px solid var(--line); margin: 28px 0 8px; }

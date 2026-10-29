@@ -24,7 +24,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .params import BY_ID, CHOICES, FEATURE_TOGGLES, OFF_AT_ZERO, PARAMS, SECTION_JA
-from .settings import SettingsStore, _read, state_key
+from .settings import SettingsStore, _read, state_key, write_atomic
 
 WEB = Path(__file__).parent / "web"
 STATIC = {"/app.js": "application/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8",
@@ -38,6 +38,8 @@ PAGES = {"/": "settings.html", "/check": "check.html", "/launch": "launch.html",
          "/about": "about.html"}  # このアプリについて（開き方・データの扱い・アンインストール。第8節）
 DIST_KEYS = {"pinch": ("rest_ti", "pinch"), "right": ("rest_tm", "rpinch"), "peace": ("rest_thumb", "peace_thumb")}
 # run のプロセス: python -m aircontroller run、または .app の実行ファイルに引数 run（SPEC 13.58）
+# チュートリアルの合格の記録（SPEC 13.65）。データの場所に置く（WKWebView とブラウザで分かれないように、画面の保存領域には持たない）
+TUTORIAL_PROGRESS = "tutorial-progress.json"
 RUN_RE = re.compile(r"(-m aircontroller|\.app/Contents/MacOS/[^/]+?)(\s+--config\s+\S+)?\s+run(\s|$)")
 
 
@@ -516,6 +518,43 @@ class App:
         self.store.save({"activation": {"mark_key": "jis_yen" if code == 93 else code}}, "check", "印のキー（環境のチェック）")
         return {"mark_key": mark_key_info(CheckContext(self.root, self.store.load))}
 
+    # ------------------------------------------------------------ チュートリアルの合格の記録（SPEC 13.65）
+    def _tutorial_ids(self) -> list[str]:
+        return [st["id"] for st in json.loads((WEB / "tutorial/manifest.json").read_text())["steps"]]
+
+    def _tutorial_read(self, ids: list[str]) -> dict:
+        """{passed: {id: 最初に合格した日時}, completed_at: 10 個目に初めて合格した日時}。壊れた・読めないファイルは空として扱う。"""
+        try:
+            d = json.loads((self.root / TUTORIAL_PROGRESS).read_text(encoding="utf-8"))
+            passed = {k: v for k, v in d.get("passed", {}).items() if k in ids and isinstance(v, str)}
+            done = d.get("completed_at") if isinstance(d.get("completed_at"), str) else None
+        except (OSError, ValueError, AttributeError):
+            passed, done = {}, None
+        return {"passed": passed, "completed_at": done}
+
+    def tutorial_progress(self) -> dict:
+        ids = self._tutorial_ids()
+        return {**self._tutorial_read(ids), "total": len(ids)}
+
+    def tutorial_pass(self, ident: str) -> dict:
+        """合格を記録する。日時は最初の合格のまま残す（やり直しの合格では上書きしない）。completed_now は、この合格で初めて全部そろったとき。"""
+        ids = self._tutorial_ids()
+        if ident not in ids:
+            raise ValueError(f"練習がありません: {ident}")
+        from datetime import datetime
+
+        with self.lock:
+            d = self._tutorial_read(ids)
+            now = datetime.now().astimezone().isoformat(timespec="seconds")
+            changed = ident not in d["passed"]
+            d["passed"].setdefault(ident, now)
+            completed_now = d["completed_at"] is None and all(i in d["passed"] for i in ids)
+            if completed_now:
+                d["completed_at"] = now
+            if changed or completed_now:
+                write_atomic(self.root / TUTORIAL_PROGRESS, json.dumps(d, ensure_ascii=False, indent=1) + "\n")
+        return {**d, "total": len(ids), "completed_now": completed_now}
+
     def job(self, ident: str) -> dict:
         j = self.jobs.get(ident)
         if j is None:
@@ -645,6 +684,8 @@ def make_handler(app: App, port_ref: list[int]):
                     self._send(200, app.app_info())
                 elif u.path == "/api/check/items":
                     self._send(200, app.check_items())
+                elif u.path == "/api/tutorial/progress":
+                    self._send(200, app.tutorial_progress())
                 else:
                     self._send(404, {"error": "ありません"})
             except ValueError as e:
@@ -686,6 +727,8 @@ def make_handler(app: App, port_ref: list[int]):
                     out = app.app_reveal()
                 elif path == "/api/app/focus":
                     out = app.app_focus(str(body.get("tab", "settings")))
+                elif path == "/api/tutorial/pass":
+                    out = app.tutorial_pass(str(body.get("id", "")))
                 elif path == "/api/check/start":
                     out = app.check_start(bool(body.get("stop_run")))
                 elif path == "/api/check/item":

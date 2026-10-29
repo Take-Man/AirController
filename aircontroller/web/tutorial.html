@@ -11,7 +11,7 @@
 
 <!-- 一覧: スキルツリー（系統ごとに円をつなぐ）。円にカーソルを合わせると説明が出て、押すとその操作の練習の画面に進む -->
 <main class="tut-list" id="view-list">
-  <h2>チュートリアル</h2>
+  <div class="row"><h2>チュートリアル</h2><button id="done-mark" class="ghost small hidden" title="完走の画面をもう一度見る">完走済み</button></div>
   <p class="note">操作にカーソルを合わせると説明が出ます（押すと、その操作の練習の画面に進みます）</p>
   <div class="tree" id="tree"><svg class="tree-lines" id="tree-lines" aria-hidden="true"></svg></div>
 </main>
@@ -48,6 +48,14 @@
         <li>ホームで「開始」し、オンにしてから始めてください</li>
       </ul>
     </section>
+  </div>
+</div>
+<!-- 完走の画面（10 個目の合格のときに 1 回。一覧の「完走済み」から、もう一度見られる） -->
+<div class="tut-done hidden" id="done" role="dialog" aria-modal="true" aria-labelledby="done-title">
+  <div class="panel">
+    <h3 id="done-title">10個すべて合格</h3>
+    <p class="muted" id="done-when"></p>
+    <button id="btn-done-close" class="primary">閉じる</button>
   </div>
 </div>
 <script src="/nav.js"></script>

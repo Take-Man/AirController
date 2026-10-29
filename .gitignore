@@ -12,6 +12,7 @@ settings-history/
 calibration-history/
 live.json
 settings-server.json
+tutorial-progress.json
 
 # パッケージ化の試作（TASKS-20261027-package 第3節）
 .venv-pkg/

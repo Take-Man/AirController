@@ -181,3 +181,32 @@ def test_shutdown_stops_server(tmp_path):
     th.join(timeout=5)  # serve_forever が戻る（settings コマンドが終わる）
     assert not th.is_alive()
     httpd.server_close()
+
+
+def test_tutorial_progress_roundtrip(server, tmp_path):
+    """チュートリアルの合格の記録（SPEC 13.65）: データの場所の JSON に書き、最初の日時を残し、10 個目で 1 回だけ完走になる。"""
+    app, port = server
+    assert api(app, port, "GET", "/api/tutorial/progress") == (200, {"passed": {}, "completed_at": None, "total": 10})
+    assert api(app, port, "POST", "/api/tutorial/pass", {"id": "nope"})[0] == 400
+    assert api(app, port, "POST", "/api/tutorial/pass", {"id": "cursor"}, **{"X-Token": "x"})[0] == 403
+    ids = app._tutorial_ids()
+    s, first = api(app, port, "POST", "/api/tutorial/pass", {"id": ids[0]})
+    assert s == 200 and list(first["passed"]) == [ids[0]] and not first["completed_now"]
+    saved = json.loads((tmp_path / "tutorial-progress.json").read_text())
+    assert saved["passed"] == first["passed"]
+    outs = [api(app, port, "POST", "/api/tutorial/pass", {"id": i})[1] for i in ids[1:]]
+    assert [o["completed_now"] for o in outs] == [False] * 8 + [True]
+    done = outs[-1]
+    assert done["completed_at"] and len(done["passed"]) == 10 and done["passed"][ids[0]] == first["passed"][ids[0]]
+    again = api(app, port, "POST", "/api/tutorial/pass", {"id": ids[0]})[1]  # やり直しの合格: 日時も完走も変わらない
+    assert not again["completed_now"] and again["completed_at"] == done["completed_at"] and again["passed"] == done["passed"]
+
+
+@pytest.mark.parametrize("text", ["{壊れた", "[]", '{"passed": [1, 2]}', '{"passed": {"cursor": 5, "nope": "x"}, "completed_at": 3}'])
+def test_tutorial_progress_broken_file_is_empty(server, tmp_path, text):
+    """壊れたファイルは空として扱い、画面を止めない。知らない id や形の違う値は捨てる。"""
+    app, port = server
+    (tmp_path / "tutorial-progress.json").write_text(text)
+    assert api(app, port, "GET", "/api/tutorial/progress") == (200, {"passed": {}, "completed_at": None, "total": 10})
+    s, out = api(app, port, "POST", "/api/tutorial/pass", {"id": "cursor"})
+    assert s == 200 and list(out["passed"]) == ["cursor"]

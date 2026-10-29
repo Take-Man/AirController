@@ -2,6 +2,7 @@
 // 一覧: スキルツリー（系統ごとに円をつなぐ）。円にカーソルを合わせると説明のカード、押すと練習の画面（左に画像・説明・コツ、右に練習）。
 // 画像は手のイラスト 2〜4 枚の切り替え（ライト・ダークの 2 組。SPEC 13.63）（tutorial/manifest.json。画像が無ければ枠と一言の仮の表示）。
 // 練習の間は run に練習モードでつなぐ（キーの出力だけを止め、マウスは出す）。発火したイベントと今の値を受け取り、キーの操作は画面の中で再現する。
+// 合格はデータの場所の tutorial-progress.json に残す（SPEC 13.65）。合格済みの円にチェックの印、10 個目の合格で完走の画面を 1 回出す。
 "use strict";
 const TOKEN = new URLSearchParams(location.search).get("t") || "";
 const $ = (id) => document.getElementById(id);
@@ -21,6 +22,43 @@ function el(tag, attrs = {}, ...kids) {
 }
 
 let M = null, cur = 0, animTimer = null;
+
+async function api(path, body) {
+  const opt = { headers: { "X-Token": TOKEN } };
+  if (body !== undefined) {
+    opt.method = "POST";
+    opt.headers["Content-Type"] = "application/json";
+    opt.body = JSON.stringify(body);
+  }
+  const r = await fetch(path, opt);
+  const j = await r.json().catch(() => ({ error: `応答を読めません（${r.status}）` }));
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+// ---------------------------------------------------------------- 合格の記録（SPEC 13.65）
+let P = { passed: {}, completed_at: null };
+const when = (iso) => new Date(iso).toLocaleString("ja-JP", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+function showProgress() {
+  for (const n of nodes) n.classList.toggle("passed", !!P.passed[n._step.id]);
+  $("done-mark").classList.toggle("hidden", !P.completed_at);
+}
+
+function showDone() {
+  $("done-when").textContent = P.completed_at ? when(P.completed_at) : "";
+  $("done").classList.remove("hidden");
+  $("btn-done-close").focus();
+}
+
+// 記録に失敗しても、練習の合格はそのまま（画面は止めない）
+function recordPass(id) {
+  api("/api/tutorial/pass", { id }).then((out) => {
+    P = out;
+    showProgress();
+    if (out.completed_now) showDone();
+  }).catch(() => {});
+}
 
 // ---------------------------------------------------------------- 画像の切り替え（画像が無ければ、枠と一言とファイル名）
 // 画像は、ライトとダークのテーマの 2 組（背景は透明。ダークは <id>-<番号>-dark）。読み込めたら onload(picture) を呼ぶ
@@ -82,7 +120,7 @@ function buildTree() {
       onclick: () => openStep(i), onkeydown: (e) => { if (e.key === "Enter") openStep(i); },
       onmouseenter: () => { placeCard(node, cd); cd._frames.play(); }, onmouseleave: () => cd._frames.stop(),
       onfocus: () => placeCard(node, cd) },
-    ring, el("span", { class: "tree-label" }, s.title), cd);
+    ring, el("span", { class: "tree-check", "aria-hidden": "true" }, "✓"), el("span", { class: "tree-label" }, s.title), cd);
     node._step = s;
     tree.append(node);
     return node;
@@ -242,6 +280,7 @@ function startTest() {
     running.done = true;
     setState("合格", true);
     setHint("");
+    recordPass(s.id);
     $("btn-test").textContent = "もう一度";
     $("test-task").textContent = msg;
     if (es) { es.close(); es = null; } // 練習モードを抜ける（キーの出力を戻す）
@@ -269,6 +308,22 @@ function spot(area, size) {
 }
 function progress(text) { return el("div", { class: "test-progress" }, text); }
 
+// 遊びの一言（SPEC 13.64）: 枠の中に小さく出して、少しで消す（stay なら残す）。合格の判定には関わらない。
+// 位置は枠の中の座標（省くと上の中央）
+function quip(area, text, at, stay = false) {
+  const q = el("div", { class: `quip${stay ? " stay" : ""}${at ? " at" : ""}` }, text);
+  area.append(q);
+  if (at) { // 指した所の少し上。枠からはみ出さないように収める
+    const w = q.offsetWidth, h = q.offsetHeight, W = area.clientWidth, H = area.clientHeight;
+    q.style.left = `${Math.max(6, Math.min(at.x - w / 2, W - w - 6))}px`;
+    q.style.top = `${Math.max(6, Math.min(at.y - h - 12, H - h - 6))}px`;
+  }
+  if (!stay) q.addEventListener("animationend", () => q.remove());
+  return q;
+}
+// 画面の座標 → 枠の中の座標
+function inArea(area, x, y) { const r = area.getBoundingClientRect(); return { x: x - r.left, y: y - r.top }; }
+
 // ピース（スクロール・戻る・進む）の形のヒント
 function peaceHint(s) {
   const [, md, rg] = s.straight || [];
@@ -285,9 +340,10 @@ function thumbsHint(s) {
 }
 
 // 画面の中の仮のデスクトップ（デスクトップ移動・Mission Control）
+const DESKTOP_NAMES = ["作業", "休憩", "遊び"];
 function desktops(area, n = 3, at = 1) {
   const strip = el("div", { class: "fake-desktops" }, [...Array(n)].map((_, i) =>
-    el("div", { class: "fake-desktop" }, el("span", {}, `デスクトップ ${i + 1}`), el("div", { class: "fake-win" }), el("div", { class: "fake-win b" }))));
+    el("div", { class: "fake-desktop" }, el("span", {}, DESKTOP_NAMES[i] || `デスクトップ ${i + 1}`), el("div", { class: "fake-win" }), el("div", { class: "fake-win b" }))));
   const view = el("div", { class: "fake-screen" }, strip);
   area.append(view);
   const d = { at, n, view, strip, set(i) { d.at = Math.max(0, Math.min(n - 1, i)); strip.style.transform = `translateX(${-100 * d.at}%)`; } };
@@ -303,7 +359,7 @@ const TESTS = {
       let n = 0, since = null;
       const t0 = performance.now();
       const dot = el("div", { class: "test-target", style: `width:${SIZE}px;height:${SIZE}px` });
-      const prog = progress(`0 / ${N}`);
+      const prog = progress(`あと ${N} 個`);
       area.replaceChildren(dot, prog);
       const place = () => { const p = spot(area, SIZE); dot.style.left = `${p.x}px`; dot.style.top = `${p.y}px`; since = null; };
       place();
@@ -313,9 +369,9 @@ const TESTS = {
         dot.classList.add("hot");
         if (performance.now() - since < HOLD) return;
         n += 1;
-        prog.textContent = `${n} / ${N}`;
+        prog.textContent = n >= N ? "全部止められた" : `あと ${N - n} 個`;
         dot.classList.remove("hot");
-        if (n >= N) { clearInterval(timer); pass(`合格: 5 回合わせました（${((performance.now() - t0) / 1000).toFixed(1)} 秒）`); return; }
+        if (n >= N) { clearInterval(timer); dot.remove(); quip(area, "全部止められた"); pass(`合格: 5 回合わせました（${((performance.now() - t0) / 1000).toFixed(1)} 秒）`); return; }
         place();
       }, 50);
       return {
@@ -334,7 +390,7 @@ const TESTS = {
     task: "出てくるボタンを、つまんで離してクリックしてください（5 回）",
     make(area, pass) {
       const N = 5, SIZE = 70;
-      let n = 0, miss = 0, lastCancel = null;
+      let n = 0, miss = 0, streak = 0, lastCancel = null;
       const btn = el("button", { class: "test-target btn", style: `width:${SIZE}px;height:${SIZE}px` }, "押す");
       const prog = progress(`0 / ${N}`);
       area.replaceChildren(btn, prog);
@@ -343,11 +399,18 @@ const TESTS = {
       btn.onclick = (e) => {
         e.stopPropagation();
         n += 1;
+        streak += 1;
         prog.textContent = `${n} / ${N}（外れ ${miss}）`;
+        if (streak >= 2) quip(area, `連続${streak}回`, inArea(area, e.clientX, e.clientY));
         if (n >= N) { pass(`合格: 5 回クリックしました（外れ ${miss} 回）`); return; }
         place();
       };
-      const onArea = () => { miss += 1; prog.textContent = `${n} / ${N}（外れ ${miss}）`; };
+      const onArea = (e) => {
+        miss += 1;
+        streak = 0;
+        prog.textContent = `${n} / ${N}（外れ ${miss}）`;
+        quip(area, "惜しい", inArea(area, e.clientX, e.clientY));
+      };
       area.addEventListener("click", onArea);
       return {
         cleanup: () => area.removeEventListener("click", onArea),
@@ -372,14 +435,16 @@ const TESTS = {
       const box = el("div", { class: "drop-box" }, "ここに置く");
       const prog = progress(`0 / ${N}`);
       area.replaceChildren(box, card, prog);
+      let settle = null;
       const place = () => {
+        card.classList.remove("settle");
         const r = area.getBoundingClientRect();
         const left = n % 2 === 0;
         card.style.left = `${left ? 40 : r.width - 200}px`; card.style.top = `${r.height / 2 - 40}px`;
         box.style.left = `${left ? r.width - 260 : 40}px`; box.style.top = `${r.height / 2 - 80}px`;
       };
       place();
-      card.addEventListener("mousedown", (e) => { drag = { dx: e.clientX - card.offsetLeft, dy: e.clientY - card.offsetTop }; card.classList.add("hot"); e.preventDefault(); });
+      card.addEventListener("mousedown", (e) => { clearTimeout(settle); card.classList.remove("settle"); drag = { dx: e.clientX - card.offsetLeft, dy: e.clientY - card.offsetTop }; card.classList.add("hot"); e.preventDefault(); });
       const move = (e) => { if (!drag) return; card.style.left = `${e.clientX - drag.dx}px`; card.style.top = `${e.clientY - drag.dy}px`; };
       const up = () => {
         if (!drag) return;
@@ -388,16 +453,20 @@ const TESTS = {
         const a = card.getBoundingClientRect(), b = box.getBoundingClientRect();
         const cx = a.left + a.width / 2, cy = a.top + a.height / 2;
         if (cx > b.left && cx < b.right && cy > b.top && cy < b.bottom) {
+          // 箱の中央へ落とし込む（合格の判定は先に済ませ、動きは後から付いてくる）
+          card.classList.add("settle");
+          card.style.left = `${box.offsetLeft + (box.offsetWidth - card.offsetWidth) / 2}px`;
+          card.style.top = `${box.offsetTop + (box.offsetHeight - card.offsetHeight) / 2}px`;
           n += 1;
           prog.textContent = `${n} / ${N}`;
           if (n >= N) { pass("合格: 2 回運べました"); return; }
-          place();
+          settle = setTimeout(place, 900);
         }
       };
       area.addEventListener("mousemove", move);
       addEventListener("mouseup", up);
       return {
-        cleanup: () => { area.removeEventListener("mousemove", move); removeEventListener("mouseup", up); },
+        cleanup: () => { clearTimeout(settle); area.removeEventListener("mousemove", move); removeEventListener("mouseup", up); },
         hint(s) {
           if (s.mode === "drag") return "ドラッグ中です（つまんだまま箱まで動かし、指をはっきり開いて離してください）";
           if (s.mode === "pinch") return "つまんだまま、手を動かさずに少し待つとドラッグになります";
@@ -412,8 +481,14 @@ const TESTS = {
     make(area, pass) {
       const SIZE = 90;
       const dot = el("div", { class: "test-target", style: `width:${SIZE}px;height:${SIZE}px` });
-      const menu = el("div", { class: "fake-menu hidden" }, ["開く", "コピー", "削除"].map((t) =>
-        el("button", { onclick: (e) => { e.stopPropagation(); menu.classList.add("hidden"); if (t === "コピー") pass("合格: 右クリックしてメニューを選べました"); } }, t)));
+      const QUIPS = { 開く: "開くのはまた今度", 名前を変更: "名前はそのままで", 削除: "それは違います", ゴミ箱に入れる: "捨てないでください" };
+      const menu = el("div", { class: "fake-menu hidden" }, ["開く", "コピー", "名前を変更", "削除", "ゴミ箱に入れる"].map((t) =>
+        el("button", { onclick: (e) => {
+          e.stopPropagation();
+          menu.classList.add("hidden");
+          if (t === "コピー") pass("合格: 右クリックしてメニューを選べました");
+          else quip(area, QUIPS[t], inArea(area, e.clientX, e.clientY));
+        } }, t)));
       area.replaceChildren(dot, menu, progress("右クリック → コピー"));
       const p = spot(area, SIZE);
       dot.style.left = `${p.x}px`; dot.style.top = `${p.y}px`;
@@ -422,7 +497,7 @@ const TESTS = {
         e.preventDefault();
         opened = true;
         const r = area.getBoundingClientRect();
-        menu.style.left = `${Math.min(e.clientX - r.left, r.width - 160)}px`; menu.style.top = `${Math.min(e.clientY - r.top, r.height - 140)}px`;
+        menu.style.left = `${Math.min(e.clientX - r.left, r.width - 160)}px`; menu.style.top = `${Math.min(e.clientY - r.top, r.height - 220)}px`;
         menu.classList.remove("hidden");
       });
       area.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -447,10 +522,11 @@ const TESTS = {
       let down = false, up = false;
       page.addEventListener("scroll", () => {
         const max = page.scrollHeight - page.clientHeight;
-        if (page.scrollTop >= max - 8) down = true;
+        if (!down && page.scrollTop >= max - 8) { down = true; quip(area, "折り返し地点です"); }
+        if (up) return;
         if (down && page.scrollTop <= 8) up = true;
         prog.textContent = `下 ${down ? "✓" : "—"}　上 ${up ? "✓" : "—"}`;
-        if (down && up) pass("合格: 下まで下げて、上まで戻せました");
+        if (down && up) { quip(area, "ゴール！この感情をピースで表してください", null, true); pass("合格: 下まで下げて、上まで戻せました"); }
       });
       return {
         hint(s) {
@@ -463,7 +539,7 @@ const TESTS = {
   nav: {
     task: "ピースで手を右へ動かして止めると「戻る」、左へ動かして止めると「進む」です（両方を 1 回ずつ、キーは送らず下の画面で見せます）",
     make(area, pass) {
-      const pages = ["ページ 1", "ページ 2", "ページ 3"];
+      const pages = ["1ページ目", "2ページ目", "3ページ目"];
       let at = 1;
       const did = { back: false, forward: false };
       const view = el("div", { class: "fake-browser" });
@@ -479,6 +555,7 @@ const TESTS = {
       return {
         onEvent(ev) {
           if (ev.kind !== "nav" || !ev.active) return;
+          if (ev.dir === "back" && at === 0) quip(area, "これ以上戻れません");
           if (ev.dir === "back" && at > 0) at -= 1;
           if (ev.dir === "forward" && at < pages.length - 1) at += 1;
           did[ev.dir] = true;
@@ -518,6 +595,14 @@ const TESTS = {
       const d = desktops(area);
       let open = false, opened = false;
       const prog = progress("開く —　閉じる —");
+      // 一覧のときだけ見える小さなアイコン。カーソルを重ねると跳ねる（合格には関わらない）
+      const secret = el("div", { class: "fake-secret", "aria-hidden": "true" }, "★");
+      secret.addEventListener("mouseenter", () => {
+        if (!open) return;
+        secret.classList.remove("found"); void secret.offsetWidth; secret.classList.add("found");
+        quip(area, "見つかった", inArea(area, secret.getBoundingClientRect().left, secret.getBoundingClientRect().top - 24));
+      });
+      d.view.append(secret);
       area.append(prog);
       return {
         onEvent(ev) {
@@ -539,11 +624,11 @@ const TESTS = {
       let at = 4;
       const did = { in: false, out: false };
       const content = el("div", { class: "zoom-content" }, el("h3", {}, "ズームの練習"), el("p", {}, "この文と図の大きさが、1 段ずつ変わります"),
-        el("div", { class: "zoom-figure" }));
+        el("div", { class: "zoom-figure" }), el("p", { class: "zoom-secret" }, "ここまで拡大しましたね"));
       const view = el("div", { class: "zoom-view" }, content);
       const prog = progress("");
       area.replaceChildren(view, prog);
-      const draw = () => { content.style.transform = `scale(${levels[at] / 100})`; prog.textContent = `${levels[at]}%　イン ${did.in ? "✓" : "—"}　アウト ${did.out ? "✓" : "—"}`; };
+      const draw = () => { content.style.transform = `scale(${levels[at] / 100})`; content.classList.toggle("max", at === levels.length - 1); prog.textContent = `${levels[at]}%　イン ${did.in ? "✓" : "—"}　アウト ${did.out ? "✓" : "—"}`; };
       draw();
       return {
         onEvent(ev) {
@@ -580,7 +665,11 @@ const TESTS = {
       return {
         onSnap(s) {
           const r = s.run || {};
-          if (last !== null && r.active !== last && did[r.reason] !== undefined) did[r.reason] = true;
+          if (last !== null && r.active !== last && did[r.reason] !== undefined) {
+            did[r.reason] = true;
+            if (r.reason === "hand_absent" && !r.active) quip(area, "おやすみなさい");
+            if (r.reason === "palm" && r.active) quip(area, "おはようございます");
+          }
           last = r.active;
           draw(r.active);
           if (did.palm && did.hand_absent && did.key) pass("合格: 3 つの切り替えができました");
@@ -604,6 +693,10 @@ async function init() {
   $("btn-prev").onclick = () => openStep(cur - 1);
   $("btn-next").onclick = () => openStep(cur + 1);
   $("btn-test").onclick = startTest;
+  $("done-mark").onclick = showDone;
+  $("btn-done-close").onclick = () => $("done").classList.add("hidden");
+  P = await api("/api/tutorial/progress").catch(() => P);
+  showProgress();
   addEventListener("pagehide", stopTest); // 画面を閉じたら練習モードを抜ける
 }
 init().catch((e) => { $("tree").textContent = `読み込めませんでした: ${e.message}`; });
