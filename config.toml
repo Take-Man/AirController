@@ -7,7 +7,7 @@ index = 0
 width = 1280
 height = 720
 fps = 30
-backend = "opencv"   # "opencv" / "avf"（AVFoundation を直接使う。段階2で遅延を比較中）
+backend = "avf"      # "avf"（AVFoundation）/ "opencv"（開発用。OpenCV が入っているときだけ。配布版は OpenCV を同梱しない、SPEC 13.68）
 
 [power]
 # 操作のオン・オフと省電力（TASKS-20261025 第3節。SPEC 13.22 の待機中 10fps を置き換えた）

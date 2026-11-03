@@ -1,24 +1,26 @@
 """入力層: カメラ取得と MediaPipe HandLandmarker（ライブストリーム）。
 
-- 取得スレッドはカメラを読み続け、最新の1枚だけを保持する（古いフレームは上書きで捨てる）。
+- 取得スレッドはカメラを読み続け、最新の1枚だけを保持する（古いフレームは上書きで捨てる）。画像は RGB（MediaPipe に渡す並び）。
+- 取得は AVFoundation（pyobjc）。配布する .app には OpenCV を入れない（同梱の FFmpeg の GPL のライブラリのため。SPEC 13.68）。
+  OpenCV の取得経路（backend = "opencv"）は、比べるための開発用で、OpenCV が入っているときだけ使える。
 - 推論スレッドは最新フレームを1枚ずつ HandLandmarker に渡す。推論中は次を投入しないので、
   キューは溜まらない。結果はコールバックで LandmarkFrame として外へ渡す。
 """
 from __future__ import annotations
 
+import ctypes
 import threading
 import time
 from dataclasses import dataclass
 from typing import Callable
 
-import cv2
-import mediapipe as mp
 import Quartz
 import numpy as np
-from mediapipe.tasks.python import BaseOptions
-from mediapipe.tasks.python import vision
 
 from . import cpustat
+from .mpimport import HAVE_CV2, mp
+from mediapipe.tasks.python import BaseOptions  # noqa: E402 — mpimport の後（cv2 が無くても読めるように）
+from mediapipe.tasks.python import vision  # noqa: E402
 from .types import Hand, LandmarkFrame
 
 
@@ -37,13 +39,30 @@ class CameraConfig:
     width: int = 1280
     height: int = 720
     fps: int = 30
-    backend: str = "opencv"  # "opencv" / "avf"（AVFoundation を直接使う。撮影時刻 PTS も取れる）
+    backend: str = "avf"  # "avf"（AVFoundation。撮影時刻 PTS も取れる）/ "opencv"（開発用。OpenCV が入っているときだけ）
+
+    def __post_init__(self):
+        if self.backend == "opencv" and not HAVE_CV2:
+            # 以前の設定（既定値が opencv だった。データの場所の config.toml に残る）のまま、OpenCV の無い配布版で動かしたとき
+            print("取得経路 opencv は使えません（OpenCV が入っていない）。avf で取得します")
+            self.backend = "avf"
+
+
+def _skip(decimate: Callable[[], float] | None, t_ns: int, last_pub_ns: int, have_frame: bool) -> bool:
+    """間引くフレームか（取得だけして画像に変換しない。オフの間の負荷を下げる。カメラは 30fps 固定で、取得の頻度は下げられない）。"""
+    interval = decimate() if decimate else 0.0
+    return interval > 0 and have_frame and (t_ns - last_pub_ns) / 1e9 < interval - DECIMATE_SLACK_S
 
 
 class Camera:
-    """取得スレッド。latest() で最新フレームを取り出す。"""
+    """OpenCV の取得スレッド（開発用。比べるため）。latest() で最新フレームを取り出す。"""
 
     def __init__(self, cfg: CameraConfig):
+        if not HAVE_CV2:
+            raise CameraError("取得経路 opencv には OpenCV が要ります（配布版には入っていません）")
+        import cv2
+
+        self._cv2 = cv2
         self.cfg = cfg
         self._cap = cv2.VideoCapture(cfg.index, cv2.CAP_AVFOUNDATION)
         if not self._cap.isOpened():
@@ -57,8 +76,7 @@ class Camera:
         self.seq = 0  # 渡したフレームの、取得の通し番号（間引いたフレームも数えるので、飛びが出る）
         self.n_grab = 0  # 取得したフレームの数
         self.capture_times: list[int] = []  # 取得間隔の計測用（取得時刻）
-        # 推論の最短間隔（秒）を返す関数（VisionPipeline が設定する）。間引くフレームは、取得だけして画像に変換しない
-        # （オフの間の負荷を下げる。カメラは 30fps 固定で、取得の頻度は下げられない）
+        # 推論の最短間隔（秒）を返す関数（VisionPipeline が設定する）。間引くフレームは、取得だけして画像に変換しない（_skip）
         self.decimate: Callable[[], float] | None = None
         self._last_pub = 0
         self._stop = False
@@ -74,11 +92,12 @@ class Camera:
 
     @property
     def actual_size(self) -> tuple[int, int]:
+        cv2 = self._cv2
         return (int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
 
     @property
     def reported_fps(self) -> float:
-        return float(self._cap.get(cv2.CAP_PROP_FPS))
+        return float(self._cap.get(self._cv2.CAP_PROP_FPS))
 
     def _loop(self) -> None:
         while not self._stop:
@@ -89,14 +108,14 @@ class Camera:
                 time.sleep(0.005)
                 continue
             self.n_grab += 1
-            interval = self.decimate() if self.decimate else 0.0
-            if interval > 0 and self._frame is not None and (t - self._last_pub) / 1e9 < interval - DECIMATE_SLACK_S:
+            if _skip(self.decimate, t, self._last_pub, self._frame is not None):
                 with self._cond:
                     self.capture_times.append(t)
                 continue  # 推論しないフレーム: 変換しない
             ok, frame = self._cap.retrieve()
             if not ok:
                 continue
+            frame = self._cv2.cvtColor(frame, self._cv2.COLOR_BGR2RGB)
             self._last_pub = t
             with self._cond:
                 self.seq = self.n_grab
@@ -105,7 +124,7 @@ class Camera:
                 self._cond.notify_all()
 
     def wait_newer(self, last_seq: int, timeout: float = 1.0) -> tuple[int, int, np.ndarray] | None:
-        """last_seq より新しいフレームを待って (seq, t_capture_ns, BGR画像) を返す。"""
+        """last_seq より新しいフレームを待って (seq, t_capture_ns, RGB画像) を返す。"""
         with self._cond:
             if not self._cond.wait_for(lambda: self.seq > last_seq or self._stop, timeout):
                 return None
@@ -129,12 +148,42 @@ class Camera:
 _AVF_DELEGATE_CLASS = None
 
 
+class _VImageBuffer(ctypes.Structure):
+    _fields_ = [("data", ctypes.c_void_p), ("height", ctypes.c_ulong), ("width", ctypes.c_ulong), ("rowBytes", ctypes.c_size_t)]
+
+
+def _vimage_bgra_to_rgb():
+    """Accelerate の vImageConvert_BGRA8888toRGB888（1280x720 で約 0.9ms。NumPy の並べ替えは約 3.3ms）。無ければ None。"""
+    try:
+        f = ctypes.CDLL("/System/Library/Frameworks/Accelerate.framework/Accelerate").vImageConvert_BGRA8888toRGB888
+    except (OSError, AttributeError):
+        return None
+    f.argtypes = [ctypes.POINTER(_VImageBuffer), ctypes.POINTER(_VImageBuffer), ctypes.c_uint32]
+    f.restype = ctypes.c_long
+    return f
+
+
+_BGRA_TO_RGB = _vimage_bgra_to_rgb()
+
+
+def bgra_to_rgb(src: np.ndarray, w: int, h: int, bytes_per_row: int) -> np.ndarray:
+    """CVPixelBuffer の BGRA（行の終わりに詰め物があることがある）から、新しい RGB の配列を作る。src は h × bytes_per_row の uint8。"""
+    if _BGRA_TO_RGB is not None:
+        dst = np.empty((h, w, 3), np.uint8)
+        err = _BGRA_TO_RGB(ctypes.byref(_VImageBuffer(src.ctypes.data, h, w, bytes_per_row)),
+                           ctypes.byref(_VImageBuffer(dst.ctypes.data, h, w, w * 3)), 0)
+        if err == 0:
+            return dst
+    return src.reshape(h, bytes_per_row // 4, 4)[:, :w, 2::-1].copy()
+
+
 class AVFCamera:
-    """AVFoundation を pyobjc で直接使う取得経路。Camera と同じ使い方ができる。
+    """AVFoundation を pyobjc で直接使う取得経路（本番）。Camera と同じ使い方ができる。
 
     - alwaysDiscardsLateVideoFrames で、処理が遅れたフレームを OS 側で捨てる（バッファに溜めない）。
     - サンプルの PTS（ホストクロック = time.perf_counter_ns と同じ時計）から、
       撮影されてから受け取るまでの時間 pts_lag_ns を記録する。
+    - 間引くフレーム（decimate）は、受け取るだけで RGB に変換しない（Camera と同じ）。
     """
 
     def __init__(self, cfg: CameraConfig):
@@ -146,9 +195,12 @@ class AVFCamera:
         self._cond = threading.Condition()
         self._frame: np.ndarray | None = None
         self._t_ns = 0
-        self.seq = 0
+        self.seq = 0  # 渡したフレームの、取得の通し番号（間引いたフレームも数えるので、飛びが出る）
+        self.n_grab = 0
         self.capture_times: list[int] = []
         self.pts_lag_ns: list[int] = []
+        self.decimate: Callable[[], float] | None = None
+        self._last_pub = 0
         self._stop = False
         self._size = (cfg.width, cfg.height)
 
@@ -187,22 +239,32 @@ class AVFCamera:
         t = time.perf_counter_ns()
         cpustat.mark("camera")
         pts = CoreMedia.CMSampleBufferGetPresentationTimeStamp(sample)
+        self.n_grab += 1
+        if pts.timescale:
+            lag = t - int(pts.value * 1_000_000_000 // pts.timescale)
+        if _skip(self.decimate, t, self._last_pub, self._frame is not None):
+            with self._cond:
+                self.capture_times.append(t)
+                if pts.timescale:
+                    self.pts_lag_ns.append(lag)
+            return  # 推論しないフレーム: 変換しない
         pb = CoreMedia.CMSampleBufferGetImageBuffer(sample)
         Quartz.CVPixelBufferLockBaseAddress(pb, 1)
         try:
             w, h = Quartz.CVPixelBufferGetWidth(pb), Quartz.CVPixelBufferGetHeight(pb)
             bpr = Quartz.CVPixelBufferGetBytesPerRow(pb)
             buf = Quartz.CVPixelBufferGetBaseAddress(pb).as_buffer(bpr * h)
-            frame = np.frombuffer(buf, dtype=np.uint8).reshape(h, bpr // 4, 4)[:, :w, :3].copy()
+            frame = bgra_to_rgb(np.frombuffer(buf, dtype=np.uint8).reshape(h, bpr), w, h, bpr)
         finally:
             Quartz.CVPixelBufferUnlockBaseAddress(pb, 1)
+        self._last_pub = t
         with self._cond:
-            self.seq += 1
+            self.seq = self.n_grab
             self._frame, self._t_ns = frame, t
             self._size = (w, h)
             self.capture_times.append(t)
             if pts.timescale:
-                self.pts_lag_ns.append(t - int(pts.value * 1_000_000_000 // pts.timescale))
+                self.pts_lag_ns.append(lag)
             self._cond.notify_all()
 
     def start(self, first_frame_timeout_s: float = 5.0) -> None:
@@ -233,7 +295,7 @@ class AVFCamera:
 
 
 def open_camera(cfg: CameraConfig):
-    return AVFCamera(cfg) if cfg.backend == "avf" else Camera(cfg)
+    return Camera(cfg) if cfg.backend == "opencv" else AVFCamera(cfg)  # OpenCV が無ければ CameraConfig が avf にしている
 
 
 @dataclass
@@ -299,23 +361,24 @@ class Tracker:
                 got = self.camera.wait_newer(last_seq)
                 if got is None:
                     continue
-                seq, t_cap, bgr = got
+                seq, t_cap, frame = got
                 last_seq = seq
                 cpustat.mark("inference-submit")
                 interval = self.min_interval() if self.min_interval else 0.0
                 if interval > 0 and (t_cap - last_proc) / 1e9 < interval - DECIMATE_SLACK_S - 0.005:
                     continue  # 待機中は間引く（取得は続けるので、有効化した次のフレームから毎フレームに戻る）
                 last_proc = t_cap
-                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)  # 新しい配列（取得スレッドの画像は書き換えない）
+                rgb = frame  # カメラはフレームごとに新しい配列を作るので、そのまま渡せる
                 boxes = self.mask_fn() if self.mask_fn is not None else None
                 if boxes:
+                    rgb = frame.copy()  # 取得スレッドの画像（プレビューも使う）は書き換えない
                     h_, w_ = rgb.shape[:2]
                     for x0, y0, x1, y1 in boxes:
                         rgb[max(0, int(y0 * h_)):max(0, int(y1 * h_)), max(0, int(x0 * w_)):max(0, int(x1 * w_))] = 0
                 image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 ts_ms = max(t_cap // 1_000_000, last_ts_ms + 1)  # 単調増加が必須
                 last_ts_ms = ts_ms
-                self._pending[ts_ms] = (seq, t_cap, (bgr.shape[1], bgr.shape[0]))
+                self._pending[ts_ms] = (seq, t_cap, (frame.shape[1], frame.shape[0]))
                 for k in [k for k in self._pending if k < ts_ms - 2000]:  # 結果が返らなかった分の掃除
                     del self._pending[k]
                 if self.num_hands_fn is not None and len(self._landmarkers) > 1:

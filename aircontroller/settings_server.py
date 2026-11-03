@@ -30,12 +30,15 @@ WEB = Path(__file__).parent / "web"
 STATIC = {"/app.js": "application/javascript; charset=utf-8", "/app.css": "text/css; charset=utf-8",
           "/check.js": "application/javascript; charset=utf-8", "/nav.js": "application/javascript; charset=utf-8",
           "/launch.js": "application/javascript; charset=utf-8", "/tutorial.js": "application/javascript; charset=utf-8",
-          "/about.js": "application/javascript; charset=utf-8"}
+          "/about.js": "application/javascript; charset=utf-8", "/licenses.js": "application/javascript; charset=utf-8"}
+# 同梱したライブラリのライセンス文（pkg/licenses/collect.sh が作る）。.app では web/ に入れる。ソースから動かすときはビルドの途中物を読む
+NOTICES = [WEB / "THIRD_PARTY_NOTICES.txt", WEB.parents[1] / "pkg/build/licenses/THIRD_PARTY_NOTICES.txt"]
 # 画面: 設定、環境のチェック（第4節）、ホーム（起動）・チュートリアル（第5節。ホームから各画面へ進み、「ホームに戻る」で戻る）
 TUTORIAL_TYPES = {".json": "application/json; charset=utf-8", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                   ".webp": "image/webp", ".gif": "image/gif"}
 PAGES = {"/": "settings.html", "/check": "check.html", "/launch": "launch.html", "/tutorial": "tutorial.html",
-         "/about": "about.html"}  # このアプリについて（開き方・データの扱い・アンインストール。第8節）
+         "/about": "about.html",  # このアプリについて（開き方・データの扱い・アンインストール。第8節）
+         "/licenses": "licenses.html"}  # 同梱したライブラリのライセンス（このアプリについてから開く）
 DIST_KEYS = {"pinch": ("rest_ti", "pinch"), "right": ("rest_tm", "rpinch"), "peace": ("rest_thumb", "peace_thumb")}
 # run のプロセス: python -m aircontroller run、または .app の実行ファイルに引数 run（SPEC 13.58）
 # チュートリアルの合格の記録（SPEC 13.65）。データの場所に置く（WKWebView とブラウザで分かれないように、画面の保存領域には持たない）
@@ -637,6 +640,14 @@ def make_handler(app: App, port_ref: list[int]):
             if u.path in STATIC:
                 if self._check(False):
                     self._send(200, (WEB / u.path.lstrip("/")).read_bytes(), STATIC[u.path])
+                return
+            if u.path == "/licenses.txt":
+                if self._check(False):
+                    f = next((p for p in NOTICES if p.is_file()), None)
+                    if f:
+                        self._send(200, f.read_bytes(), "text/plain; charset=utf-8")
+                    else:
+                        self._send(404, "ライセンス文がありません（pkg/licenses/collect.sh で作ります）".encode(), "text/plain; charset=utf-8")
                 return
             if u.path.startswith("/tutorial/"):  # チュートリアルの画像と manifest.json（SPEC 13.60）。web/tutorial/ の中だけ
                 if self._check(False):

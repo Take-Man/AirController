@@ -1008,3 +1008,35 @@ Mac のトラックパッド操作を、ハンドジェスチャーだけで行�
 - 確認（2026-10-29）: 作り直した .app の Resources のアイコンと署名の検証、.dmg のボリュームの印と中身。作者の Mac で Finder・Dock・.dmg に新しいアイコンが出た。
   13.55 の「ダイアログのアイコンが Python のもの」は、これで解消する見込み（ダイアログでは未確認）。
 - アプリの中でアイコンを出せる箇所（ホームの見出しの左、「AirController について」の見出し）は報告のみ。出すかは作者が決める。
+
+### 13.68 通信の監視、ライセンスの表示、OpenCV を外す（2026-11-03、LP 制作側の指示書 ac-network-and-licenses、作者の承認）
+- 通信の監視（作者の実機の記録とパケットの取得、2026-11-03）: 同梱の MediaPipe 1.1.1 が、run を始めて約 60 秒後に `play.googleapis.com` へ HTTPS で
+  1 回送る（送信 約 2.6KB・受信 約 8.8KB、約 60 秒で閉じる。宛先は SNI と DNS で確認、中身は TLS で見られない）。MediaPipe の NOTICE は
+  「入力は送らず、性能と利用状況の指標を送る」としている。止める公式の設定はない（mediapipe の issue 6291）。アプリ（ホーム・設定・チュートリアル）は
+  外と通信しない。自作のコードの通信は 127.0.0.1 だけ（13.62 の確認どおり）。ローカルネットワークの確認が出る原因は分からないまま。
+  → 「このアプリについて」と README の「ネットワークには何も送らない」を、実態に合わせて直した（作者の方針）。送信を止めるかどうかは作者の判断待ち。
+- ライセンスの表示: `pkg/licenses/collect.sh` が `pkg/licenses/components.txt` の一覧から `pkg/build/licenses/THIRD_PARTY_NOTICES.txt` を作り
+  （版は .venv-pkg から読む。`pkg/build.sh app` が先に呼ぶ）、spec が .app の web/ に入れる。「このアプリについて」→「使っているソフトウェアのライセンスを見る」
+  （/licenses。全文は /licenses.txt）。
+- OpenCV を外す（作者が承認。将来の有料化の余地を残すため、GPL の条件を満たす案〔ソースの公開〕は採らない）: opencv-python の wheel に入っていた FFmpeg が
+  `--enable-gpl --enable-version3` でビルドされ、GPL の libx264・libx265・librubberband・libvidstab・libpostproc を含んでいた。`import cv2` で読み込まれる。
+  - 取り込み: AVFoundation（`input.AVFCamera`。以前から比べる用にあった経路）を本番にした（`camera.backend` の既定値を `avf` に）。間引くフレームは変換しない
+    （OpenCV の経路と同じ判断を `_skip` にまとめた）。BGRA → RGB は Accelerate の vImage（1280x720 で約 0.9ms。NumPy の並べ替えは約 3.3ms）。
+    カメラが渡す画像は RGB に統一した（推論の前の色変換は要らなくなった。マスクを塗るときだけ写す）。
+  - OpenCV の取得経路（`backend = "opencv"`）は開発用に残した（.venv には OpenCV がある）。OpenCV が無いときに opencv が指定されていれば
+    （データの場所の config.toml に以前の既定値が残る）、avf で取得する。
+  - mediapipe は `import mediapipe` の中で drawing_utils を読み、それが `import cv2` をする。アプリは drawing_utils を使わないので、cv2 が無ければ
+    使うと分かる中身のない cv2 を先に置いてから読む（`aircontroller/mpimport.py`）。OpenCV のあり・なしで、写真 3 枚の推論の結果が同じことを確かめた。
+  - 測定（calibrate）と lab・learn-* のプレビュー: OpenCV の imshow を、AppKit のウィンドウ（`aircontroller/preview.py`）と Pillow の描画に置き換えた
+    （作者の選択: 同じ見た目で作り直す）。鏡像、骨格（緑の線・赤の点）、目印の円と線、残り時間の棒、日本語の指示は同じ。q・Esc で中断（ウィンドウを
+    閉じても中断）。線の縁の滑らかさ（cv2 の LINE_AA）は Pillow では付かない。
+  - view と camlatency は開発用のまま OpenCV を使う（無ければ、そう出して終わる）。
+  - 配布用: `.venv-pkg` から opencv-python・opencv-contrib-python を外し（README の手順）、spec の excludes にも cv2。.app に cv2・libx264・libx265・
+    librubberband・libvidstab・libav*（FFmpeg）が無いことを確かめた。.app 296MB → 185MB、.dmg 132.5MB → 84.4MB。前の版は pkg/dist-v0.1.0-opencv/ に残した。
+  - 実機の確認（カメラ・権限が要る。作者）: 遅延・取り込みの安定・環境のチェック・チュートリアル・9 つの操作・測定のプレビュー。結果はここに追記する。
+- 実機の確認（作者、2026-11-03 15:25〜）: 作り直した .dmg から入れ直し、環境のチェック（カメラ）・測定（U1 操作範囲、290 フレーム）・run の手の検出が動いた。
+  ログの「取得経路 opencv」は実際（avf）と合っていなかった → `CameraConfig` が OpenCV の無いときに avf に直し、run のログ・記録の見出しには実際の経路を書くようにした。
+  遅延の前後の比較は、run を終えたときの集計で行う（未記入）。
+- 送信の扱い（作者の判断、2026-11-03）: 止めずに、内容を正確に開示する（作業 D の案 D1。同意の画面は作らない）。「このアプリについて」に、宛先・いつ・量・
+  中身（MediaPipe の説明と、私たちは確かめられていないこと）・Google の扱い・確かめた日を書いた。README も同じ。
+- 版の番号: 0.2.0 に上げた（作者の指示、2026-11-03。取り込みの経路・同梱物・開示が 0.1.0 と違うため）。.dmg は 84,444,440 バイト、sha256 5dcbc291a838cab234734dcefdde667f1fb396162c7167bf6cfbce7e20c0ba37。

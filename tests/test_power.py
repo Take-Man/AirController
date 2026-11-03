@@ -159,7 +159,9 @@ class FakeCap:
 
 def test_camera_skips_conversion_and_rates_match(monkeypatch):
     """間引く間は、取得だけして画像に変換しない。カメラと推論の両方の間引きで、1 つおきにならない（1Hz と 10Hz を保つ）。"""
-    monkeypatch.setattr(inp.cv2, "VideoCapture", FakeCap)
+    import cv2
+
+    monkeypatch.setattr(cv2, "VideoCapture", FakeCap)  # 開発用の OpenCV の取得経路（.venv には OpenCV がある）
     for interval, lo, hi in ((1.0, 2, 4), (0.1, 25, 33), (0.0, 80, 95)):
         cam = inp.Camera(inp.CameraConfig())
         cam.decimate = lambda: interval
@@ -174,3 +176,43 @@ def test_camera_skips_conversion_and_rates_match(monkeypatch):
         assert lo <= n <= hi, (interval, n)  # 3 秒で 1Hz → 3 回、10Hz → 30 回、毎フレーム → 約 90 回
         if interval > 0:  # 間引く間は、推論しないフレームを変換しない（毎フレームのときは、推論中に来たものも変換する）
             assert cam._cap.retrieves <= n + 3, (interval, cam._cap.retrieves)
+
+
+def test_skip_and_bgra_to_rgb():
+    """AVFoundation の取得経路（本番）: 間引きの判断は OpenCV の経路と同じ。BGRA（行の詰め物つき）から RGB を作る。"""
+    assert not inp._skip(None, 10**9, 0, True)
+    assert inp._skip(lambda: 1.0, int(0.5e9), 0, True)  # 1Hz の間、前に渡してから 0.5 秒なら変換しない
+    assert not inp._skip(lambda: 1.0, int(0.5e9), 0, False)  # まだ 1 枚も無ければ渡す
+    assert not inp._skip(lambda: 1.0, int(0.99e9), 0, True)  # ゆとり（DECIMATE_SLACK_S）の分、早めに渡す
+    h, w, bpr = 3, 5, 5 * 4 + 12
+    src = np.random.default_rng(0).integers(0, 255, (h, bpr), dtype=np.uint8)
+    rgb = inp.bgra_to_rgb(src, w, h, bpr)
+    assert rgb.shape == (h, w, 3) and rgb.flags.c_contiguous
+    assert np.array_equal(rgb, src[:, :w * 4].reshape(h, w, 4)[:, :, 2::-1])
+
+
+def test_input_imports_without_cv2():
+    """配布版（OpenCV なし）: mediapipe が読む cv2 は中身のない代わりで足り、取得経路 opencv は avf に置き換わる。"""
+    import subprocess
+    import sys
+
+    code = """
+import sys
+class Block:
+    def find_spec(self, name, path=None, target=None):
+        if name == "cv2" or name.startswith("cv2."):
+            raise ModuleNotFoundError("blocked")
+sys.meta_path.insert(0, Block())
+import aircontroller.input as inp
+try:
+    sys.modules["cv2"].imshow
+except ImportError:
+    print("stub")
+inp.AVFCamera = lambda cfg: cfg.backend
+print(inp.open_camera(inp.CameraConfig(backend="opencv")))
+"""
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60,
+                         cwd=Path(__file__).resolve().parent.parent)
+    assert out.returncode == 0, out.stderr
+    lines = out.stdout.splitlines()
+    assert lines[0] == "stub" and lines[-1] == "avf" and "avf で取得します" in out.stdout

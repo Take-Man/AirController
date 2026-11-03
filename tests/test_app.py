@@ -108,6 +108,39 @@ def test_tutorial_manifest_and_static(tmp_path):
         httpd.server_close()
 
 
+def test_licenses_page_serves_notices(tmp_path, monkeypatch):
+    """ライセンス: 全文（/licenses.txt）は .app の web/ か、ソースのときはビルドの途中物から。無ければ 404。画面はトークンが要る。"""
+    import http.client
+    import threading
+
+    import aircontroller.settings_server as ss
+    from aircontroller.settings_server import serve
+
+    notices = tmp_path / "THIRD_PARTY_NOTICES.txt"
+    monkeypatch.setattr(ss, "NOTICES", [tmp_path / "none.txt", notices])
+    app = App(tmp_path)
+    httpd, _url = serve(app, 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        port = httpd.server_address[1]
+
+        def get(path):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            c.request("GET", path, headers={"Host": f"127.0.0.1:{port}"})
+            r = c.getresponse()
+            return r.status, r.read()
+
+        assert get("/licenses.txt")[0] == 404
+        notices.write_text("Third-party software included in AirController\n")
+        assert get("/licenses.txt") == (200, b"Third-party software included in AirController\n")
+        assert get("/licenses")[0] == 403
+        assert get(f"/licenses?t={app.token}")[0] == 200
+        assert get("/licenses.js")[0] == 200
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_about_info_lists_data_location(tmp_path, monkeypatch):
     """このアプリについて（第8節）: データの場所と、アプリを消した後に残る場所（.app のときは macOS がアプリごとに作る場所も）。"""
     app = App(tmp_path)

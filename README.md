@@ -110,6 +110,7 @@ open tools/targets.html                                          # クリック�
 `.venv-pkg`（requirements.txt + PyInstaller）で作る（SPEC 13.59）。データは `~/Library/Application Support/AirController`。
 ```bash
 uv venv --python 3.12 .venv-pkg && uv pip install --python .venv-pkg -r requirements.txt pyinstaller
+uv pip uninstall --python .venv-pkg opencv-python opencv-contrib-python   # 配布版に OpenCV を入れない（SPEC 13.68）
 pkg/build.sh app    # pkg/dist/AirController.app
 pkg/build.sh dmg    # pkg/dist/AirController.dmg（ボリュームにもアイコンを付ける）
 .venv/bin/python tools/make_icon.py   # icon-source/AirController-icon-1024.png から pkg/AirController.icns を作る（元画像を替えたときだけ。SPEC 13.66）
@@ -122,7 +123,9 @@ pkg/build.sh dmg    # pkg/dist/AirController.dmg（ボリュームにもアイ�
 - はじめて開くとき: 「開いていません」の警告が出るので「完了」→ システム設定 → プライバシーとセキュリティ の「このまま開く」→ もう一度「このまま開く」。
   その後、アクセシビリティ・入力監視・カメラをオンにして開き直す（環境のチェックで確かめられる）。新しい版に入れ替えたら、権限を付け直す。
 - データの扱い: カメラの映像は保存も送信もしない。設定・ログ・手の点の記録・チュートリアルの合格の記録（`tutorial-progress.json`）は、この Mac の `~/Library/Application Support/AirController` にだけ保存する。
-  ネットワークには何も送らない（画面と Controller のやり取りは 127.0.0.1 だけ）。
+  画面と Controller のやり取りは 127.0.0.1 だけ。外に送るのは、同梱の MediaPipe（1.1.1）の利用状況の指標だけ（宛先 `play.googleapis.com`、HTTPS。
+  run を始めて約 60 秒後に 1 回、送信 約 2.6KB・受信 約 8.8KB。アプリの画面だけでは送らない。2026-11-03 の通信監視、SPEC 13.68）。中身は暗号化されていて
+  確かめていない。MediaPipe の NOTICE では「API の性能と使われ方の指標で、入力は送らない」。止める公式の設定はない。アプリの「このアプリについて」に同じ開示がある。
 - アンインストール: ⌘Q で終了 → /Applications の AirController をゴミ箱へ → 残るデータを消す（要らなければ）:
   `~/Library/Application Support/AirController`、`~/Library/Preferences/com.takeman.aircontroller.plist`、`~/Library/WebKit/com.takeman.aircontroller`、
   `~/Library/Caches/com.takeman.aircontroller`、`~/Library/Saved Application State/com.takeman.aircontroller.savedState`（あれば）

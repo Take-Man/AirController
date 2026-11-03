@@ -18,3 +18,4 @@ tutorial-progress.json
 .venv-pkg/
 pkg/build/
 pkg/dist/
+pkg/dist-*/

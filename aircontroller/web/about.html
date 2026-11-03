@@ -29,8 +29,18 @@
     <ul class="tut-lines">
       <li>カメラの映像は、保存も送信もしません（手の形を読み取るためだけに使います）</li>
       <li>設定・ログ・手の動きの記録（手の点の位置）・チュートリアルの合格の記録（tutorial-progress.json）は、この Mac の中のデータの場所にだけ保存します</li>
-      <li>ネットワークには何も送りません（画面と Controller のやり取りも、この Mac の中だけです）</li>
+      <li>画面と Controller のやり取りは、この Mac の中だけです。外に送るのは、次の 1 つだけです</li>
     </ul>
+    <h4>Google への送信（MediaPipe の利用状況の指標）</h4>
+    <p class="note">手の形の読み取りに使っている Google の MediaPipe（1.1.1）が、インターネットの Google に送ります。AirController の中では止められません</p>
+    <ul class="tut-lines">
+      <li>宛先: Google（play.googleapis.com。暗号化した通信）</li>
+      <li>いつ: Controller を始めてから約 1 分後に 1 回（始めるたびに）。ホーム・設定・チュートリアルの画面を開くだけでは送りません</li>
+      <li>量: 1 回に約 3KB を送ります（カメラの画像 1 枚の数百分の一）</li>
+      <li>中身: MediaPipe の説明では「API の性能と使われ方の指標」で、カメラの映像などの入力は送らない、とされています。通信は暗号化されているので、私たちは中身を確かめられていません</li>
+      <li>Google の扱い: Google のプライバシーポリシー（policies.google.com/privacy）による、とされています</li>
+    </ul>
+    <p class="note">2026-11-03 にこの版の通信を記録して確かめた内容です</p>
     <p class="note">データの場所: <code id="home-dir">—</code> <button id="btn-reveal" class="small hidden">Finder で開く</button></p>
   </section>
 
@@ -43,6 +53,12 @@
       <li>システム設定 → プライバシーとセキュリティ の、アクセシビリティ・入力監視・カメラの一覧から AirController を選び、「−」で外す</li>
     </ol>
     <ul class="tut-lines muted small paths" id="leftovers"></ul>
+  </section>
+
+  <section class="panel">
+    <h3>ライセンス</h3>
+    <p class="note">MediaPipe・OpenCV・Python などのオープンソースのソフトウェアを同梱しています</p>
+    <p><a data-go="/licenses">使っているソフトウェアのライセンスを見る ›</a></p>
   </section>
 </main>
 <script src="/nav.js"></script>

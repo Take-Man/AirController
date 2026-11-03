@@ -7,6 +7,7 @@ cd "$(dirname "$0")/.."
 PY=.venv-pkg/bin/python
 case "$1" in
   app)
+    pkg/licenses/collect.sh  # 同梱するライブラリのライセンス文（spec が .app に入れる）
     $PY -m PyInstaller --noconfirm --clean --workpath pkg/build/app --distpath pkg/dist pkg/AirController.spec ;;
   dmg)
     rm -rf pkg/build/dmg && mkdir -p pkg/build/dmg/src pkg/build/dmg/mnt

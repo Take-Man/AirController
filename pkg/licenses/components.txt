@@ -1,0 +1,19 @@
+# .app に同梱するライブラリのライセンス（pkg/licenses/collect.sh が読む）。
+# 入れるのは .app の Contents/Frameworks と PYZ に実際に入っているものだけ（2026-11-03、LP 側の確認。v0.1.0）。依存を変えたらここも直す。
+# OpenCV は外した（SPEC 13.68）
+# 名前|配布の名前（.dist-info の頭。版はここから読む）|ライセンス|ライセンス文（.dist-info からの相対。; 区切り）
+PyInstaller (bootloader)|pyinstaller|GPL-2.0-or-later WITH Bootloader-exception|licenses/COPYING.txt
+MediaPipe|mediapipe|Apache-2.0|licenses/LICENSE;licenses/NOTICE
+NumPy|numpy|BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0|licenses/LICENSE.txt
+Pillow|pillow|MIT-CMU|licenses/LICENSE
+Matplotlib|matplotlib|Matplotlib License (PSF-based)|LICENSE
+contourpy|contourpy|BSD-3-Clause|licenses/LICENSE
+kiwisolver|kiwisolver|BSD-3-Clause|licenses/LICENSE
+cycler|cycler|BSD-3-Clause|LICENSE
+fontTools|fonttools|MIT|licenses/LICENSE;licenses/LICENSE.external
+pyparsing|pyparsing|MIT|licenses/LICENSE
+python-dateutil|python_dateutil|Apache-2.0 AND BSD-3-Clause|licenses/LICENSE
+six|six|MIT|LICENSE
+packaging|packaging|Apache-2.0 OR BSD-2-Clause|licenses/LICENSE;licenses/LICENSE.APACHE;licenses/LICENSE.BSD
+certifi|certifi|MPL-2.0|licenses/LICENSE
+PyObjC|pyobjc_framework_cocoa|MIT|licenses/LICENSE.txt

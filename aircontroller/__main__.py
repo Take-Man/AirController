@@ -169,7 +169,9 @@ def cmd_run(args, cfg: dict) -> int:
 
     tcfg = _tracker_config(cfg)
     hand_policy = HandCountPolicy(gcfg.hand, min_score=gcfg.min_score) if tcfg.auto_two_hands else None
-    pipe = VisionPipeline(CameraConfig(**cfg["camera"]), tcfg, lambda f: frame_handler[0](f), min_interval,
+    cam_cfg = CameraConfig(**cfg["camera"])
+    cfg = {**cfg, "camera": {**cfg["camera"], "backend": cam_cfg.backend}}  # 記録とイベントログには、実際に使う取得経路を書く
+    pipe = VisionPipeline(cam_cfg, tcfg, lambda f: frame_handler[0](f), min_interval,
                           (lambda: hand_policy.num_hands) if hand_policy else None,
                           (lambda: hand_policy.mask_boxes) if hand_policy else None)
     try:
@@ -609,8 +611,22 @@ def cmd_run(args, cfg: dict) -> int:
 
 
 # ---------------------------------------------------------------- 段階0: view
+def _dev_cv2(what: str):
+    """開発用のコマンドの OpenCV（cv2）。無ければ（配布版。mpimport の中身のない cv2 を含む）理由を出して None。"""
+    from .mpimport import HAVE_CV2
+
+    if HAVE_CV2:
+        import cv2
+
+        return cv2
+    print(f"{what} は開発用のコマンドで、OpenCV（cv2）が要ります（配布版には入っていません。ソースの .venv で動かしてください）")
+    return None
+
+
 def cmd_view(args, cfg: dict) -> int:
-    import cv2
+    cv2 = _dev_cv2("view")
+    if cv2 is None:
+        return 2
 
     from .gesture import GestureConfig, GestureEngine, pinch_metrics
     from .input import Tracker
@@ -627,7 +643,7 @@ def cmd_view(args, cfg: dict) -> int:
     rec_path = _resolve(cfg["log"]["recordings_dir"]) / f"{args.name or stamp}.jsonl"
     engine = GestureEngine(GestureConfig.from_toml(cfg))
     log = LatencyLog(log_path)
-    recorder = Recorder(rec_path, {"camera": cfg["camera"], "actual_size": list(size),
+    recorder = Recorder(rec_path, {"camera": {**cfg["camera"], "backend": camera.cfg.backend}, "actual_size": list(size),
                                    "tracker": cfg["tracker"]}) if args.record else None
 
     shared_lock = threading.Lock()
@@ -665,15 +681,15 @@ def cmd_view(args, cfg: dict) -> int:
             if args.headless:
                 time.sleep(0.05)
                 continue
-            _, _, bgr = camera.latest()
+            _, _, rgb = camera.latest()
             with shared_lock:
                 frame = shared["frame"]
                 lat = list(shared["lat"])
                 tp = list(shared["t_proc"])
-            if bgr is None:
+            if rgb is None:
                 time.sleep(0.01)
                 continue
-            img = cv2.flip(bgr, 1)  # 表示だけ鏡像にする（記録・ジェスチャー層は非反転の座標）
+            img = cv2.flip(cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), 1)  # 表示だけ鏡像にする（記録・ジェスチャー層は非反転の座標）
             ct = camera.capture_times[-31:]
             cam_fps = (len(ct) - 1) / ((ct[-1] - ct[0]) / 1e9) if len(ct) > 1 else 0.0
             proc_fps = (len(tp) - 1) / ((tp[-1] - tp[0]) / 1e9) if len(tp) > 1 else 0.0
@@ -710,29 +726,8 @@ def cmd_view(args, cfg: dict) -> int:
     return 0
 
 
-_JP_FONT = "/System/Library/Fonts/ヒラギノ角ゴシック W6.ttc"
-
-
-def _put_jp(img, lines: list[str], size: int = 30) -> np.ndarray:
-    """画像の上部に日本語の文字を描く（cv2.putText は日本語を描けないので PIL を使う）。"""
-    from PIL import Image, ImageDraw, ImageFont
-
-    try:
-        font = ImageFont.truetype(_JP_FONT, size)
-        small = ImageFont.truetype(_JP_FONT, int(size * 0.7))
-    except OSError:
-        font = small = ImageFont.load_default()
-    pil = Image.fromarray(img[:, :, ::-1])
-    draw = ImageDraw.Draw(pil)
-    y = 12
-    for i, line in enumerate(lines):
-        f = font if i == 0 else small
-        draw.text((14, y), line, font=f, fill=(255, 255, 255), stroke_width=4, stroke_fill=(0, 0, 0))
-        y += int((size if i == 0 else size * 0.7) * 1.45)
-    return np.asarray(pil)[:, :, ::-1].copy()
-
-
 def _draw_hand(cv2, img, hand) -> None:
+    """view（開発用）の骨格。測定・記録のプレビューは preview.draw_hand。"""
     from mediapipe.tasks.python import vision
 
     h, w = img.shape[:2]
@@ -765,14 +760,13 @@ def _calib_units(args) -> list[str]:
 
 def _calib_decorate():
     """calibrate のプレビュー: 親指と指先の距離を出し、範囲の段階では手のひら中心の軌跡を描く。"""
-    import cv2
-
     from .gesture import image_pinch_metrics
+    from .preview import draw_circle
     from .types import PALM
 
     pts: list = []
 
-    def deco(img, f, label, recording) -> list[str]:
+    def deco(draw, size, f, label, recording) -> list[str]:
         h = preferred_hand(f.hands, HAND) if f is not None and f.hands else None
         if h is None:
             return []
@@ -780,7 +774,7 @@ def _calib_decorate():
             if recording:
                 pts.append(tuple(h.landmarks[list(PALM), :2].mean(axis=0)))
             for x, y in pts[-300:]:
-                cv2.circle(img, (int((1 - x) * img.shape[1]), int(y * img.shape[0])), 2, (255, 200, 0), -1)
+                draw_circle(draw, (int((1 - x) * size[0]), int(y * size[1])), 2, (0, 200, 255))
         m = image_pinch_metrics(h, f.image_size)
         return [f"親指-人差し指 {m['thumb_index_n']:.2f}   親指-中指 {m['thumb_middle_n']:.2f}"]
     return deco
@@ -914,13 +908,15 @@ def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, st
     記録（.jsonl）とラベル（.labels.json）を保存し、(記録のパス, 区間のリスト) を返す。
     targets: ラベル（全体、なければ "/" の前）→ 手のひら中心を置く位置（画像座標、非反転）。プレビューに円で示す。
     位置のリストなら、それらを線で結んで示す（往復する動き）。
-    decorate(img, frame, label, recording) は、プレビューに描き足し、表示する行を足す（行のリストを返す）。
+    decorate(draw, (w, h), frame, label, recording) は、プレビュー（Pillow の ImageDraw）に描き足し、表示する行を足す（行のリストを返す）。
+    プレビューのウィンドウは AppKit（preview.Preview。OpenCV は使わない、SPEC 13.68）。q・Esc か、ウィンドウを閉じると中断。
     status を渡すと、中断したら status["aborted"] = True にする。"""
     import json
 
-    import cv2
+    from PIL import ImageDraw
 
     from .input import Tracker
+    from .preview import ESC, Preview, draw_circle, draw_hand, mirror, put_jp, to_pil
     from .recording import Recorder
     from .types import LandmarkFrame
 
@@ -929,7 +925,7 @@ def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, st
         return None
     iw, ih = camera.actual_size
     rec_path = _resolve(cfg["log"]["recordings_dir"]) / f"{name}.jsonl"
-    recorder = Recorder(rec_path, {"camera": cfg["camera"], "actual_size": [iw, ih], "purpose": purpose})
+    recorder = Recorder(rec_path, {"camera": {**cfg["camera"], "backend": camera.cfg.backend}, "actual_size": [iw, ih], "purpose": purpose})
     lock = threading.Lock()
     latest: dict = {"frame": None}
 
@@ -941,6 +937,7 @@ def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, st
     segments: list[dict] = []
     tracker = Tracker(camera, _tracker_config(cfg), on_frame)
     tracker.start()
+    preview = Preview(title)
     n_data = sum(1 for st in steps if st[0])
     # 待ち時間の段階では、次の段階の位置を先に示す
     msg_next_label = {st[2]: nxt[0] for st, nxt in zip(steps, steps[1:]) if st[0] is None and nxt[0]}
@@ -956,38 +953,38 @@ def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, st
                                  "t_end_ns": int((time.perf_counter() + dur) * 1e9)})
             print(msg)
             while time.monotonic() < t_end:
-                _, _, bgr = camera.latest()
-                if bgr is None:
+                _, _, rgb = camera.latest()
+                if rgb is None:
                     time.sleep(0.01)
                     continue
-                img = cv2.flip(bgr, 1)
+                img = to_pil(mirror(rgb))
+                size = img.size
+                draw = ImageDraw.Draw(img)
                 with lock:
                     f = latest["frame"]
                 if f is not None and f.hands:
-                    _draw_hand(cv2, img, preferred_hand(f.hands, HAND))
+                    draw_hand(draw, size, preferred_hand(f.hands, HAND))
                 full = label or msg_next_label.get(msg, "")
                 tg = (targets or {}).get(full, (targets or {}).get(full.split("/")[0]))
                 if tg is not None:  # 手のひら中心を置く位置（プレビューは鏡像なので x を反転）
                     pts = tg if isinstance(tg, list) else [tg]
-                    pix = [(int((1 - tx) * img.shape[1]), int(ty * img.shape[0])) for tx, ty in pts]
+                    pix = [(int((1 - tx) * size[0]), int(ty * size[1])) for tx, ty in pts]
                     for a_, b_ in zip(pix, pix[1:]):
-                        cv2.line(img, a_, b_, (0, 220, 255), 2)
-                    for cx, cy in pix:
-                        cv2.circle(img, (cx, cy), 40, (0, 220, 255), 3)
-                        cv2.circle(img, (cx, cy), 4, (0, 220, 255), -1)
+                        draw.line([a_, b_], fill=(255, 220, 0), width=2)
+                    for c in pix:
+                        draw_circle(draw, c, 40, (255, 220, 0), width=3)
+                        draw_circle(draw, c, 4, (255, 220, 0))
                 left = t_end - time.monotonic()
                 if label:
                     sub = f"あと {left:3.1f} 秒" + ("（準備中）" if time.monotonic() < settle_until else "（記録中）")
                     head = f"[{k}/{n_data}] {msg}"
                 else:
                     sub, head = f"{left:3.1f} 秒後に始まります", msg
-                extra = decorate(img, f, label, bool(label) and time.monotonic() >= settle_until) if decorate else []
-                img = _put_jp(img, [head, sub, "手が見えています" if f is not None and f.hands else "手が見えません", *extra])
-                w = int(img.shape[1] * max(0.0, left) / dur)
-                cv2.rectangle(img, (0, img.shape[0] - 10), (w, img.shape[0]),
-                              (0, 200, 255) if label else (160, 160, 160), -1)
-                cv2.imshow(title, img)
-                if cv2.waitKey(1) & 0xFF in (ord("q"), 27):
+                extra = decorate(draw, size, f, label, bool(label) and time.monotonic() >= settle_until) if decorate else []
+                put_jp(img, [head, sub, "手が見えています" if f is not None and f.hands else "手が見えません", *extra])
+                w = int(size[0] * max(0.0, left) / dur)
+                draw.rectangle([0, size[1] - 10, w, size[1]], fill=(255, 200, 0) if label else (160, 160, 160))
+                if preview.show(np.asarray(img)) in (ord("q"), ESC):
                     print("中断しました（ここまでの記録は保存します）")
                     if status is not None:
                         status["aborted"] = True
@@ -1000,8 +997,7 @@ def _guided_record(cfg: dict, name: str, steps: list[tuple[str | None, float, st
         tracker.stop()
         camera.stop()
         recorder.close()
-        cv2.destroyAllWindows()
-        cv2.waitKey(1)
+        preview.close()
         rec_path.with_suffix(".labels.json").write_text(json.dumps({"segments": segments}, ensure_ascii=False, indent=1))
     print(f"記録: {rec_path}\nラベル: {rec_path.with_suffix('.labels.json')}")
     return rec_path, segments
@@ -1330,8 +1326,11 @@ def cmd_camlatency(args, cfg: dict) -> int:
 
     測れるのは「画面の切り替え命令 → 画面の発光 → 露光 → 転送 → 取得スレッドが受け取る」の合計。
     ソフトウェア遅延（取得→送出）の前に乗る、カメラ側の遅延の見積もりに使う（表示側の遅延も含む上限値）。
+    開発用（全画面の明滅に OpenCV を使う）。
     """
-    import cv2
+    cv2 = _dev_cv2("camlatency")
+    if cv2 is None:
+        return 2
 
     if args.size:
         w, h = (int(v) for v in args.size.lower().split("x"))
@@ -1350,8 +1349,8 @@ def cmd_camlatency(args, cfg: dict) -> int:
             got = camera.wait_newer(last, timeout=0.5)
             if got is None:
                 continue
-            last, t, bgr = got
-            samples.append((t, float(cv2.cvtColor(cv2.resize(bgr, (160, 90)), cv2.COLOR_BGR2GRAY).mean())))
+            last, t, rgb = got
+            samples.append((t, float(cv2.cvtColor(cv2.resize(rgb, (160, 90)), cv2.COLOR_RGB2GRAY).mean())))
 
     th = threading.Thread(target=sampler, daemon=True)
     th.start()
