@@ -328,6 +328,7 @@ class Tracker:
         self._done = threading.Event()
         self._stop = False
         self.error: BaseException | None = None
+        self.stale_results = 0  # 送った表に無い時刻の結果（掃除の後に遅れて届いた分）。捨てて数える
         self.num_hands_fn = num_hands_fn
         self.mask_fn = mask_fn
         self.current_num_hands = cfg.num_hands
@@ -395,8 +396,17 @@ class Tracker:
 
     def _on_result(self, result: vision.HandLandmarkerResult, image: mp.Image, ts_ms: int) -> None:
         t_infer = time.perf_counter_ns()
+        stale = False
         try:
-            seq, t_cap, size = self._pending.pop(ts_ms)
+            entry = self._pending.pop(ts_ms, None)
+            if entry is None:
+                # 掃除（2秒より古い分）の後に遅れて届いた結果。1 フレーム欠けても次で取り戻せるので、落とさずに捨てる
+                stale = True
+                self.stale_results += 1
+                if self.stale_results == 1:
+                    print(f"[推論] 送った覚えの無い時刻の結果を捨てました（ts {ts_ms}）。以後は数だけ数えます")
+                return
+            seq, t_cap, size = entry
             hands = []
             for handed, lms, wlms in zip(result.handedness, result.hand_landmarks, result.hand_world_landmarks):
                 hands.append(Hand(
@@ -411,7 +421,8 @@ class Tracker:
             self.error = e
         finally:
             cpustat.mark("inference-result")  # MediaPipe の結果のスレッド（ジェスチャー層・出力層・記録もここ）
-            self._done.set()
+            if not stale:  # 遅れて届いた古い結果では、いま待っているフレームの待ちを解かない
+                self._done.set()
 
     def stop(self) -> None:
         self._stop = True

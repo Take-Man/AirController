@@ -3,7 +3,7 @@
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = SPECPATH + "/.."
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 INFO = {
     "CFBundleName": "AirController",
     "CFBundleDisplayName": "AirController",
